@@ -1,0 +1,82 @@
+import { http, HttpResponse } from "msw";
+
+import type { Message } from "@/lib/types";
+
+import { db, genId } from "../data/store";
+import { API, notFound } from "./util";
+
+export const conversationHandlers = [
+  http.get(`${API}/conversations`, ({ request }) => {
+    const status = new URL(request.url).searchParams.get("status");
+    let result = db.conversations;
+    if (status) result = result.filter((c) => c.status === status);
+    // Más recientes primero.
+    result = [...result].sort((a, b) =>
+      b.last_message_at.localeCompare(a.last_message_at),
+    );
+    return HttpResponse.json(result);
+  }),
+
+  http.get(`${API}/conversations/:id`, ({ params }) => {
+    const conversation = db.conversations.find((c) => c.id === params.id);
+    if (!conversation) return notFound();
+    return HttpResponse.json(conversation);
+  }),
+
+  http.get(`${API}/conversations/:id/messages`, ({ params }) => {
+    const conversation = db.conversations.find((c) => c.id === params.id);
+    if (!conversation) return notFound();
+    const messages = db.messages
+      .filter((m) => m.conversation_id === params.id)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return HttpResponse.json(messages);
+  }),
+
+  http.post(`${API}/conversations/:id/messages`, async ({ params, request }) => {
+    const conversation = db.conversations.find((c) => c.id === params.id);
+    if (!conversation) return notFound();
+    const { text } = (await request.json()) as { text: string };
+    const now = new Date().toISOString();
+
+    const message: Message = {
+      id: genId("msg"),
+      conversation_id: conversation.id,
+      direction: "outbound",
+      sender: "human",
+      text,
+      created_at: now,
+      status: "sent",
+    };
+    db.messages.push(message);
+    conversation.last_message_at = now;
+    // El operador está leyendo: ya no hay sin leer.
+    conversation.unread = 0;
+
+    return HttpResponse.json(message, { status: 201 });
+  }),
+
+  http.post(`${API}/conversations/:id/take`, ({ params }) => {
+    const conversation = db.conversations.find((c) => c.id === params.id);
+    if (!conversation) return notFound();
+    conversation.status = "human_handoff";
+    conversation.active_agent = null;
+    conversation.unread = 0;
+    return HttpResponse.json(conversation);
+  }),
+
+  http.post(`${API}/conversations/:id/close`, ({ params }) => {
+    const conversation = db.conversations.find((c) => c.id === params.id);
+    if (!conversation) return notFound();
+    conversation.status = "closed";
+    conversation.active_agent = null;
+    return HttpResponse.json(conversation);
+  }),
+
+  http.post(`${API}/conversations/:id/reactivate`, ({ params }) => {
+    const conversation = db.conversations.find((c) => c.id === params.id);
+    if (!conversation) return notFound();
+    conversation.status = "ai_active";
+    conversation.active_agent = "agent_orchestrator";
+    return HttpResponse.json(conversation);
+  }),
+];
