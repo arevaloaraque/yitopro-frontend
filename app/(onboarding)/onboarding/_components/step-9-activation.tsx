@@ -16,17 +16,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useOnboarding } from "@/lib/onboarding";
 
 export function Step9Activation() {
-  const { data, activate } = useOnboarding();
+  const { data, activate, activateError } = useOnboarding();
   const [activating, setActivating] = useState(false);
   const [activated, setActivated] = useState(data.activated);
+  const [error, setError] = useState<string | null>(activateError);
 
   const handleActivate = async () => {
     setActivating(true);
-    // Pequeño delay para mostrar feedback visual antes de redirigir
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    await activate();
-    setActivating(false);
-    setActivated(true);
+    setError(null);
+    try {
+      await activate();
+      setActivated(true);
+    } catch {
+      setError(activateError ?? "Error al activar el negocio. Intenta de nuevo.");
+    } finally {
+      setActivating(false);
+    }
   };
 
   return (
@@ -89,6 +94,11 @@ export function Step9Activation() {
               "Activar negocio"
             )}
           </Button>
+        )}
+        {error && (
+          <p className="mt-3 text-center text-[0.8rem] text-destructive">
+            {error}
+          </p>
         )}
       </div>
     </div>

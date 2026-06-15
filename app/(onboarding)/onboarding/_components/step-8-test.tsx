@@ -90,6 +90,7 @@ export function Step8Test() {
           disabled={!message.trim() || sending}
           size="icon"
           className="shrink-0 self-end"
+          aria-label="Enviar mensaje de prueba"
         >
           <Send className="size-4" />
         </Button>

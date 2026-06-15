@@ -48,7 +48,7 @@ export function Step5Records() {
     <div className="space-y-4">
       {data.recordFields.map((field, idx) => (
         <div
-          key={idx}
+          key={field._key}
           className="rounded-xl border border-border/40 p-3"
         >
           <div className="grid grid-cols-2 gap-3">

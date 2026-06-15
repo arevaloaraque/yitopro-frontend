@@ -1,7 +1,9 @@
-"use client";
-
 import type { Agent, Product, RecordField, Service } from "@/lib/types";
 import type { IndustryTemplate } from "./templates";
+
+export interface RecordFieldWithKey extends RecordField {
+  _key: string;
+}
 
 export type OnboardingStep =
   | 1
@@ -46,7 +48,7 @@ export interface OnboardingData {
   products: Product[];
 
   // Step 5 — Campos de ficha editables
-  recordFields: RecordField[];
+  recordFields: RecordFieldWithKey[];
 
   // Step 6 — Agentes editables
   agents: Agent[];
