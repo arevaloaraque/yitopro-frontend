@@ -45,15 +45,35 @@ function validateStep(
     case 3:
       if (data.services.some((s) => !s.name.trim()))
         return "Todos los servicios deben tener un nombre.";
-      if (data.services.some((s) => s.duration_minutes <= 0))
+      if (data.services.some((s) => Number.isNaN(s.duration_minutes) || s.duration_minutes <= 0))
         return "Todos los servicios deben tener una duración válida.";
+      if (data.services.some((s) => Number.isNaN(s.price) || s.price < 0))
+        return "Todos los servicios deben tener un precio válido.";
+      return null;
+
+    case 4:
+      if (data.products.length === 0)
+        return "Agrega al menos un producto.";
+      if (data.products.some((p) => !p.name.trim()))
+        return "Todos los productos deben tener un nombre.";
+      if (data.products.some((p) => Number.isNaN(p.price) || p.price < 0))
+        return "Todos los productos deben tener un precio válido.";
       return null;
 
     case 5:
+      if (data.recordFields.length === 0)
+        return "Agrega al menos un campo de ficha.";
       if (data.recordFields.some((f) => !f.label.trim()))
         return "Todos los campos de ficha deben tener un label.";
       if (data.recordFields.some((f) => !f.name.trim()))
         return "Todos los campos de ficha deben tener un nombre interno.";
+      if (data.recordFields.some((f) => f.type === "select" && (!f.options || f.options.length === 0)))
+        return "Los campos de tipo selector deben tener al menos una opción.";
+      return null;
+
+    case 6:
+      if (data.agents.length === 0)
+        return "Configura al menos un agente.";
       return null;
 
     case 7:

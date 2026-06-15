@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -11,7 +12,6 @@ import { useRouter } from "next/navigation";
 
 import { updateBusiness } from "@/lib/api";
 import type { Agent, Product, RecordField, Service } from "@/lib/types";
-
 import { INDUSTRY_TEMPLATES } from "./templates";
 import {
   createEmptyOnboardingData,
@@ -70,6 +70,8 @@ interface OnboardingContextValue {
 
   // Step 9 — Activation
   activate: () => Promise<void>;
+  activateError: string | null;
+  setActivateError: (err: string | null) => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
@@ -80,8 +82,33 @@ export function OnboardingProvider({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [data, setData] = useState<OnboardingData>(createEmptyOnboardingData);
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>(1);
+  const [data, setData] = useState<OnboardingData>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("onboarding_data");
+        if (saved) return JSON.parse(saved) as OnboardingData;
+      } catch {
+        // corrupted data, start fresh
+      }
+    }
+    return createEmptyOnboardingData();
+  });
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("onboarding_step");
+      if (saved) return Number(saved) as OnboardingStep;
+    }
+    return 1;
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("onboarding_data", JSON.stringify(data));
+      sessionStorage.setItem("onboarding_step", String(currentStep));
+    } catch {
+      // storage full or unavailable — silently degrade
+    }
+  }, [data, currentStep]);
 
   const goNext = useCallback(() => {
     setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS) as OnboardingStep);
@@ -138,7 +165,10 @@ export function OnboardingProvider({
       selectedTemplate: template,
       services,
       products,
-      recordFields: template.recordFields,
+      recordFields: template.recordFields.map((f) => ({
+        ...f,
+        _key: tempId("rf"),
+      })),
       agents,
     }));
   }, []);
@@ -235,6 +265,7 @@ export function OnboardingProvider({
       recordFields: [
         ...prev.recordFields,
         {
+          _key: tempId("rf"),
           name: "",
           label: "",
           type: "text",
@@ -280,18 +311,28 @@ export function OnboardingProvider({
     [],
   );
 
+  const [activateError, setActivateError] = useState<string | null>(null);
+
   const activate = useCallback(async () => {
-    await updateBusiness({
-      name: data.businessName,
-      country: data.country,
-      currency: data.currency,
-      language: data.language,
-      timezone: data.timezone,
-      is_active: true,
-      onboarding_status: "completed",
-    });
-    setData((prev) => ({ ...prev, activated: true }));
-    router.push("/dashboard");
+    setActivateError(null);
+    try {
+      await updateBusiness({
+        name: data.businessName,
+        country: data.country,
+        currency: data.currency,
+        language: data.language,
+        timezone: data.timezone,
+        is_active: true,
+        onboarding_status: "completed",
+      });
+      setData((prev) => ({ ...prev, activated: true }));
+      router.push("/dashboard");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Error al activar el negocio.";
+      setActivateError(message);
+      throw err;
+    }
   }, [data, router]);
 
   const value = useMemo<OnboardingContextValue>(
@@ -316,6 +357,8 @@ export function OnboardingProvider({
       toggleAgentSkill,
       setWhatsappConnected,
       activate,
+      activateError,
+      setActivateError,
     }),
     [
       data,
@@ -338,6 +381,7 @@ export function OnboardingProvider({
       toggleAgentSkill,
       setWhatsappConnected,
       activate,
+      activateError,
     ],
   );
 

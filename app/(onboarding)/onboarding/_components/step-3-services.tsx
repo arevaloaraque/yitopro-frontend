@@ -14,7 +14,7 @@ export function Step3Services() {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
         <p className="text-sm text-muted-foreground">
-          Selecciona una industria en el paso anterior para generar servicios automáticamente,
+          Selecciona una industria en el paso 2 para generar servicios automáticamente,
           o agrega servicios manualmente.
         </p>
         <Button variant="outline" size="sm" onClick={addService}>
