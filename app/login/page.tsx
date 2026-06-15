@@ -57,9 +57,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center bg-muted/40 px-4">
+    <main className="flex min-h-svh flex-col items-center justify-center bg-gradient-to-b from-surface to-background px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex justify-center">
+        <div className="mb-8 flex justify-center">
           <Image
             src="/brand/horizontal.svg"
             alt="Yitopro"
@@ -69,7 +69,7 @@ export default function LoginPage() {
           />
         </div>
 
-        <Card>
+        <Card elevated>
           <CardHeader className="text-center">
             <CardTitle>Inicia sesión</CardTitle>
             <CardDescription>Accede al panel de tu negocio</CardDescription>
@@ -104,7 +104,7 @@ export default function LoginPage() {
               </div>
 
               {error ? (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-[0.8rem] text-destructive">
                   {error}
                 </p>
               ) : null}
@@ -121,7 +121,7 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <p className="mt-4 text-center text-xs text-muted-foreground">
+            <p className="mt-4 text-center text-[0.7rem] text-muted-foreground">
               Modo demo: cualquier email y contraseña funcionan.
             </p>
           </CardContent>

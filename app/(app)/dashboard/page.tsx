@@ -8,6 +8,8 @@ import {
   Bot,
   Calendar,
   MessageSquare,
+  TrendingDown,
+  TrendingUp,
   Users,
 } from "lucide-react";
 
@@ -91,7 +93,8 @@ function intentLabel(intent: string | null): string {
 }
 
 function statusBadge(status: Conversation["status"]) {
-  if (status === "ai_active") return { label: "IA activa", variant: "default" as const };
+  if (status === "ai_active")
+    return { label: "IA activa", variant: "default" as const };
   if (status === "human_handoff")
     return { label: "Derivada", variant: "secondary" as const };
   return { label: "Cerrada", variant: "outline" as const };
@@ -122,11 +125,13 @@ interface DashboardData {
 function MetricSkeleton() {
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <Skeleton className="h-4 w-20" />
+      <CardHeader className="flex flex-row items-center justify-between pb-0">
+        <Skeleton className="h-3.5 w-20" />
+        <Skeleton className="size-10 rounded-2xl" />
       </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-16" />
+      <CardContent className="pb-1">
+        <Skeleton className="h-9 w-20" />
+        <Skeleton className="mt-1.5 h-3 w-32" />
       </CardContent>
     </Card>
   );
@@ -136,13 +141,16 @@ function ListSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 rounded-lg border px-4 py-3">
-          <Skeleton className="size-9 rounded-full" />
-          <div className="flex-1 space-y-1.5">
+        <div
+          key={i}
+          className="flex items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5"
+        >
+          <Skeleton className="size-10 rounded-xl" />
+          <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-1/3" />
             <Skeleton className="h-3 w-1/2" />
           </div>
-          <Skeleton className="h-5 w-16 rounded-4xl" />
+          <Skeleton className="h-5 w-16 rounded-full" />
         </div>
       ))}
     </div>
@@ -151,8 +159,8 @@ function ListSkeleton({ rows = 5 }: { rows?: number }) {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="space-y-10">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <MetricSkeleton />
         <MetricSkeleton />
         <MetricSkeleton />
@@ -183,28 +191,64 @@ function DashboardSkeleton() {
 interface MetricCardProps {
   label: string;
   value: string | number;
+  subValue?: string;
   icon: React.ReactNode;
-  accent?: "default" | "amber" | "red";
+  trend?: "up" | "down" | "neutral";
+  variant?: "default" | "accent" | "warning";
 }
 
-function MetricCard({ label, value, icon, accent = "default" }: MetricCardProps) {
+function MetricCard({
+  label,
+  value,
+  subValue,
+  icon,
+  trend,
+  variant = "default",
+}: MetricCardProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardDescription>{label}</CardDescription>
+    <Card className="group/card">
+      <CardHeader className="flex flex-row items-center justify-between pb-0">
+        <CardDescription className="text-[0.75rem]">{label}</CardDescription>
         <span
           className={cn(
-            "flex size-8 items-center justify-center rounded-lg",
-            accent === "amber" && "bg-amber-500/10 text-amber-600",
-            accent === "red" && "bg-red-500/10 text-red-600",
-            accent === "default" && "bg-muted text-muted-foreground",
+            "flex size-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-200",
+            variant === "accent" &&
+              "bg-accent/10 text-accent ring-1 ring-accent/20",
+            variant === "warning" &&
+              "bg-warning/10 text-warning ring-1 ring-warning/20",
+            variant === "default" &&
+              "bg-muted text-muted-foreground",
           )}
         >
           {icon}
         </span>
       </CardHeader>
-      <CardContent>
-        <CardTitle className="text-2xl">{value}</CardTitle>
+      <CardContent className="pb-1">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[1.75rem] font-semibold leading-none tracking-tight tabular-nums text-foreground">
+            {value}
+          </span>
+          {trend ? (
+            <span
+              className={cn(
+                "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.65rem] font-semibold",
+                trend === "up" && "bg-success/10 text-success",
+                trend === "down" && "bg-destructive/10 text-destructive",
+              )}
+            >
+              {trend === "up" ? (
+                <TrendingUp className="size-2.5" />
+              ) : (
+                <TrendingDown className="size-2.5" />
+              )}
+            </span>
+          ) : null}
+        </div>
+        {subValue ? (
+          <p className="mt-1.5 text-[0.7rem] leading-relaxed text-muted-foreground">
+            {subValue}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -216,41 +260,49 @@ interface ConversationRowProps {
   agentName: string | null;
 }
 
-function ConversationRow({ conversation, customerName, agentName }: ConversationRowProps) {
+function ConversationRow({
+  conversation,
+  customerName,
+  agentName,
+}: ConversationRowProps) {
   const s = statusBadge(conversation.status);
   return (
     <Link
-      href={`/conversations`}
-      className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50"
+      href="/conversations"
+      className="flex cursor-pointer items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5 transition-all duration-200 hover:border-border/60 hover:bg-surface active:scale-[0.99]"
     >
       <div
         className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-full",
+          "flex size-10 shrink-0 items-center justify-center rounded-xl",
           conversation.status === "human_handoff"
-            ? "bg-amber-500/10 text-amber-600"
-            : "bg-primary/10 text-primary",
+            ? "bg-warning/10 text-warning ring-1 ring-warning/20"
+            : "bg-primary/10 text-primary ring-1 ring-primary/20",
         )}
       >
         <MessageSquare className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{customerName}</span>
-          {conversation.unread > 0 && (
-            <Badge variant="default" className="shrink-0">
+          <span className="truncate text-[0.8rem] font-semibold text-foreground">
+            {customerName}
+          </span>
+          {conversation.unread > 0 ? (
+            <Badge variant="default" className="shrink-0 text-[0.65rem]">
               {conversation.unread}
             </Badge>
-          )}
+          ) : null}
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="mt-0.5 flex items-center gap-2 text-[0.7rem] text-muted-foreground">
           <span>{intentLabel(conversation.detected_intent)}</span>
           <span>·</span>
           <span>{agentName ?? "Sin agente"}</span>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Badge variant={s.variant}>{s.label}</Badge>
-        <span className="text-xs text-muted-foreground">
+        <Badge variant={s.variant} className="text-[0.65rem]">
+          {s.label}
+        </Badge>
+        <span className="text-[0.7rem] text-muted-foreground tabular-nums">
           {relativeTime(conversation.last_message_at)}
         </span>
       </div>
@@ -264,23 +316,33 @@ interface AppointmentRowProps {
   serviceName: string;
 }
 
-function AppointmentRow({ appointment, customerName, serviceName }: AppointmentRowProps) {
+function AppointmentRow({
+  appointment,
+  customerName,
+  serviceName,
+}: AppointmentRowProps) {
   const s = appointmentStatusBadge(appointment.status);
   return (
     <Link
       href="/appointments"
-      className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50"
+      className="flex cursor-pointer items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5 transition-all duration-200 hover:border-border/60 hover:bg-surface active:scale-[0.99]"
     >
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         <Calendar className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <span className="truncate text-sm font-medium">{customerName}</span>
-        <p className="text-xs text-muted-foreground">{serviceName}</p>
+        <span className="truncate text-[0.8rem] font-semibold text-foreground">
+          {customerName}
+        </span>
+        <p className="mt-0.5 text-[0.7rem] text-muted-foreground">
+          {serviceName}
+        </p>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-0.5">
-        <Badge variant={s.variant}>{s.label}</Badge>
-        <span className="text-xs text-muted-foreground">
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <Badge variant={s.variant} className="text-[0.65rem]">
+          {s.label}
+        </Badge>
+        <span className="text-[0.7rem] text-muted-foreground tabular-nums">
           {formatTime(appointment.start)} – {formatTime(appointment.end)}
         </span>
       </div>
@@ -292,25 +354,33 @@ function AlertRow({ alert }: { alert: AlertItem }) {
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-lg border px-4 py-3",
+        "flex items-start gap-3 rounded-xl border px-4 py-3",
         alert.type === "error_integracion"
-          ? "border-amber-500/30 bg-amber-500/5"
-          : "border-red-500/30 bg-red-500/5",
+          ? "border-warning/20 bg-warning/[0.04]"
+          : "border-destructive/15 bg-destructive/[0.04]",
       )}
     >
       <AlertTriangle
         className={cn(
           "mt-0.5 size-4 shrink-0",
-          alert.type === "error_integracion" ? "text-amber-600" : "text-red-600",
+          alert.type === "error_integracion"
+            ? "text-warning"
+            : "text-destructive",
         )}
       />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">
-          {alert.type === "error_integracion" ? "Error de integración" : "Error operativo"}
+        <p className="text-[0.8rem] font-semibold text-foreground">
+          {alert.type === "error_integracion"
+            ? "Error de integración"
+            : "Error operativo"}
         </p>
-        <p className="text-xs text-muted-foreground">{alert.message}</p>
+        <p className="mt-0.5 text-[0.7rem] leading-relaxed text-muted-foreground">
+          {alert.message}
+        </p>
       </div>
-      <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(alert.at)}</span>
+      <span className="shrink-0 text-[0.7rem] text-muted-foreground tabular-nums">
+        {relativeTime(alert.at)}
+      </span>
     </div>
   );
 }
@@ -358,7 +428,9 @@ export default function DashboardPage() {
         case "conversacion_escalada":
           listConversations()
             .then((conversations) => {
-              setData((prev) => (prev ? { ...prev, conversations } : prev));
+              setData((prev) =>
+                prev ? { ...prev, conversations } : prev,
+              );
             })
             .catch(() => {});
           break;
@@ -368,7 +440,9 @@ export default function DashboardPage() {
           const { from, to } = todayRange();
           listAppointments({ from, to })
             .then((appointments) => {
-              setData((prev) => (prev ? { ...prev, appointments } : prev));
+              setData((prev) =>
+                prev ? { ...prev, appointments } : prev,
+              );
             })
             .catch(() => {});
           break;
@@ -424,15 +498,25 @@ export default function DashboardPage() {
     );
   }
 
-  const { business, conversations, appointments, agents, customers, services } = data;
+  const {
+    business,
+    conversations,
+    appointments,
+    agents,
+    customers,
+    services,
+  } = data;
 
   const customerMap = new Map(customers.map((c) => [c.id, c]));
   const agentMap = new Map(agents.map((a) => [a.id, a]));
   const serviceMap = new Map(services.map((s) => [s.id, s]));
 
-  const activeConversations = conversations.filter((c) => c.status !== "closed");
+  const activeConversations = conversations.filter(
+    (c) => c.status !== "closed",
+  );
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread, 0);
-  const assistantActive = agents.some((a) => a.is_active) && business.assistant_config.autonomous;
+  const assistantActive =
+    agents.some((a) => a.is_active) && business.assistant_config.autonomous;
 
   const recentConversations = conversations.slice(0, 5);
   const todayAppointments = appointments.filter(
@@ -440,44 +524,60 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
+      {/* Page header */}
       <div>
-        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-[1.65rem] font-bold tracking-tight text-foreground">
+          Dashboard
+        </h1>
+        <p className="mt-1.5 text-[0.8rem] text-muted-foreground">
           Resumen de la actividad de {business.name}
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Metric cards */}
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Conversaciones activas"
           value={activeConversations.length}
+          subValue={`${activeConversations.length > 0 ? "En curso" : "Sin actividad"}`}
           icon={<MessageSquare className="size-4" />}
+          trend={activeConversations.length > 0 ? "up" : "neutral"}
         />
         <MetricCard
           label="Citas de hoy"
           value={todayAppointments.length}
+          subValue={`${todayAppointments.length} programada${todayAppointments.length !== 1 ? "s" : ""}`}
           icon={<Calendar className="size-4" />}
+          trend={todayAppointments.length >= 3 ? "up" : "neutral"}
         />
         <MetricCard
           label="Mensajes sin leer"
           value={totalUnread}
+          subValue={totalUnread > 0 ? "Requieren atención" : "Todo al día"}
           icon={<Users className="size-4" />}
-          accent={totalUnread > 0 ? "amber" : "default"}
+          trend={totalUnread > 5 ? "up" : totalUnread > 0 ? "down" : "neutral"}
+          variant={totalUnread > 0 ? "warning" : "default"}
         />
         <MetricCard
-          label="Asistente"
+          label="Asistente IA"
           value={assistantActive ? "Activo" : "Pausado"}
+          subValue={
+            assistantActive
+              ? "Respondiendo automáticamente"
+              : "Esperando activación"
+          }
           icon={<Bot className="size-4" />}
-          accent={assistantActive ? "default" : "amber"}
+          variant={assistantActive ? "accent" : "default"}
         />
       </div>
 
-      {alerts.length > 0 && (
-        <Card className="border-amber-500/30">
+      {/* Alerts section */}
+      {alerts.length > 0 ? (
+        <Card className="border-warning/30">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <AlertTriangle className="size-4 text-amber-600" />
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-4 text-warning" />
               Alertas operativas
             </CardTitle>
             <CardDescription>
@@ -491,20 +591,22 @@ export default function DashboardPage() {
             ))}
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
+      {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-3">
+        {/* Recent conversations */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-sm">Conversaciones recientes</CardTitle>
+              <CardTitle>Conversaciones recientes</CardTitle>
               <CardDescription>
                 Últimas {recentConversations.length} conversaciones activas
               </CardDescription>
             </div>
             <Link
               href="/conversations"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               Ver todas
               <ArrowUpRight className="size-3" />
@@ -521,7 +623,9 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 {recentConversations.map((c) => {
                   const customer = customerMap.get(c.customer_id);
-                  const agent = c.active_agent ? agentMap.get(c.active_agent) : null;
+                  const agent = c.active_agent
+                    ? agentMap.get(c.active_agent)
+                    : null;
                   return (
                     <ConversationRow
                       key={c.id}
@@ -536,18 +640,20 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Today's appointments */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-sm">Citas de hoy</CardTitle>
+              <CardTitle>Citas de hoy</CardTitle>
               <CardDescription>
-                {todayAppointments.length} cita{todayAppointments.length !== 1 ? "s" : ""}{" "}
-                programada{todayAppointments.length !== 1 ? "s" : ""}
+                {todayAppointments.length} cita
+                {todayAppointments.length !== 1 ? "s" : ""} programada
+                {todayAppointments.length !== 1 ? "s" : ""}
               </CardDescription>
             </div>
             <Link
               href="/appointments"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               Ver agenda
               <ArrowUpRight className="size-3" />

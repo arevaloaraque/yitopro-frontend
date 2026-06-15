@@ -8,6 +8,7 @@
 import type {
   Agent,
   Appointment,
+  AppointmentAuditEntry,
   Business,
   Conversation,
   Customer,
@@ -65,6 +66,7 @@ export interface SeedData {
   conversations: Conversation[];
   messages: Message[];
   appointments: Appointment[];
+  appointmentAudit: AppointmentAuditEntry[];
   products: Product[];
   agents: Agent[];
 }
@@ -585,6 +587,58 @@ export function createSeedData(): SeedData {
     },
   ];
 
+  const appointmentAudit: AppointmentAuditEntry[] = [
+    {
+      id: "aud_apt01_create",
+      appointment_id: "apt_01",
+      event: "created",
+      timestamp: "2026-06-11T13:42:00.000Z",
+      details: "Cita creada por IA vía WhatsApp.",
+    },
+    {
+      id: "aud_apt02_create",
+      appointment_id: "apt_02",
+      event: "created",
+      timestamp: "2026-06-11T11:18:00.000Z",
+      details: "Cita creada por IA vía WhatsApp.",
+    },
+    {
+      id: "aud_apt03_create",
+      appointment_id: "apt_03",
+      event: "created",
+      timestamp: "2026-06-04T10:00:00.000Z",
+      details: "Cita creada manualmente.",
+    },
+    {
+      id: "aud_apt03_complete",
+      appointment_id: "apt_03",
+      event: "completed",
+      timestamp: "2026-06-05T21:05:00.000Z",
+      details: "Servicio completado.",
+    },
+    {
+      id: "aud_apt04_create",
+      appointment_id: "apt_04",
+      event: "created",
+      timestamp: "2026-06-05T09:00:00.000Z",
+      details: "Cita creada por IA vía WhatsApp.",
+    },
+    {
+      id: "aud_apt04_cancel",
+      appointment_id: "apt_04",
+      event: "cancelled",
+      timestamp: "2026-06-07T14:30:00.000Z",
+      details: "Cliente canceló por viaje.",
+    },
+    {
+      id: "aud_apt05_create",
+      appointment_id: "apt_05",
+      event: "created",
+      timestamp: "2026-06-12T09:00:00.000Z",
+      details: "Cita creada manualmente.",
+    },
+  ];
+
   const products: Product[] = [
     {
       id: "prod_shampoo",
@@ -690,6 +744,7 @@ export function createSeedData(): SeedData {
     conversations,
     messages,
     appointments,
+    appointmentAudit,
     products,
     agents,
   };

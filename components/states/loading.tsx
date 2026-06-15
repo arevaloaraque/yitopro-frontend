@@ -23,7 +23,7 @@ export function Loading({ rows = 4, className, label = "Cargando…" }: LoadingP
     >
       <span className="sr-only">{label}</span>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3">
+        <div key={i} className="flex items-center gap-3 rounded-lg border border-border/60 bg-surface/30 px-4 py-3">
           <Skeleton className="size-10 shrink-0 rounded-full" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-1/3" />

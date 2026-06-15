@@ -57,30 +57,34 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --color-surface: var(--surface);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
 
-  /* Sombras suaves, estilo SaaS (Linear/Vercel) */
-  --shadow-xs: 0 1px 2px 0 rgb(7 26 58 / 0.04);
-  --shadow-sm: 0 1px 3px 0 rgb(7 26 58 / 0.06), 0 1px 2px -1px rgb(7 26 58 / 0.04);
-  --shadow-md: 0 4px 12px -2px rgb(7 26 58 / 0.08), 0 2px 6px -2px rgb(7 26 58 / 0.05);
+  --shadow-xs: 0 1px 2px 0 rgb(7 26 58 / 0.03);
+  --shadow-sm:
+    0 1px 2px 0 rgb(7 26 58 / 0.03), 0 1px 3px 0 rgb(7 26 58 / 0.03);
+  --shadow-md:
+    0 2px 4px -1px rgb(7 26 58 / 0.03), 0 4px 12px -2px rgb(7 26 58 / 0.06);
   --shadow-lg:
-    0 12px 28px -6px rgb(7 26 58 / 0.12), 0 4px 10px -4px rgb(7 26 58 / 0.06);
+    0 4px 8px -2px rgb(7 26 58 / 0.04), 0 12px 24px -6px rgb(7 26 58 / 0.08);
 }
 
 /* ---------------------------------------------------------------------------
    Modo claro (primero). El toggle a oscuro se completa en F5.
 --------------------------------------------------------------------------- */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
   --background: #ffffff;
   --foreground: #071a3a;
+
+  --surface: #f7f8fb;
 
   --card: #ffffff;
   --card-foreground: #071a3a;
@@ -139,7 +143,9 @@
   --background: #071a3a;
   --foreground: #f5f7fa;
 
-  --card: #0c2348;
+  --surface: #081b38;
+
+  --card: #0c2449;
   --card-foreground: #f5f7fa;
 
   --popover: #0c2348;

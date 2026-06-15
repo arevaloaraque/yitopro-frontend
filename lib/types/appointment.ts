@@ -18,3 +18,13 @@ export interface Appointment {
   created_by: ActorType;
   notes: string | null;
 }
+
+/** Evento en el historial de cambios de una cita. */
+export interface AppointmentAuditEntry {
+  id: string;
+  appointment_id: string;
+  event: "created" | "cancelled" | "rescheduled" | "completed";
+  /** ISO 8601. */
+  timestamp: string;
+  details: string | null;
+}
