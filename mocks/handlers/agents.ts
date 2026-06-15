@@ -7,7 +7,7 @@ import { API, notFound } from "./util";
 
 export const agentHandlers = [
   http.get(`${API}/agents`, () => {
-    return HttpResponse.json(db.agents);
+    return HttpResponse.json({ items: db.agents, count: db.agents.length });
   }),
 
   http.patch(`${API}/agents/:id`, async ({ params, request }) => {

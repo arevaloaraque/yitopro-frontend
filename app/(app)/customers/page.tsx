@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -296,15 +296,27 @@ export default function CustomersPage() {
                 const customerConvs = isSelected ? conversations : [];
                 const convCount = conversationCounts[c.id] ?? 0;
                 return (
-                  <>
+                  <Fragment key={c.id}>
                     <TableRow
-                      key={c.id}
                       className="cursor-pointer hover:bg-surface"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isSelected}
                       onClick={() =>
                         isSelected
                           ? setSelectedId(null)
                           : loadDetail(c.id)
                       }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          if (isSelected) {
+                            setSelectedId(null);
+                          } else {
+                            loadDetail(c.id);
+                          }
+                        }
+                      }}
                     >
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-muted-foreground">
@@ -393,8 +405,7 @@ export default function CustomersPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
-                );
+                  </Fragment>                );
               })}
             </TableBody>
           </Table>

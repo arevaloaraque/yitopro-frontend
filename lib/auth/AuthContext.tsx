@@ -84,13 +84,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  // Session expired: limpia sesion (RequireAuth redirige a /login).
+  const handleSessionExpired = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    // Force a react render so RequireAuth picks up the change
+    // and redirects to /login automatically.
+  }, []);
+
   // Registra los hooks de auth en el cliente HTTP (una sola vez).
   useEffect(() => {
     configureApiAuth({
       getAccessToken: () => tokenRef.current,
       refreshSession: refresh,
+      onSessionExpired: handleSessionExpired,
     });
-  }, [refresh]);
+  }, [refresh, handleSessionExpired]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

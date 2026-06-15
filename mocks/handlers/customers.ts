@@ -8,7 +8,7 @@ import { API, notFound } from "./util";
 
 export const customerHandlers = [
   http.get(`${API}/customers`, () => {
-    return HttpResponse.json(db.customers);
+    return HttpResponse.json({ items: db.customers, count: db.customers.length });
   }),
 
   http.post(`${API}/customers`, async ({ request }) => {

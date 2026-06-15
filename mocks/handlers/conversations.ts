@@ -14,7 +14,7 @@ export const conversationHandlers = [
     result = [...result].sort((a, b) =>
       b.last_message_at.localeCompare(a.last_message_at),
     );
-    return HttpResponse.json(result);
+    return HttpResponse.json({ items: result, count: result.length });
   }),
 
   http.get(`${API}/conversations/:id`, ({ params }) => {
@@ -29,7 +29,7 @@ export const conversationHandlers = [
     const messages = db.messages
       .filter((m) => m.conversation_id === params.id)
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
-    return HttpResponse.json(messages);
+    return HttpResponse.json({ items: messages, count: messages.length });
   }),
 
   http.post(`${API}/conversations/:id/messages`, async ({ params, request }) => {

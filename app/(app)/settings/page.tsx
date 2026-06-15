@@ -206,7 +206,7 @@ export default function SettingsPage() {
               id="biz-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="PET Spa"
+              placeholder="Nombre del negocio"
             />
           </div>
 

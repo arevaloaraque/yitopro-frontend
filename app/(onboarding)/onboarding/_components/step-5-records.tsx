@@ -59,7 +59,7 @@ export function Step5Records() {
                 onChange={(e) =>
                   updateRecordField(idx, { label: e.target.value })
                 }
-                placeholder="Ej: Nombre de la mascota"
+                placeholder="Ej: Nombre del titular"
               />
             </div>
             <div className="space-y-1.5">
@@ -69,7 +69,7 @@ export function Step5Records() {
                 onChange={(e) =>
                   updateRecordField(idx, { name: e.target.value })
                 }
-                placeholder="Ej: pet_name"
+                placeholder="Ej: nombre_titular"
               />
             </div>
           </div>
@@ -134,7 +134,7 @@ export function Step5Records() {
                       .filter(Boolean),
                   })
                 }
-                placeholder="perro, gato, conejo"
+                placeholder="opcion A, opcion B"
               />
             </div>
           )}

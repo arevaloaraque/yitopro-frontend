@@ -8,7 +8,7 @@ import { API, notFound } from "./util";
 
 export const productHandlers = [
   http.get(`${API}/products`, () => {
-    return HttpResponse.json(db.products);
+    return HttpResponse.json({ items: db.products, count: db.products.length });
   }),
 
   http.post(`${API}/products`, async ({ request }) => {

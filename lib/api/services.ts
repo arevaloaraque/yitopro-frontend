@@ -1,9 +1,10 @@
-import type { Service } from "@/lib/types";
+import type { Paginated, Service } from "@/lib/types";
 
 import { api } from "./client";
 
-export function listServices(): Promise<Service[]> {
-  return api.get<Service[]>("/services");
+export async function listServices(): Promise<Service[]> {
+  const res = await api.get<Paginated<Service>>("/services");
+  return res.items;
 }
 
 export type CreateServiceInput = Omit<Service, "id" | "business_id">;

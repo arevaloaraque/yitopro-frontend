@@ -1,9 +1,10 @@
-import type { Customer } from "@/lib/types";
+import type { Customer, Paginated } from "@/lib/types";
 
 import { api } from "./client";
 
-export function listCustomers(): Promise<Customer[]> {
-  return api.get<Customer[]>("/customers");
+export async function listCustomers(): Promise<Customer[]> {
+  const res = await api.get<Paginated<Customer>>("/customers");
+  return res.items;
 }
 
 export function getCustomer(id: string): Promise<Customer> {

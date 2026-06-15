@@ -1,4 +1,4 @@
-import type { Conversation, Message } from "@/lib/types";
+import type { Conversation, Message, Paginated } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -6,18 +6,24 @@ export interface ListConversationsParams {
   status?: Conversation["status"];
 }
 
-export function listConversations(
+export async function listConversations(
   params: ListConversationsParams = {},
 ): Promise<Conversation[]> {
-  return api.get<Conversation[]>("/conversations", { query: { ...params } });
+  const res = await api.get<Paginated<Conversation>>("/conversations", {
+    query: { ...params },
+  });
+  return res.items;
 }
 
 export function getConversation(id: string): Promise<Conversation> {
   return api.get<Conversation>(`/conversations/${id}`);
 }
 
-export function listMessages(conversationId: string): Promise<Message[]> {
-  return api.get<Message[]>(`/conversations/${conversationId}/messages`);
+export async function listMessages(conversationId: string): Promise<Message[]> {
+  const res = await api.get<Paginated<Message>>(
+    `/conversations/${conversationId}/messages`,
+  );
+  return res.items;
 }
 
 /** Envía un mensaje saliente como operador humano. */

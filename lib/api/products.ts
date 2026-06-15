@@ -1,9 +1,10 @@
-import type { Product } from "@/lib/types";
+import type { Paginated, Product } from "@/lib/types";
 
 import { api } from "./client";
 
-export function listProducts(): Promise<Product[]> {
-  return api.get<Product[]>("/products");
+export async function listProducts(): Promise<Product[]> {
+  const res = await api.get<Paginated<Product>>("/products");
+  return res.items;
 }
 
 export type CreateProductInput = Omit<Product, "id" | "business_id">;

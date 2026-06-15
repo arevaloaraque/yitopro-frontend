@@ -47,7 +47,7 @@ export function Step1BusinessInfo() {
               timezone: data.timezone,
             })
           }
-          placeholder="Ej: PET Spa"
+          placeholder="Ej: Mi Negocio"
         />
       </div>
 

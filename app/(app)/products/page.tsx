@@ -83,6 +83,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,20 +158,46 @@ export default function ProductsPage() {
   }
 
   async function toggleActive(product: Product) {
+    setActionError(null);
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === product.id ? { ...p, is_active: !p.is_active } : p,
+      ),
+    );
     try {
-      const updated = await updateProduct(product.id, { is_active: !product.is_active });
-      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      await updateProduct(product.id, { is_active: !product.is_active });
     } catch {
-      // Silently fail
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === product.id ? { ...p, is_active: product.is_active } : p,
+        ),
+      );
+      setActionError("No se pudo cambiar el estado del producto.");
     }
   }
 
   async function toggleWhatsApp(product: Product) {
+    setActionError(null);
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === product.id
+          ? { ...p, sellable_via_whatsapp: !p.sellable_via_whatsapp }
+          : p,
+      ),
+    );
     try {
-      const updated = await updateProduct(product.id, { sellable_via_whatsapp: !product.sellable_via_whatsapp });
-      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      await updateProduct(product.id, {
+        sellable_via_whatsapp: !product.sellable_via_whatsapp,
+      });
     } catch {
-      // Silently fail
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === product.id
+            ? { ...p, sellable_via_whatsapp: product.sellable_via_whatsapp }
+            : p,
+        ),
+      );
+      setActionError("No se pudo cambiar el estado de WhatsApp.");
     }
   }
 
@@ -224,6 +251,10 @@ export default function ProductsPage() {
           Nuevo producto
         </Button>
       </div>
+
+      {actionError && (
+        <p className="text-sm text-destructive">{actionError}</p>
+      )}
 
       <Tabs defaultValue="products">
         <TabsList>

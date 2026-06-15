@@ -27,8 +27,8 @@ export function Step9Activation() {
     try {
       await activate();
       setActivated(true);
-    } catch {
-      setError(activateError ?? "Error al activar el negocio. Intenta de nuevo.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al activar el negocio. Intenta de nuevo.");
     } finally {
       setActivating(false);
     }
