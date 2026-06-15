@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, MessageSquare, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,7 +98,7 @@ export default function SettingsPage() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Error al cargar configuracion");
+          setError(e instanceof Error ? e.message : "Error al cargar configuración");
           setState("error");
         }
       }
@@ -120,7 +127,7 @@ export default function SettingsPage() {
         setState("ready");
       })
       .catch((e) => {
-        setError(e instanceof Error ? e.message : "Error al cargar configuracion");
+        setError(e instanceof Error ? e.message : "Error al cargar configuración");
         setState("error");
       });
   }
@@ -128,6 +135,10 @@ export default function SettingsPage() {
   async function handleSave() {
     if (!name.trim()) {
       setSaveError("El nombre del negocio es obligatorio.");
+      return;
+    }
+    if (!country) {
+      setSaveError("Selecciona un pais.");
       return;
     }
 
@@ -150,7 +161,8 @@ export default function SettingsPage() {
         },
       });
       setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       setSaveError(
         e instanceof Error ? e.message : "Error al guardar",
@@ -166,8 +178,8 @@ export default function SettingsPage() {
     return (
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Settings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Configuracion de tu negocio y asistente.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Configuración</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Configuración de tu negocio y asistente.</p>
         </div>
         <ErrorState description={error ?? "Error desconocido"} onRetry={refetch} />
       </div>
@@ -185,7 +197,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Datos del negocio</CardTitle>
-          <CardDescription>Informacion basica de tu negocio.</CardDescription>
+          <CardDescription>Información básica de tu negocio.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -199,7 +211,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="biz-country">Pais</Label>
+            <Label htmlFor="biz-country">País</Label>
             <Select value={country} onValueChange={(v) => {
               const selected = v ?? country;
               setCountry(selected);
@@ -210,7 +222,7 @@ export default function SettingsPage() {
               }
             }}>
               <SelectTrigger id="biz-country" className="w-full">
-                <SelectValue placeholder="Selecciona un pais" />
+                <SelectValue placeholder="Selecciona un país" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -276,7 +288,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Asistente IA</CardTitle>
-          <CardDescription>Configura como se comporta tu asistente.</CardDescription>
+          <CardDescription>Configura cómo se comporta tu asistente.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -336,9 +348,9 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
             <div>
-              <Label className="cursor-pointer text-sm">Autonomo</Label>
+              <Label className="cursor-pointer text-sm">Autónomo</Label>
               <p className="text-[0.7rem] text-muted-foreground">
-                El asistente responde automaticamente sin supervision.
+                El asistente responde automáticamente sin supervisión.
               </p>
             </div>
             <Switch checked={autonomous} onChange={setAutonomous} />
@@ -350,7 +362,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>WhatsApp</CardTitle>
-          <CardDescription>Estado de la conexion con WhatsApp Business.</CardDescription>
+          <CardDescription>Estado de la conexión con WhatsApp Business.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3 rounded-lg border border-border/40 px-4 py-3">
@@ -358,7 +370,7 @@ export default function SettingsPage() {
             <div className="flex-1">
               <p className="text-sm font-medium">WhatsApp Business API</p>
               <p className="text-xs text-muted-foreground">
-                La conexion se configura durante el onboarding.
+                La conexión se configura durante el onboarding.
               </p>
             </div>
             <Badge variant="secondary" className="text-xs">
