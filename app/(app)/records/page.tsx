@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Bot, Check, ClipboardList, Eye, EyeOff, Pencil, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -133,18 +134,12 @@ function renderFieldInput(
 }
 
 export default function RecordsPage() {
+  const searchParams = useSearchParams();
+  const preselectedId = searchParams.get("customer");
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
-    () => {
-      if (typeof window !== "undefined") {
-        const saved = sessionStorage.getItem("records_selected_customer");
-        if (saved) {
-          sessionStorage.removeItem("records_selected_customer");
-          return saved;
-        }
-      }
-      return null;
-    },
+    preselectedId,
   );
   const [state, setState] = useState<PageState>("idle");
   const [record, setRecord] = useState<CustomerRecord | null>(null);

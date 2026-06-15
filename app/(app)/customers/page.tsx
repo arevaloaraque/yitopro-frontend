@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -97,6 +97,11 @@ export default function CustomersPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [conversationCounts, setConversationCounts] = useState<
+    Record<string, number>
+  >({});
+
+  const detailReqRef = useRef(0);
 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -109,9 +114,17 @@ export default function CustomersPage() {
       setState("loading");
       setError(null);
       try {
-        const data = await listCustomers();
+        const [customerData, convData] = await Promise.all([
+          listCustomers(),
+          listConversations(),
+        ]);
         if (!cancelled) {
-          setCustomers(data);
+          setCustomers(customerData);
+          const counts: Record<string, number> = {};
+          for (const c of convData) {
+            counts[c.customer_id] = (counts[c.customer_id] ?? 0) + 1;
+          }
+          setConversationCounts(counts);
           setState("ready");
         }
       } catch (e) {
@@ -127,40 +140,48 @@ export default function CustomersPage() {
     };
   }, []);
 
-  function refetch() {
+  async function refetch() {
     setState("loading");
     setError(null);
-    listCustomers()
-      .then((data) => {
-        setCustomers(data);
-        setState("ready");
-      })
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : "Error al cargar clientes");
-        setState("error");
-      });
+    try {
+      const [customerData, convData] = await Promise.all([
+        listCustomers(),
+        listConversations(),
+      ]);
+      setCustomers(customerData);
+      const counts: Record<string, number> = {};
+      for (const c of convData) {
+        counts[c.customer_id] = (counts[c.customer_id] ?? 0) + 1;
+      }
+      setConversationCounts(counts);
+      setState("ready");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al cargar clientes");
+      setState("error");
+    }
   }
 
   async function loadDetail(customerId: string) {
+    const reqId = ++detailReqRef.current;
     setSelectedId(customerId);
     setLoadingDetail(true);
     try {
       const convs = await listConversations();
+      if (reqId !== detailReqRef.current) return;
       setConversations(
         convs.filter((c) => c.customer_id === customerId),
       );
     } catch {
+      if (reqId !== detailReqRef.current) return;
       setConversations([]);
     } finally {
+      if (reqId !== detailReqRef.current) return;
       setLoadingDetail(false);
     }
   }
 
   function openRecord(customerId: string) {
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("records_selected_customer", customerId);
-    }
-    router.push("/records");
+    router.push(`/records?customer=${customerId}`);
   }
 
   function validate(f: FormData): Record<string, string> {
@@ -273,6 +294,7 @@ export default function CustomersPage() {
               {customers.map((c) => {
                 const isSelected = selectedId === c.id;
                 const customerConvs = isSelected ? conversations : [];
+                const convCount = conversationCounts[c.id] ?? 0;
                 return (
                   <>
                     <TableRow
@@ -292,10 +314,10 @@ export default function CustomersPage() {
                         {formatDate(c.created_at)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="text-xs">
-                          <MessageSquare className="mr-0.5 size-3" />
-                          {customerConvs.length}
-                        </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            <MessageSquare className="mr-0.5 size-3" />
+                            {convCount}
+                          </Badge>
                       </TableCell>
                       <TableCell>
                         {isSelected ? (
