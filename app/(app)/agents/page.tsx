@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot, Shield } from "lucide-react";
+import { Bot, CalendarDays, ClipboardList, Headphones, Package, Shield } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,12 +31,12 @@ const AGENT_TYPE_LABELS: Record<AgentType, string> = {
   support: "Soporte",
 };
 
-const AGENT_TYPE_ICONS: Record<AgentType, string> = {
-  orchestrator: "🧠",
-  scheduling: "📅",
-  products: "📦",
-  records: "📋",
-  support: "🎧",
+const AGENT_TYPE_ICONS: Record<AgentType, LucideIcon> = {
+  orchestrator: Bot,
+  scheduling: CalendarDays,
+  products: Package,
+  records: ClipboardList,
+  support: Headphones,
 };
 
 const AUTONOMY_OPTIONS: { value: AgentAutonomy; label: string; desc: string }[] = [
@@ -78,6 +79,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,20 +120,39 @@ export default function AgentsPage() {
   }
 
   async function toggleActive(agent: Agent) {
+    setActionError(null);
+    setAgents((prev) =>
+      prev.map((a) =>
+        a.id === agent.id ? { ...a, is_active: !a.is_active } : a,
+      ),
+    );
     try {
-      const updated = await updateAgent(agent.id, { is_active: !agent.is_active });
-      setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      await updateAgent(agent.id, { is_active: !agent.is_active });
     } catch {
-      // silently fail
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === agent.id ? { ...a, is_active: agent.is_active } : a,
+        ),
+      );
+      setActionError("No se pudo cambiar el estado del agente.");
     }
   }
 
   async function changeAutonomy(agent: Agent, autonomy: AgentAutonomy) {
+    setActionError(null);
+    const prevAutonomy = agent.autonomy;
+    setAgents((prev) =>
+      prev.map((a) => (a.id === agent.id ? { ...a, autonomy } : a)),
+    );
     try {
-      const updated = await updateAgent(agent.id, { autonomy });
-      setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      await updateAgent(agent.id, { autonomy });
     } catch {
-      // silently fail
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === agent.id ? { ...a, autonomy: prevAutonomy } : a,
+        ),
+      );
+      setActionError("No se pudo cambiar la autonomia del agente.");
     }
   }
 
@@ -156,6 +177,10 @@ export default function AgentsPage() {
         <p className="mt-1 text-sm text-muted-foreground">Tus agentes de IA y su configuración.</p>
       </div>
 
+      {actionError && (
+        <p className="text-sm text-destructive">{actionError}</p>
+      )}
+
       {agents.length === 0 ? (
         <EmptyState
           icon={Bot}
@@ -170,8 +195,8 @@ export default function AgentsPage() {
               <Card key={agent.id}>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div className="flex items-center gap-3">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-lg">
-                      {AGENT_TYPE_ICONS[agent.type]}
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                      {(() => { const Icon = AGENT_TYPE_ICONS[agent.type]; return <Icon className="size-5" />; })()}
                     </span>
                     <div>
                       <CardTitle className="text-base">{agent.name}</CardTitle>
@@ -218,6 +243,8 @@ export default function AgentsPage() {
                       variant="ghost"
                       size="xs"
                       onClick={() => setExpandedId(isExpanded ? null : agent.id)}
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? `Ocultar detalle de ${agent.name}` : `Ver detalle de ${agent.name}`}
                     >
                       {isExpanded ? "Ocultar" : "Detalle"}
                     </Button>
@@ -257,9 +284,9 @@ export default function AgentsPage() {
                         {agent.escalation_rules.length === 0 ? (
                           <p className="text-xs text-muted-foreground">Sin reglas definidas.</p>
                         ) : (
-                          agent.escalation_rules.map((rule, i) => (
+                          agent.escalation_rules.map((rule) => (
                             <div
-                              key={i}
+                              key={`${rule.condition}-${rule.action}`}
                               className="flex items-center gap-2 rounded-lg border border-border/30 px-3 py-2"
                             >
                               <Shield className="size-3.5 text-warning shrink-0" />
