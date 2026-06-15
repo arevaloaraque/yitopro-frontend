@@ -14,11 +14,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <RequireAuth>
       <NotificationsProvider>
-        <div className="flex min-h-svh bg-background">
+        <div className="flex min-h-svh bg-surface">
           <Sidebar />
           <div className="flex min-w-0 flex-1 flex-col">
             <Topbar />
-            <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+            <main className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-6 py-8 md:px-12 md:py-12">
+              {children}
+            </main>
           </div>
         </div>
       </NotificationsProvider>

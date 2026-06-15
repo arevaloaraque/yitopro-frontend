@@ -58,3 +58,6 @@ public/mockServiceWorker.js
 # caché de herramientas
 .eslintcache
 .cache/
+
+# archivos de configuración local
+.opencode/

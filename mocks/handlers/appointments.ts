@@ -1,12 +1,22 @@
 import { http, HttpResponse } from "msw";
 
-import type { Appointment } from "@/lib/types";
+import type { Appointment, AppointmentAuditEntry } from "@/lib/types";
 
 import { emitMockEvent, nextEventId } from "@/lib/sse";
 
 import { BUSINESS_ID } from "../data/seed";
 import { db, genId } from "../data/store";
 import { API, notFound } from "./util";
+
+function pushAudit(appointmentId: string, event: AppointmentAuditEntry["event"], details: string | null): void {
+  db.appointmentAudit.push({
+    id: genId("aud"),
+    appointment_id: appointmentId,
+    event,
+    timestamp: new Date().toISOString(),
+    details,
+  });
+}
 
 export const appointmentHandlers = [
   http.get(`${API}/appointments`, ({ request }) => {
@@ -47,6 +57,8 @@ export const appointmentHandlers = [
     };
     db.appointments.push(appointment);
 
+    pushAudit(appointment.id, "created", "Cita creada manualmente desde el panel.");
+
     emitMockEvent({
       id: nextEventId(),
       type: "nueva_cita",
@@ -72,6 +84,8 @@ export const appointmentHandlers = [
     appointment.status = "cancelled";
     if (body.reason) appointment.notes = body.reason;
 
+    pushAudit(appointment.id, "cancelled", body.reason ?? null);
+
     emitMockEvent({
       id: nextEventId(),
       type: "cita_cancelada",
@@ -95,6 +109,12 @@ export const appointmentHandlers = [
     appointment.end = body.end;
     appointment.status = "rescheduled";
 
+    pushAudit(
+      appointment.id,
+      "rescheduled",
+      `De ${new Date(oldStart).toLocaleString("es-CL")} a ${new Date(appointment.start).toLocaleString("es-CL")}`,
+    );
+
     emitMockEvent({
       id: nextEventId(),
       type: "cita_reagendada",
@@ -108,5 +128,12 @@ export const appointmentHandlers = [
     });
 
     return HttpResponse.json(appointment);
+  }),
+
+  http.get(`${API}/appointments/:id/history`, ({ params }) => {
+    const entries = db.appointmentAudit.filter(
+      (e) => e.appointment_id === params.id,
+    );
+    return HttpResponse.json(entries);
   }),
 ];

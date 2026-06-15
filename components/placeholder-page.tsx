@@ -14,17 +14,17 @@ interface PlaceholderPageProps {
  */
 export function PlaceholderPage({ title, description, icon }: PlaceholderPageProps) {
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-10">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+        <h1 className="text-[1.65rem] font-bold tracking-tight text-foreground">{title}</h1>
         {description ? (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1.5 text-[0.8rem] text-muted-foreground">{description}</p>
         ) : null}
       </div>
       <EmptyState
         icon={icon ?? Construction}
         title="En construcción"
-        description="Esta sección llegará en una próxima sesión del plan."
+        description="Esta sección estará disponible próximamente."
       />
     </div>
   );

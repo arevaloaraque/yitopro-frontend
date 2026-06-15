@@ -78,7 +78,7 @@ export function ConversationDetail({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="shrink-0 border-b border-border px-4 py-3">
+      <div className="shrink-0 border-b border-border/60 bg-background/50 px-5 py-3.5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold">{customerName}</h2>
@@ -89,40 +89,40 @@ export function ConversationDetail({
               >
                 {statusLabel(conversation.status)}
               </Badge>
-              {conversation.detected_intent && (
+              {conversation.detected_intent ? (
                 <Badge variant="outline" className="h-5 text-[11px]">
                   {conversation.detected_intent.replace(/_/g, " ")}
                 </Badge>
-              )}
-              {agentName && (
-                <span className="text-xs text-muted-foreground">
+              ) : null}
+              {agentName ? (
+                <span className="text-[0.7rem] text-muted-foreground">
                   {agentName}
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
-          <div className="flex shrink-0 gap-1">
-            {isAiActive && (
+          <div className="flex shrink-0 gap-1.5">
+            {isAiActive ? (
               <Button variant="secondary" size="xs" onClick={onTake}>
                 Tomar conversación
               </Button>
-            )}
-            {isHandoff && (
+            ) : null}
+            {isHandoff ? (
               <Button variant="outline" size="xs" onClick={onReactivate}>
                 Reactivar IA
               </Button>
-            )}
-            {!isClosed && (
+            ) : null}
+            {!isClosed ? (
               <Button variant="outline" size="xs" onClick={onClose}>
                 Cerrar
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
-        {actionError && (
+        {actionError ? (
           <div
             role="alert"
-            className="mt-2 flex items-center gap-1.5 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive"
+            className="mt-2 flex items-center gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-[0.7rem] text-destructive"
           >
             <AlertCircle className="size-3 shrink-0" />
             <span className="flex-1">{actionError}</span>
@@ -135,7 +135,7 @@ export function ConversationDetail({
               ×
             </button>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Messages */}

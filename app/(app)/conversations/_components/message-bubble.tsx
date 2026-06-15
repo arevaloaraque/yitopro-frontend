@@ -35,17 +35,18 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div
       className={cn(
-        "flex flex-col gap-0.5 px-4 py-0.5",
+        "flex flex-col gap-0.5 px-5 py-0.5",
         isOutbound ? "items-end" : "items-start",
       )}
     >
       <div
         className={cn(
-          "max-w-[80%] rounded-lg px-3 py-2 text-sm leading-relaxed",
-          message.sender === "customer" && "bg-muted text-foreground",
-          message.sender === "ai" && "bg-primary/10 text-foreground",
+          "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+          message.sender === "customer" &&
+            "rounded-bl-md bg-muted text-foreground",
+          message.sender === "ai" && "rounded-br-md bg-primary/10 text-foreground",
           message.sender === "human" &&
-            "bg-primary text-primary-foreground",
+            "rounded-br-md bg-primary text-primary-foreground shadow-sm",
         )}
       >
         <span className="whitespace-pre-wrap break-words">
@@ -56,14 +57,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         <span className="select-none text-[10px] text-muted-foreground">
           {senderLabel(message.sender)}
         </span>
-        <span className="select-none text-[10px] text-muted-foreground/60">
+        <span className="select-none text-[10px] text-muted-foreground/50">
           {formatTime(message.created_at)}
         </span>
-        {message.status === "failed" && (
+        {message.status === "failed" ? (
           <span className="select-none text-[10px] text-destructive">
             Error
           </span>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -83,7 +83,7 @@ export function ConversationList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-border px-3 py-2.5">
+      <div className="shrink-0 border-b border-border/60 px-3 py-2.5">
         <div className="flex gap-1 overflow-x-auto">
           {STATUS_OPTIONS.map((opt) => (
             <Button
@@ -112,33 +112,33 @@ export function ConversationList({
               type="button"
               onClick={() => onSelect(conv.id)}
               className={cn(
-                "flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/50",
-                selectedId === conv.id && "bg-muted",
+                "flex w-full items-start gap-3 border-b border-border/40 px-4 py-3 text-left transition-all duration-150 hover:bg-muted/30",
+                selectedId === conv.id && "bg-muted/60",
               )}
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-semibold text-primary ring-1 ring-primary/20">
                 {customerNames.get(conv.customer_id)?.charAt(0) ?? "?"}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium">
+                  <span className="truncate text-[0.8rem] font-medium">
                     {customerNames.get(conv.customer_id) ?? conv.customer_id}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  <span className="shrink-0 text-[0.7rem] text-muted-foreground">
                     {formatTime(conv.last_message_at)}
                   </span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  {conv.detected_intent && (
+                  {conv.detected_intent ? (
                     <Badge variant="outline" className="h-4 px-1 text-[10px] leading-none">
                       {conv.detected_intent.replace(/_/g, " ")}
                     </Badge>
-                  )}
-                  {conv.active_agent && (
-                    <span className="truncate text-xs text-muted-foreground">
+                  ) : null}
+                  {conv.active_agent ? (
+                    <span className="truncate text-[0.7rem] text-muted-foreground">
                       {agentNames.get(conv.active_agent) ?? conv.active_agent}
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
@@ -148,11 +148,11 @@ export function ConversationList({
                 >
                   {statusLabel(conv.status)}
                 </Badge>
-                {conv.unread > 0 && (
-                  <span className="flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                {conv.unread > 0 ? (
+                  <span className="flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
                     {conv.unread > 9 ? "9+" : conv.unread}
                   </span>
-                )}
+                ) : null}
               </div>
             </button>
           ))

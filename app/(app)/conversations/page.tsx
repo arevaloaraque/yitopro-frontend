@@ -266,9 +266,9 @@ export default function ConversationsPage() {
       : null;
 
   return (
-    <div className="-my-6 -mx-4 flex h-[calc(100vh-var(--spacing)*14)] md:-my-8 md:-mx-8">
+    <div className="-my-8 -mx-6 flex h-[calc(100vh-var(--spacing)*20)] md:-my-12 md:-mx-12">
       {/* Left panel — Inbox */}
-      <div className="w-80 shrink-0 border-r border-border bg-card md:w-96">
+      <div className="w-80 shrink-0 border-r border-border/60 bg-card md:w-96">
         <ConversationList
           conversations={conversations}
           selectedId={selectedId}

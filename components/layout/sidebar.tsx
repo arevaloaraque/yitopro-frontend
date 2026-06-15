@@ -20,14 +20,14 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "sticky top-0 hidden h-svh shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 md:flex",
-        collapsed ? "w-[4.5rem]" : "w-64",
+        "sticky top-0 hidden h-svh shrink-0 flex-col border-r border-sidebar-border/50 bg-sidebar transition-all duration-300 ease-in-out md:flex",
+        collapsed ? "w-[4.5rem]" : "w-[16.5rem]",
       )}
     >
       <div
         className={cn(
-          "flex h-16 shrink-0 items-center border-b border-sidebar-border",
-          collapsed ? "justify-center px-2" : "justify-between px-4",
+          "flex h-16 shrink-0 items-center border-b border-sidebar-border/40",
+          collapsed ? "justify-center px-3" : "justify-between px-5",
         )}
       >
         <SidebarBrand collapsed={collapsed} />
@@ -37,21 +37,23 @@ export function Sidebar() {
             size="icon-sm"
             onClick={() => setCollapsed(true)}
             aria-label="Colapsar menú"
+            className="cursor-pointer"
           >
-            <PanelLeftClose />
+            <PanelLeftClose className="size-4" />
           </Button>
         ) : null}
       </div>
 
       {collapsed ? (
-        <div className="flex justify-center px-2 pt-2">
+        <div className="flex justify-center px-3 pt-3">
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={() => setCollapsed(false)}
             aria-label="Expandir menú"
+            className="cursor-pointer"
           >
-            <PanelLeft />
+            <PanelLeft className="size-4" />
           </Button>
         </div>
       ) : null}

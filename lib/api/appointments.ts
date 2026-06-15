@@ -1,4 +1,4 @@
-import type { Appointment } from "@/lib/types";
+import type { Appointment, AppointmentAuditEntry } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -40,4 +40,8 @@ export function rescheduleAppointment(
   next: { start: string; end: string },
 ): Promise<Appointment> {
   return api.post<Appointment>(`/appointments/${id}/reschedule`, next);
+}
+
+export function getAppointmentHistory(id: string): Promise<AppointmentAuditEntry[]> {
+  return api.get<AppointmentAuditEntry[]>(`/appointments/${id}/history`);
 }
