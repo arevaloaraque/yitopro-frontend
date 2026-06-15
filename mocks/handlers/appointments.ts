@@ -32,7 +32,7 @@ export const appointmentHandlers = [
     if (from) result = result.filter((a) => a.start >= from);
     if (to) result = result.filter((a) => a.start <= to);
 
-    return HttpResponse.json(result);
+    return HttpResponse.json({ items: result, count: result.length });
   }),
 
   http.post(`${API}/appointments`, async ({ request }) => {
@@ -134,6 +134,6 @@ export const appointmentHandlers = [
     const entries = db.appointmentAudit.filter(
       (e) => e.appointment_id === params.id,
     );
-    return HttpResponse.json(entries);
+    return HttpResponse.json({ items: entries, count: entries.length });
   }),
 ];

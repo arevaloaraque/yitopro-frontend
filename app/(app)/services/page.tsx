@@ -68,6 +68,7 @@ export default function ServicesPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,11 +141,21 @@ export default function ServicesPage() {
   }
 
   async function toggleActive(service: Service) {
+    setActionError(null);
+    setServices((prev) =>
+      prev.map((s) =>
+        s.id === service.id ? { ...s, is_active: !s.is_active } : s,
+      ),
+    );
     try {
-      const updated = await updateService(service.id, { is_active: !service.is_active });
-      setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      await updateService(service.id, { is_active: !service.is_active });
     } catch {
-      // Silently fail; the user can retry
+      setServices((prev) =>
+        prev.map((s) =>
+          s.id === service.id ? { ...s, is_active: service.is_active } : s,
+        ),
+      );
+      setActionError("No se pudo cambiar el estado del servicio.");
     }
   }
 
@@ -198,6 +209,10 @@ export default function ServicesPage() {
           Nuevo servicio
         </Button>
       </div>
+
+      {actionError && (
+        <p className="text-sm text-destructive">{actionError}</p>
+      )}
 
       {services.length === 0 ? (
         <EmptyState
@@ -279,7 +294,7 @@ export default function ServicesPage() {
                 id="svc-name"
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Ej. Corte de pelo"
+                placeholder="Ej. Consulta inicial"
               />
               {formErrors.name && <p className="text-xs text-destructive">{formErrors.name}</p>}
             </div>

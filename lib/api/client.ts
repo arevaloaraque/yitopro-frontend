@@ -31,17 +31,21 @@ export class ApiError extends Error {
 
 type AccessTokenGetter = () => string | null;
 type SessionRefresher = () => Promise<boolean>;
+type SessionExpiredHandler = () => void;
 
 let getAccessToken: AccessTokenGetter = () => null;
 let refreshSession: SessionRefresher = async () => false;
+let onSessionExpired: SessionExpiredHandler = () => {};
 
 /** Registra los hooks de auth. Lo llama `AuthProvider`. */
 export function configureApiAuth(opts: {
   getAccessToken?: AccessTokenGetter;
   refreshSession?: SessionRefresher;
+  onSessionExpired?: SessionExpiredHandler;
 }): void {
   if (opts.getAccessToken) getAccessToken = opts.getAccessToken;
   if (opts.refreshSession) refreshSession = opts.refreshSession;
+  if (opts.onSessionExpired) onSessionExpired = opts.onSessionExpired;
 }
 
 // --- Núcleo ----------------------------------------------------------------
@@ -82,9 +86,36 @@ async function parseBody(res: Response): Promise<unknown> {
   return text;
 }
 
+function extractErrorMessage(
+  payload: unknown,
+  status: number,
+  path: string,
+): string {
+  if (payload && typeof payload === "object") {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail.length > 0 && typeof detail[0] === "object" && detail[0] !== null) {
+      const first = detail[0] as Record<string, unknown>;
+      if (typeof first.msg === "string") return String(first.msg);
+    }
+    const firstField = Object.values(payload as Record<string, unknown>)[0];
+    if (Array.isArray(firstField) && typeof firstField[0] === "string")
+      return String(firstField[0]);
+  }
+  return `Error ${status} en ${path}`;
+}
+
+// Single-flight: un único refresh aunque N requests reciban 401 a la vez.
+let refreshInFlight: Promise<boolean> | null = null;
+const refreshOnce = () =>
+  (refreshInFlight ??= refreshSession().finally(() => {
+    refreshInFlight = null;
+  }));
+
 /**
  * Hace una petición a la API. Lanza `ApiError` ante respuestas no-OK.
- * Ante `401`, intenta refrescar la sesión una vez y reintenta.
+ * Ante `401`, intenta refrescar la sesión una vez (single-flight) y reintenta.
+ * Si el refresh falla, dispara `onSessionExpired`.
  */
 export async function apiFetch<T>(
   path: string,
@@ -97,7 +128,6 @@ export async function apiFetch<T>(
     const token = getAccessToken();
     return fetch(url, {
       ...rest,
-      // El refresh token es una cookie httpOnly: siempre la enviamos.
       credentials: "include",
       headers: {
         Accept: "application/json",
@@ -109,27 +139,35 @@ export async function apiFetch<T>(
     });
   };
 
-  let res = await doRequest();
+  let res: Response;
+  try {
+    res = await doRequest();
+  } catch {
+    throw new ApiError(0, "Error de red", null);
+  }
 
-  // 401 -> intentar refresh una vez y reintentar.
   if (res.status === 401) {
-    const refreshed = await refreshSession();
+    const refreshed = await refreshOnce();
     if (refreshed) {
-      res = await doRequest();
+      try {
+        res = await doRequest();
+      } catch {
+        throw new ApiError(0, "Error de red", null);
+      }
+    } else {
+      onSessionExpired();
+      throw new ApiError(401, "Sesion expirada", null);
     }
   }
 
   const payload = await parseBody(res);
 
   if (!res.ok) {
-    const message =
-      (typeof payload === "object" &&
-        payload !== null &&
-        "detail" in payload &&
-        typeof (payload as { detail: unknown }).detail === "string" &&
-        (payload as { detail: string }).detail) ||
-      `Error ${res.status} en ${path}`;
-    throw new ApiError(res.status, message, payload);
+    throw new ApiError(
+      res.status,
+      extractErrorMessage(payload, res.status, path),
+      payload,
+    );
   }
 
   return payload as T;

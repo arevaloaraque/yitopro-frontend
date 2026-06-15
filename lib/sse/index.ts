@@ -104,25 +104,49 @@ function subscribeMock(onEvent: SSEEventHandler): () => void {
   };
 }
 
-function subscribeReal(onEvent: SSEEventHandler): () => void {
+// --- Estado del bus real ----------------------------------------------------
+
+let realSource: EventSource | null = null;
+const realListeners = new Set<SSEEventHandler>();
+
+function ensureRealSource(): EventSource {
+  if (realSource) return realSource;
   const url = new URL("/api/events", API_BASE_URL).toString();
   const source = new EventSource(url, { withCredentials: true });
 
   const handle = (event: MessageEvent) => {
     try {
-      onEvent(JSON.parse(event.data) as SSEEvent);
+      const parsed = JSON.parse(event.data) as SSEEvent;
+      for (const listener of realListeners) listener(parsed);
     } catch {
       // Ignoramos payloads malformados.
     }
   };
 
-  // El backend puede usar el evento `message` por defecto o eventos nombrados.
   source.addEventListener("message", handle);
   for (const type of SSE_EVENT_TYPES) {
     source.addEventListener(type, handle);
   }
 
-  return () => source.close();
+  source.onerror = () => {
+    // EventSource reconecta solo; si el backend cierra por 401,
+    // F4-C debe disparar refresh + recrear el socket aquí con backoff.
+  };
+
+  realSource = source;
+  return source;
+}
+
+function subscribeReal(onEvent: SSEEventHandler): () => void {
+  ensureRealSource();
+  realListeners.add(onEvent);
+  return () => {
+    realListeners.delete(onEvent);
+    if (realListeners.size === 0 && realSource) {
+      realSource.close();
+      realSource = null;
+    }
+  };
 }
 
 /**

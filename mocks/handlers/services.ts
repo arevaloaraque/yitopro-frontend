@@ -8,7 +8,7 @@ import { API, notFound } from "./util";
 
 export const serviceHandlers = [
   http.get(`${API}/services`, () => {
-    return HttpResponse.json(db.services);
+    return HttpResponse.json({ items: db.services, count: db.services.length });
   }),
 
   http.post(`${API}/services`, async ({ request }) => {

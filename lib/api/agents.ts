@@ -1,9 +1,10 @@
-import type { Agent } from "@/lib/types";
+import type { Agent, Paginated } from "@/lib/types";
 
 import { api } from "./client";
 
-export function listAgents(): Promise<Agent[]> {
-  return api.get<Agent[]>("/agents");
+export async function listAgents(): Promise<Agent[]> {
+  const res = await api.get<Paginated<Agent>>("/agents");
+  return res.items;
 }
 
 export function updateAgent(

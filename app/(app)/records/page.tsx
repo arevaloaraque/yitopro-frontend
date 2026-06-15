@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Bot, Check, ClipboardList, Eye, EyeOff, Pencil, Save } from "lucide-react";
 
@@ -149,6 +149,13 @@ export default function RecordsPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,7 +164,7 @@ export default function RecordsPage() {
         const data = await listCustomers();
         if (!cancelled) setCustomers(data);
       } catch {
-        // silently fail
+        if (!cancelled) setError("Error al cargar clientes");
       }
     }
     load();
@@ -226,7 +233,8 @@ export default function RecordsPage() {
       setRecord(updated);
       setValues({ ...updated.values });
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setSaveError(
         e instanceof Error ? e.message : "Error al guardar la ficha",

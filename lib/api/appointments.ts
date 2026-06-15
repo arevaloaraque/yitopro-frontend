@@ -1,4 +1,4 @@
-import type { Appointment, AppointmentAuditEntry } from "@/lib/types";
+import type { Appointment, AppointmentAuditEntry, Paginated } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -11,10 +11,13 @@ export interface ListAppointmentsParams {
   customer_id?: string;
 }
 
-export function listAppointments(
+export async function listAppointments(
   params: ListAppointmentsParams = {},
 ): Promise<Appointment[]> {
-  return api.get<Appointment[]>("/appointments", { query: { ...params } });
+  const res = await api.get<Paginated<Appointment>>("/appointments", {
+    query: { ...params },
+  });
+  return res.items;
 }
 
 export interface CreateAppointmentInput {
@@ -42,6 +45,11 @@ export function rescheduleAppointment(
   return api.post<Appointment>(`/appointments/${id}/reschedule`, next);
 }
 
-export function getAppointmentHistory(id: string): Promise<AppointmentAuditEntry[]> {
-  return api.get<AppointmentAuditEntry[]>(`/appointments/${id}/history`);
+export async function getAppointmentHistory(
+  id: string,
+): Promise<AppointmentAuditEntry[]> {
+  const res = await api.get<Paginated<AppointmentAuditEntry>>(
+    `/appointments/${id}/history`,
+  );
+  return res.items;
 }
