@@ -16,6 +16,7 @@ import { AssistantStatus } from "./assistant-status";
 import { NotificationBell } from "./notification-bell";
 import { SidebarBrand } from "./sidebar-brand";
 import { SidebarNav } from "./sidebar-nav";
+import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 
 /**
@@ -52,6 +53,7 @@ export function Topbar() {
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
         <AssistantStatus />
+        <ThemeToggle />
         <NotificationBell />
         <UserMenu />
       </div>

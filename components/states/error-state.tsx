@@ -10,6 +10,8 @@ interface ErrorStateProps {
   description?: string;
   /** Si se provee, muestra un botón "Reintentar". */
   onRetry?: () => void;
+  /** Acción adicional (p.ej. un enlace "Ir al inicio") debajo del botón. */
+  action?: React.ReactNode;
   className?: string;
 }
 
@@ -21,6 +23,7 @@ export function ErrorState({
   title = "Algo salió mal",
   description = "No pudimos cargar la información. Inténtalo de nuevo.",
   onRetry,
+  action,
   className,
 }: ErrorStateProps) {
   return (
@@ -38,10 +41,15 @@ export function ErrorState({
       <p className="mt-2 max-w-sm text-[0.8rem] leading-relaxed text-muted-foreground">
         {description}
       </p>
-      {onRetry ? (
-        <Button variant="outline" size="sm" className="mt-7" onClick={onRetry}>
-          Reintentar
-        </Button>
+      {onRetry || action ? (
+        <div className="mt-7 flex items-center gap-3">
+          {onRetry ? (
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              Reintentar
+            </Button>
+          ) : null}
+          {action}
+        </div>
       ) : null}
     </div>
   );

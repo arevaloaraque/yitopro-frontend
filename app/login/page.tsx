@@ -1,9 +1,11 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,47 +19,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { type LoginValues, loginSchema } from "@/lib/validation/schemas";
 
 export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+  });
 
   // Si ya hay sesión, no mostramos el login.
   useEffect(() => {
     if (isAuthenticated) router.replace("/dashboard");
   }, [isAuthenticated, router]);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-
-    if (!email || !password) {
-      setError("Ingresa tu email y contraseña.");
-      return;
-    }
-    if (!EMAIL_RE.test(email)) {
-      setError("Ingresa un email válido.");
-      return;
-    }
-
-    setLoading(true);
+  async function onSubmit(values: LoginValues) {
     try {
-      await login(email, password);
+      await login(values.email, values.password);
       router.replace("/dashboard");
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        setError("Email o contraseña incorrectos.");
-      } else {
-        setError("No pudimos conectar con el servidor. Inténtalo de nuevo.");
-      }
-      setLoading(false);
+      setError("root", {
+        message:
+          err instanceof ApiError && err.status === 401
+            ? "Email o contraseña incorrectos."
+            : "No pudimos conectar con el servidor. Inténtalo de nuevo.",
+      });
     }
   }
 
@@ -65,13 +58,7 @@ export default function LoginPage() {
     <main className="flex min-h-svh flex-col items-center justify-center bg-gradient-to-b from-surface to-background px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex justify-center">
-          <Image
-            src="/brand/horizontal.svg"
-            alt="Yitopro"
-            width={160}
-            height={44}
-            priority
-          />
+          <Image src="/brand/horizontal.svg" alt="Yitopro" width={160} height={44} priority />
         </div>
 
         <Card elevated>
@@ -80,7 +67,7 @@ export default function LoginPage() {
             <CardDescription>Accede al panel de tu negocio</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -88,11 +75,13 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   placeholder="tu@negocio.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={loading}
-                  aria-invalid={error !== null}
+                  disabled={isSubmitting}
+                  aria-invalid={!!errors.email}
+                  {...register("email")}
                 />
+                {errors.email ? (
+                  <p className="text-[0.8rem] text-destructive">{errors.email.message}</p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Contraseña</Label>
@@ -101,21 +90,23 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  aria-invalid={error !== null}
+                  disabled={isSubmitting}
+                  aria-invalid={!!errors.password}
+                  {...register("password")}
                 />
+                {errors.password ? (
+                  <p className="text-[0.8rem] text-destructive">{errors.password.message}</p>
+                ) : null}
               </div>
 
-              {error ? (
+              {errors.root ? (
                 <p role="alert" className="text-[0.8rem] text-destructive">
-                  {error}
+                  {errors.root.message}
                 </p>
               ) : null}
 
-              <Button type="submit" size="lg" className="w-full" disabled={loading}>
-                {loading ? (
+              <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? (
                   <>
                     <Loader2 className="animate-spin" />
                     Entrando…

@@ -12,11 +12,3 @@ export const db: SeedData = createSeedData();
 export function resetDb(): void {
   Object.assign(db, createSeedData());
 }
-
-let idCounter = 1000;
-
-/** Genera un id único con prefijo para entidades nuevas. */
-export function genId(prefix: string): string {
-  idCounter += 1;
-  return `${prefix}_${idCounter}`;
-}

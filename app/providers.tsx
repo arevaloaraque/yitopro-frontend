@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeProvider } from "next-themes";
 import { useEffect, useState } from "react";
 
 import { AuthProvider } from "@/lib/auth";
@@ -34,7 +35,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  if (!mswReady) return null;
-
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      {mswReady ? <AuthProvider>{children}</AuthProvider> : null}
+    </ThemeProvider>
+  );
 }
