@@ -112,10 +112,13 @@ NEXT_PUBLIC_META_CONFIG_ID=                  # configuration_id de Embedded Sign
 
 > MSW requiere `public/mockServiceWorker.js` (gitignored): generarlo con `npx msw init public`.
 
-**Conexión por dominio (F4-B):** el interruptor está en `mocks/handlers/index.ts` (`DOMAIN_LIVE`).
-Real: auth, services, products, customers, appointments. Mock todavía: businesses/settings y
-records (el backend no expone el shape completo), agents (sin endpoint) y conversations (F4-C).
-Los desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
+**Conexión por dominio (F4-B/F4-C):** el interruptor está en `mocks/handlers/index.ts` (`DOMAIN_LIVE`).
+Real: auth, services, products, customers, appointments, conversations (inbox + tomar/cerrar/
+reactivar/responder), **SSE** (`lib/sse` lee `GET /api/events/stream/` por `fetch`+Bearer, no
+`EventSource`, porque el token va por header) y **WhatsApp Embedded Signup**
+(`POST /api/whatsapp/embedded-signup/callback/`, solo viaja el `code`). Mock todavía:
+businesses/settings y records (shape incompleto), agents (sin endpoint). Los desajustes de shape
+se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
 
 ## Flujo de trabajo por sesión
 

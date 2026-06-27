@@ -4,6 +4,9 @@ export type { RequestOptions } from "./client";
 export { loginRequest, refreshRequest, logoutRequest } from "./auth";
 export type { TokenResponse } from "./auth";
 
+export { submitEmbeddedSignupCode } from "./whatsapp";
+export type { EmbeddedSignupResult } from "./whatsapp";
+
 export * from "./businesses";
 export * from "./services";
 export * from "./appointments";
