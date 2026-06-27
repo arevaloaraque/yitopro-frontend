@@ -1,158 +1,156 @@
 /**
- * Abstracción de eventos en tiempo real. La firma pública
- * (`subscribeToEvents`) es ESTABLE: al conectar el backend real (F4-C) solo
- * cambia la implementación interna, no la interfaz.
+ * Abstracción de eventos en tiempo real. La firma pública (`subscribeToEvents`)
+ * es ESTABLE: dashboard, agenda, conversaciones y notificaciones la consumen
+ * igual. En F4-C cambia solo la implementación interna a SSE real.
  *
- * - Modo mock: NO abre `EventSource`. Emite eventos simulados periódicamente
- *   (cada ~15-20s) y de forma programática cuando una acción mock lo amerita
- *   (los handlers MSW llaman `emitMockEvent`).
- * - Modo real: abre un `EventSource` contra `/api/events`.
+ * Por qué `fetch` y no `EventSource`: el backend autentica `/api/events/stream/`
+ * por header `Authorization: Bearer` y nuestro access token vive SOLO en memoria.
+ * `EventSource` nativo no puede enviar headers (solo cookies), y la cookie de
+ * refresh está acotada a `/api/auth/`. Por eso el stream se lee con `fetch` +
+ * `ReadableStream`, con reconexión con backoff y refresh de token propios.
  *
- * La suscripción debe hacerse UNA sola vez, a nivel del layout autenticado.
+ * Multiplexa: un único stream alimenta a todos los suscriptores.
  */
-import { API_BASE_URL } from "@/lib/api/client";
+import { API_BASE_URL, peekAccessToken, refreshAuthOnce } from "@/lib/api/client";
 import type { SSEEvent, SSEEventType } from "@/lib/types";
 
 export type SSEEventHandler = (event: SSEEvent) => void;
 
-/** Genera el próximo evento simulado, o `null` si no hay nada que emitir. */
-type MockEventGenerator = () => SSEEvent | null;
-
-const MOCKING = process.env.NEXT_PUBLIC_API_MOCKING === "enabled";
-
-const SSE_EVENT_TYPES: SSEEventType[] = [
-  "nueva_cita",
-  "cita_cancelada",
-  "cita_reagendada",
-  "mensaje_recibido",
-  "conversacion_escalada",
-  "pedido_creado",
-  "error_operativo",
-  "error_integracion",
-];
-
-// --- Estado del bus mock ---------------------------------------------------
-
-const listeners = new Set<SSEEventHandler>();
-let mockGenerator: MockEventGenerator | null = null;
-let timer: ReturnType<typeof setTimeout> | null = null;
 let seq = 0;
-
-const MIN_DELAY_MS = 15_000;
-const MAX_DELAY_MS = 20_000;
-
-/** Id de evento único (suficiente para dedupe en el cliente). */
+/** Id único de evento (para dedupe en el cliente). */
 export function nextEventId(): string {
   seq += 1;
   return `evt_${Date.now().toString(36)}_${seq}`;
 }
 
-function dispatch(event: SSEEvent): void {
+/**
+ * No-op: el emisor de eventos simulados se apagó en F4-C (SSE real). Se conserva
+ * la firma para no romper a los handlers mock que lo invocaban.
+ */
+// ponytail: stub para compatibilidad; el bus mock ya no existe.
+export function emitMockEvent(_event: SSEEvent): void {}
+
+// --- Stream real (fetch + SSE) ---------------------------------------------
+
+const listeners = new Set<SSEEventHandler>();
+let abort: AbortController | null = null;
+let running = false;
+
+const STREAM_URL = new URL("/api/events/stream/", API_BASE_URL).toString();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Mapea el envelope del backend `{event, data, correlation_id}` al `SSEEvent`
+ * del front `{id, type, emitted_at, data}`: renombra `event`→`type`, sintetiza
+ * `id`/`emitted_at` (el backend no los manda), coacciona ids enteros a string y
+ * normaliza `start_datetime`→`start` / `slot`→`new_start`.
+ */
+function mapEnvelope(raw: unknown): SSEEvent | null {
+  if (!raw || typeof raw !== "object") return null;
+  const env = raw as { event?: unknown; data?: unknown };
+  if (typeof env.event !== "string") return null;
+  const data: Record<string, unknown> = {
+    ...((env.data as Record<string, unknown> | undefined) ?? {}),
+  };
+  for (const k of Object.keys(data)) {
+    if (k.endsWith("_id") && typeof data[k] === "number") data[k] = String(data[k]);
+  }
+  if ("start_datetime" in data && !("start" in data)) data.start = data.start_datetime;
+  if ("slot" in data && !("new_start" in data)) data.new_start = data.slot;
+  return {
+    id: nextEventId(),
+    type: env.event as SSEEventType,
+    emitted_at: new Date().toISOString(),
+    data,
+  } as SSEEvent;
+}
+
+/** Procesa un frame SSE (separado por `\n\n`): toma las líneas `data:`. */
+function dispatchFrame(frame: string): void {
+  const payload = frame
+    .split("\n")
+    .filter((l) => l.startsWith("data:"))
+    .map((l) => l.slice(5).trim())
+    .join("\n");
+  if (!payload) return; // comentario (`: connected` / `: keep-alive`) o vacío
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return;
+  }
+  const event = mapEnvelope(parsed);
+  if (!event) return;
   for (const listener of listeners) listener(event);
 }
 
-/**
- * Empuja un evento al stream mock. Lo usan los handlers MSW para reflejar
- * acciones (p.ej. crear una cita => `nueva_cita`).
- */
-export function emitMockEvent(event: SSEEvent): void {
-  if (!MOCKING) return;
-  dispatch(event);
-}
-
-/**
- * Registra el generador de eventos periódicos del mock (lo llama
- * `mocks/browser` al arrancar el worker). Mantiene `lib/sse` desacoplado de
- * los datos mock.
- */
-export function setMockEventGenerator(generator: MockEventGenerator): void {
-  mockGenerator = generator;
-}
-
-function fallbackEvent(): SSEEvent {
-  return {
-    id: nextEventId(),
-    type: "mensaje_recibido",
-    emitted_at: new Date().toISOString(),
-    data: {
-      conversation_id: "conv_demo",
-      message_id: nextEventId(),
-      customer_id: "cus_demo",
-      preview: "Nuevo mensaje de un cliente",
-    },
-  };
-}
-
-function scheduleNext(): void {
-  const delay = MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS);
-  timer = setTimeout(() => {
-    const event = mockGenerator?.() ?? fallbackEvent();
-    if (event) dispatch(event);
-    scheduleNext();
-  }, delay);
-}
-
-function subscribeMock(onEvent: SSEEventHandler): () => void {
-  listeners.add(onEvent);
-  if (timer === null) scheduleNext();
-  return () => {
-    listeners.delete(onEvent);
-    if (listeners.size === 0 && timer !== null) {
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-}
-
-// --- Estado del bus real ----------------------------------------------------
-
-let realSource: EventSource | null = null;
-const realListeners = new Set<SSEEventHandler>();
-
-function ensureRealSource(): EventSource {
-  if (realSource) return realSource;
-  const url = new URL("/api/events", API_BASE_URL).toString();
-  const source = new EventSource(url, { withCredentials: true });
-
-  const handle = (event: MessageEvent) => {
+async function runStream(): Promise<void> {
+  running = true;
+  let backoff = 1000;
+  while (running) {
+    abort = new AbortController();
     try {
-      const parsed = JSON.parse(event.data) as SSEEvent;
-      for (const listener of realListeners) listener(parsed);
+      const token = peekAccessToken();
+      const res = await fetch(STREAM_URL, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          Accept: "text/event-stream",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        signal: abort.signal,
+      });
+
+      if (res.status === 401) {
+        // Token vencido: refresca y reintenta. No cerramos sesión desde el
+        // stream — la validez de la sesión la gobiernan las llamadas API.
+        const refreshed = await refreshAuthOnce();
+        if (!refreshed) {
+          await sleep(backoff);
+          backoff = Math.min(backoff * 2, 15_000);
+        }
+        continue;
+      }
+      if (!res.ok || !res.body) throw new Error(`SSE ${res.status}`);
+
+      backoff = 1000; // conexión OK → reinicia backoff
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (running) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          dispatchFrame(buffer.slice(0, sep));
+          buffer = buffer.slice(sep + 2);
+        }
+      }
     } catch {
-      // Ignoramos payloads malformados.
+      // error de red o abort → reconexión con backoff
     }
-  };
-
-  source.addEventListener("message", handle);
-  for (const type of SSE_EVENT_TYPES) {
-    source.addEventListener(type, handle);
+    if (!running) break;
+    await sleep(backoff);
+    backoff = Math.min(backoff * 2, 15_000);
   }
-
-  source.onerror = () => {
-    // EventSource reconecta solo; si el backend cierra por 401,
-    // F4-C debe disparar refresh + recrear el socket aquí con backoff.
-  };
-
-  realSource = source;
-  return source;
 }
 
-function subscribeReal(onEvent: SSEEventHandler): () => void {
-  ensureRealSource();
-  realListeners.add(onEvent);
-  return () => {
-    realListeners.delete(onEvent);
-    if (realListeners.size === 0 && realSource) {
-      realSource.close();
-      realSource = null;
-    }
-  };
+function stopStream(): void {
+  running = false;
+  abort?.abort();
+  abort = null;
 }
 
 /**
- * Se suscribe al stream de eventos. Devuelve una función de limpieza.
- * Firma estable entre modo mock y modo real.
+ * Se suscribe al stream de eventos en tiempo real. Devuelve una función de
+ * limpieza. Firma estable entre la implementación mock anterior y la real.
  */
 export function subscribeToEvents(onEvent: SSEEventHandler): () => void {
-  return MOCKING ? subscribeMock(onEvent) : subscribeReal(onEvent);
+  listeners.add(onEvent);
+  if (!running) void runStream();
+  return () => {
+    listeners.delete(onEvent);
+    if (listeners.size === 0) stopStream();
+  };
 }

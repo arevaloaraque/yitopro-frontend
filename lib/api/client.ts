@@ -118,6 +118,21 @@ const refreshOnce = () =>
     refreshInFlight = null;
   }));
 
+// --- Auth para el stream SSE -----------------------------------------------
+// El stream SSE va por `fetch` (no `EventSource`) porque el backend autentica
+// por header Bearer y el access token vive en memoria; `EventSource` no puede
+// enviar headers. `lib/sse` reutiliza estos hooks ya configurados por AuthProvider.
+
+/** Access token vigente (en memoria), para el header del stream SSE. */
+export function peekAccessToken(): string | null {
+  return getAccessToken();
+}
+
+/** Refresca la sesión una vez (single-flight compartido con `apiFetch`). */
+export function refreshAuthOnce(): Promise<boolean> {
+  return refreshOnce();
+}
+
 /**
  * Hace una petición a la API. Lanza `ApiError` ante respuestas no-OK.
  * Ante `401`, intenta refrescar la sesión una vez (single-flight) y reintenta.
