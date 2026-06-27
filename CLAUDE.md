@@ -71,6 +71,9 @@ Después de cualquier cambio, antes de dar una tarea por terminada: `npm run lin
   usan `credentials: 'include'`.
 - **No decodificar el access token** en el cliente: es opaco por diseño.
 - Ante `401`, intentar refresh una vez y reintentar; si falla, limpiar sesión y redirigir a `/login`.
+  **Implementado (F4-A):** login/refresh/logout reales (`lib/api/auth.ts`), interceptor single-flight
+  en `lib/api/client.ts`. **Recargar la página fuerza re-login** (token solo en memoria; no se
+  recupera vía cookie en boot frío). El backend debe permitir CORS con credenciales (ver README).
 - **Sanitizar** todo contenido externo que se renderice (mensajes de WhatsApp de clientes).
 - Solo `NEXT_PUBLIC_*` son públicos; **ningún secreto en el bundle**. `META_APP_SECRET` jamás
   llega al cliente; en Embedded Signup solo el `code` corto viaja al backend.
@@ -101,11 +104,13 @@ WhatsApp realistas. Mantener este caso al crear/ampliar mocks para que la valida
 ## Variables de entorno
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:8000   # backend Django
-NEXT_PUBLIC_API_MOCKING=enabled             # enabled = MSW intercepta; disabled = backend real
+NEXT_PUBLIC_API_URL=http://localhost:8050   # backend Django (auth real desde F4-A)
+NEXT_PUBLIC_API_MOCKING=enabled             # enabled = MSW intercepta todo MENOS auth; disabled = backend real
 NEXT_PUBLIC_META_APP_ID=                     # WhatsApp Embedded Signup (F4-C)
 NEXT_PUBLIC_META_CONFIG_ID=                  # configuration_id de Embedded Signup (F4-C)
 ```
+
+> MSW requiere `public/mockServiceWorker.js` (gitignored): generarlo con `npx msw init public`.
 
 ## Flujo de trabajo por sesión
 

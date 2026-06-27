@@ -57,6 +57,12 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
   /** Parámetros de query; los `undefined`/`null` se omiten. */
   query?: Record<string, QueryValue>;
+  /**
+   * Salta el interceptor de refresh ante 401. Lo usan las propias rutas de
+   * auth: en `/login` un 401 es "credenciales inválidas" (no hay que refrescar)
+   * y en `/refresh` un 401 es "sesión muerta" (refrescar provocaría recursión).
+   */
+  skipRefresh?: boolean;
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
@@ -121,7 +127,7 @@ export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { body, query, headers, ...rest } = options;
+  const { body, query, headers, skipRefresh, ...rest } = options;
   const url = buildUrl(path, query);
 
   const doRequest = async (): Promise<Response> => {
@@ -146,7 +152,7 @@ export async function apiFetch<T>(
     throw new ApiError(0, "Error de red", null);
   }
 
-  if (res.status === 401) {
+  if (res.status === 401 && !skipRefresh) {
     const refreshed = await refreshOnce();
     if (refreshed) {
       try {
