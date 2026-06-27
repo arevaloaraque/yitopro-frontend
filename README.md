@@ -11,12 +11,16 @@ Panel de administración SaaS de Yitopro (Next.js App Router). Backend Django se
 ## Puesta en marcha
 
 ```bash
-nvm use                      # Node 24
-npm install
-cp .env.example .env.local   # ajusta si tu backend no está en :8050
-npx msw init public          # genera public/mockServiceWorker.js (gitignored, requerido)
-npm run dev                  # http://localhost:3000
+nvm use                              # Node 24
+npm install --legacy-peer-deps       # ver nota abajo
+cp .env.example .env.local           # ajusta si tu backend no está en :8050
+npx msw init public                  # genera public/mockServiceWorker.js (gitignored, requerido)
+npm run dev                          # http://localhost:3000
 ```
+
+> **`--legacy-peer-deps`**: `@testing-library/react` aún declara un peer de React más
+> estricto que el 19 del proyecto. La resolución real es correcta; el flag solo evita el
+> error de peers de npm. Vercel y CI usan el mismo flag (ver `vercel.json` / `.github`).
 
 > `public/mockServiceWorker.js` está en `.gitignore` y **no** se versiona: cada clon debe
 > generarlo con `npx msw init public`. Sin él, MSW no arranca y las rutas mockeadas fallan.
@@ -83,10 +87,11 @@ CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
 
 ## Conexión al backend por dominio (F4-B/F4-C)
 
-Cada dominio se conecta al backend real de forma independiente. El interruptor vive en
-`mocks/handlers/index.ts` (`DOMAIN_LIVE`): `true` excluye el handler MSW de ese dominio y sus
-rutas pasan a la red real (`onUnhandledRequest: "bypass"`); `false` lo mantiene mockeado. Solo se
-tocó la capa `lib/api`/tipos para mapear los desajustes de shape — **ningún componente cambió**.
+Los dominios conectados van al backend real (sus handlers MSW fueron eliminados). En
+`mocks/handlers/index.ts` solo quedan los handlers de los dominios aún mockeados
+(businesses/settings, records, agents); el resto pasa a la red real (`onUnhandledRequest:
+"bypass"`). Solo se tocó la capa `lib/api`/tipos para mapear desajustes de shape —
+**ningún componente cambió**. Cuando el backend exponga un dominio mockeado, se borra su handler.
 
 | Dominio | Estado | Notas |
 |---------|--------|-------|
@@ -158,5 +163,91 @@ npm run dev        # desarrollo
 npm run build      # build de producción
 npm run lint       # ESLint
 npm run typecheck  # tsc --noEmit
+npm run test       # Vitest (run) — sin backend real
+npm run test:watch # Vitest en watch
 npm run format     # Prettier
 ```
+
+## Manejo de errores (F5)
+
+Sistema unificado, sin exponer stack traces ni mensajes técnicos:
+
+- `lib/errors.ts` — `friendlyMessage(error)` / `messageForStatus(status)` / `titleForStatus(status)`:
+  traducen cualquier error (incluido `ApiError`) a textos seguros en español por código HTTP
+  (401/403/404/409/500/red).
+- **Boundaries de ruta**: `app/error.tsx` (excepciones no manejadas; mapea `ApiError.status` a
+  un mensaje seguro + `reset()`), `app/global-error.tsx` (crash de raíz, autocontenido) y
+  `app/not-found.tsx` (404). Todos reutilizan el **mismo** componente visual `ErrorState`.
+- En pantallas, los errores de carga usan `components/states/ErrorState` con `onRetry`; el `401`
+  lo intercepta `lib/api/client` (refresh + redirect a `/login`).
+
+## Modo oscuro (F5)
+
+- Tokens claro/oscuro en `app/globals.css` (base Navy `#071A3A`); el dark **reutiliza** los mismos
+  tokens, sin colores nuevos.
+- `next-themes` montado en `app/providers.tsx` (`attribute="class"`, `defaultTheme="system"`,
+  `enableSystem`). Toggle en el topbar (`components/layout/theme-toggle.tsx`); la preferencia
+  persiste (localStorage `theme`). `app/layout.tsx` usa `suppressHydrationWarning`.
+
+## Testing (F5)
+
+- **Vitest + React Testing Library + jsdom**; **MSW (node)** intercepta toda la red — **ningún
+  test toca el backend real** (`mocks/server.ts`, lifecycle en `vitest.setup.ts`).
+- Cobertura: `lib/api/client` (GET, query, `ApiError`, **401→refresh→retry**, **expiración→logout**),
+  **login** (`AuthContext` + payload), **mappers** de services/products/customers/**conversations**/
+  **appointments** (crear/cancelar/reagendar), **SSE** (`mapSseEnvelope`), `lib/errors` y schemas Zod.
+- Ejecutar: `npm run test`.
+
+## Formularios (F5)
+
+Validación con **React Hook Form + Zod** (`@hookform/resolvers`). Los esquemas viven en
+`lib/validation/schemas.ts` (única fuente de verdad, testeados): `loginSchema`, `serviceSchema`,
+`productSchema`, `customerSchema`. **Convertidos**: login. **Pendientes de migrar al patrón**
+(hoy con validación manual funcional): clientes/servicios/productos (dialogs), citas
+(crear/reagendar/cancelar), configuración, fichas, agentes y onboarding — ver "Estado pendiente".
+
+## CI/CD (F5)
+
+`.github/workflows/ci.yml` corre en push a `main` y en PRs: **install → lint → typecheck → test →
+build**. Cualquier paso que falle hace fallar el workflow. Node 24, `npm ci --legacy-peer-deps`.
+
+## Deploy (F5)
+
+- `vercel.json`: framework Next.js, `installCommand` con `--legacy-peer-deps`.
+- Variables de producción en `.env.production.example`. En producción
+  **`NEXT_PUBLIC_API_MOCKING=disabled`** ⇒ MSW **no se carga** (lo gatea `app/providers.tsx`) y toda
+  la red va al backend real.
+- `NEXT_PUBLIC_API_URL` apunta al backend real; `NEXT_PUBLIC_META_*` para el Embedded Signup.
+
+## Auditoría de seguridad frontend (F5)
+
+| Ítem | Estado | Evidencia |
+|------|--------|-----------|
+| Access token | ✅ solo en memoria (estado React `AuthContext`), nunca en storage | `lib/auth/AuthContext.tsx` |
+| Refresh token | ✅ cookie httpOnly `yitopro_refresh` (scope `/api/auth/`), `credentials:"include"` | `lib/api/client.ts`, `lib/sse` |
+| Token no se decodifica | ✅ JWE opaco; el cliente nunca lo parsea | — |
+| localStorage para auth | ✅ no se usa | grep |
+| sessionStorage | ✅ solo datos de formulario del onboarding (no auth) | `lib/onboarding/onboarding-context.tsx` |
+| Secretos en bundle | ✅ solo `NEXT_PUBLIC_*`; `META_APP_SECRET` solo en backend | `.env.example` |
+| Sanitización | ✅ contenido de WhatsApp se renderiza con `stripTags`; sin `dangerouslySetInnerHTML` | `message-bubble.tsx` |
+| Errores técnicos | ✅ nunca se muestran stack traces; mensajes por código vía `lib/errors` | `app/error.tsx` |
+| Autorización | ✅ el frontend solo gatea login (`RequireAuth`); el backend autoriza y aísla por tenant | `lib/auth/auth-guard.tsx` |
+| Multi-tenant | ✅ el cliente nunca envía `business_id`; el backend filtra por token | mappers en `lib/api/*` |
+
+## Troubleshooting
+
+- **`npm install` falla por peers** → usa `npm install --legacy-peer-deps`.
+- **MSW no intercepta / rutas mockeadas dan 404** → corre `npx msw init public` (worker gitignored).
+- **SSE no llega en dev** → el backend debe estar arriba; `uvicorn --reload` puede quedar colgado al
+  editar código si hay una conexión SSE abierta (reinicia el contenedor `api`). En prod (gunicorn) no aplica.
+- **Modo oscuro no cambia** → confirma que `ThemeProvider` está montado (`app/providers.tsx`).
+- **Tests "tocan red"** → MSW está en modo `onUnhandledRequest: "error"`; agrega un handler con `server.use(...)`.
+
+## Estado pendiente (documentado)
+
+- **Migración a RHF+Zod**: hecha en login; el resto de formularios usa validación manual funcional
+  (mismos campos/reglas) — migrar siguiendo `lib/validation/schemas.ts`.
+- **Dominios aún en MSW** (el backend no expone el shape/endpoint completo): **businesses/settings**
+  (sin `assistant_config.display_name`/`autonomous` ni `/business/onboarding`), **records** (sin
+  `schema`/`audit` en `RecordOut`), **agents** (sin endpoint). Son los únicos handlers en
+  `mocks/handlers/index.ts`; el seed (`mocks/data/seed.ts`) solo conserva su data.

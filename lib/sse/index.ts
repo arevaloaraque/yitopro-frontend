@@ -23,13 +23,6 @@ export function nextEventId(): string {
   return `evt_${Date.now().toString(36)}_${seq}`;
 }
 
-/**
- * No-op: el emisor de eventos simulados se apagó en F4-C (SSE real). Se conserva
- * la firma para no romper a los handlers mock que lo invocaban.
- */
-// ponytail: stub para compatibilidad; el bus mock ya no existe.
-export function emitMockEvent(_event: SSEEvent): void {}
-
 // --- Stream real (fetch + SSE) ---------------------------------------------
 
 const listeners = new Set<SSEEventHandler>();
@@ -45,7 +38,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * `id`/`emitted_at` (el backend no los manda), coacciona ids enteros a string y
  * normaliza `start_datetime`→`start` / `slot`→`new_start`.
  */
-function mapEnvelope(raw: unknown): SSEEvent | null {
+export function mapSseEnvelope(raw: unknown): SSEEvent | null {
   if (!raw || typeof raw !== "object") return null;
   const env = raw as { event?: unknown; data?: unknown };
   if (typeof env.event !== "string") return null;
@@ -79,7 +72,7 @@ function dispatchFrame(frame: string): void {
   } catch {
     return;
   }
-  const event = mapEnvelope(parsed);
+  const event = mapSseEnvelope(parsed);
   if (!event) return;
   for (const listener of listeners) listener(event);
 }

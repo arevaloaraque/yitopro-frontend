@@ -112,13 +112,26 @@ NEXT_PUBLIC_META_CONFIG_ID=                  # configuration_id de Embedded Sign
 
 > MSW requiere `public/mockServiceWorker.js` (gitignored): generarlo con `npx msw init public`.
 
-**Conexión por dominio (F4-B/F4-C):** el interruptor está en `mocks/handlers/index.ts` (`DOMAIN_LIVE`).
-Real: auth, services, products, customers, appointments, conversations (inbox + tomar/cerrar/
-reactivar/responder), **SSE** (`lib/sse` lee `GET /api/events/stream/` por `fetch`+Bearer, no
-`EventSource`, porque el token va por header) y **WhatsApp Embedded Signup**
-(`POST /api/whatsapp/embedded-signup/callback/`, solo viaja el `code`). Mock todavía:
-businesses/settings y records (shape incompleto), agents (sin endpoint). Los desajustes de shape
-se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
+**Conexión por dominio (F4/F5):** real contra el backend: auth, services, products, customers,
+appointments, conversations (inbox + tomar/cerrar/reactivar/responder), **SSE** (`lib/sse` lee
+`GET /api/events/stream/` por `fetch`+Bearer, no `EventSource`, porque el token va por header) y
+**WhatsApp Embedded Signup** (`POST /api/whatsapp/embedded-signup/callback/`, solo viaja el `code`).
+**Mock** (únicos handlers en `mocks/handlers/`): businesses/settings y records (shape incompleto en
+el backend), agents (sin endpoint) — cuando el backend los exponga, se borra su handler. Los
+desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
+
+**Endurecimiento (F5):**
+- **Errores**: `lib/errors.ts` (mensajes seguros por código HTTP, sin stack traces) + boundaries
+  `app/error.tsx` / `global-error.tsx` / `not-found.tsx`, todos reusando `ErrorState`.
+- **Dark mode**: `next-themes` en `app/providers.tsx` (`attribute="class"`), toggle en el topbar;
+  tokens claro/oscuro en `globals.css` (base Navy), sin colores nuevos.
+- **Testing**: Vitest + RTL + MSW (node) — `npm run test`, ningún test toca el backend real
+  (`mocks/server.ts`). **Forms**: RHF + Zod con esquemas en `lib/validation/schemas.ts` (login
+  convertido; resto pendiente de migrar — ver README).
+- **CI**: `.github/workflows/ci.yml` (install→lint→typecheck→test→build). **Deploy**: `vercel.json`
+  + `.env.production.example`; en prod `NEXT_PUBLIC_API_MOCKING=disabled` ⇒ MSW no se carga.
+- Antes de cerrar cualquier tarea: `npm run lint`, `npm run typecheck`, `npm run test` y
+  `npm run build` deben pasar limpios.
 
 ## Flujo de trabajo por sesión
 
