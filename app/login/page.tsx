@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -50,8 +51,12 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.replace("/dashboard");
-    } catch {
-      setError("No pudimos iniciar sesión. Revisa tus datos e inténtalo de nuevo.");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setError("Email o contraseña incorrectos.");
+      } else {
+        setError("No pudimos conectar con el servidor. Inténtalo de nuevo.");
+      }
       setLoading(false);
     }
   }
@@ -120,10 +125,6 @@ export default function LoginPage() {
                 )}
               </Button>
             </form>
-
-            <p className="mt-4 text-center text-[0.7rem] text-muted-foreground">
-              Modo demo: cualquier email y contraseña funcionan.
-            </p>
           </CardContent>
         </Card>
       </div>

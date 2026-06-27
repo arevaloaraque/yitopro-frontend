@@ -10,8 +10,7 @@ import {
 } from "react";
 
 import { configureApiAuth } from "@/lib/api/client";
-
-const MOCKING = process.env.NEXT_PUBLIC_API_MOCKING === "enabled";
+import { loginRequest, logoutRequest, refreshRequest } from "@/lib/api/auth";
 
 /** Usuario autenticado (mínimo necesario para el shell). */
 export interface AuthUser {
@@ -26,16 +25,14 @@ export interface AuthContextValue {
   user: AuthUser | null;
   status: AuthStatus;
   isAuthenticated: boolean;
-  /** En mock acepta cualquier credencial y setea un token falso. */
+  /** Autentica contra el backend real (`POST /api/auth/login/`). */
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  /** Stub mock por ahora; F4 conecta el refresh real (cookie httpOnly). */
+  /** Rota la sesión usando la cookie httpOnly (`POST /api/auth/refresh/`). */
   refresh: () => Promise<boolean>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
-
-let fakeTokenSeq = 0;
 
 function nameFromEmail(email: string): string {
   const handle = email.split("@")[0] ?? "Operador";
@@ -58,28 +55,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const refresh = useCallback(async (): Promise<boolean> => {
-    // Stub: F4 hará POST de refresh usando la cookie httpOnly.
-    return false;
+    try {
+      const { access_token } = await refreshRequest();
+      // Sincroniza el ref de inmediato: el reintento del interceptor lee
+      // `tokenRef.current` justo tras este await, antes de que React
+      // re-renderice y corra el effect que lo actualiza.
+      tokenRef.current = access_token;
+      setToken(access_token);
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     if (!email || !password) {
       throw new Error("Email y contraseña son obligatorios.");
     }
-    if (MOCKING) {
-      fakeTokenSeq += 1;
-      // Token opaco simulado (no se decodifica en el cliente).
-      const fakeToken = `mock.jwe.${btoa(email)}.${fakeTokenSeq}`;
-      setToken(fakeToken);
-      setUser({ id: `usr_${fakeTokenSeq}`, email, name: nameFromEmail(email) });
-      return;
-    }
-    // F4 conectará el login real contra el backend. Por ahora, sin backend,
-    // dejamos la sesión sin token (las llamadas reales fallarán con 401).
-    throw new Error("Login real no implementado todavía (se conecta en F4).");
+    const { access_token } = await loginRequest(email, password);
+    // El backend no devuelve perfil (solo el token); la identidad visible se
+    // arma con el email del formulario. El token JWE es opaco: no se decodifica.
+    tokenRef.current = access_token;
+    setToken(access_token);
+    setUser({ id: email, email, name: nameFromEmail(email) });
   }, []);
 
   const logout = useCallback(() => {
+    // Best-effort: revoca el refresh token en el backend (usa la cookie).
+    // No bloquea el cierre de sesión local si la red falla.
+    void logoutRequest().catch(() => {});
+    tokenRef.current = null;
     setToken(null);
     setUser(null);
   }, []);
