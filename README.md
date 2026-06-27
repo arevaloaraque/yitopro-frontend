@@ -81,11 +81,33 @@ CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
 - En producción frontend y backend son **same-origin** (`app.yitopro.com`), así que `CORS_ALLOWED_ORIGINS`
   queda vacío allí.
 
-## Conectar más dominios al backend real
+## Conexión al backend por dominio (F4-B)
 
-Auth ya es real. Para pasar otro dominio de mock a real (F4-B), se quita su handler de MSW
-(`mocks/handlers/`); al no haber handler, `onUnhandledRequest: "bypass"` deja pasar esas rutas al
-backend. No hay que tocar componentes ni `lib/api`.
+Cada dominio se conecta al backend real de forma independiente. El interruptor vive en
+`mocks/handlers/index.ts` (`DOMAIN_LIVE`): `true` excluye el handler MSW de ese dominio y sus
+rutas pasan a la red real (`onUnhandledRequest: "bypass"`); `false` lo mantiene mockeado. Solo se
+tocó la capa `lib/api`/tipos para mapear los desajustes de shape — **ningún componente cambió**.
+
+| Dominio | Estado | Notas |
+|---------|--------|-------|
+| auth | **real** | F4-A |
+| services | **real** | mapeo: `active`→`is_active`, `price` Decimal-string→number, `id` int→string, sin envelope de paginación (lista cruda) |
+| products | **real** | mapeo: `whatsapp_enabled`→`sellable_via_whatsapp`, `active`→`is_active`, `price`/`id` |
+| customers | **real** | mapeo: `display_name`→`name`; `create` envía `{phone, display_name}` |
+| appointments | **real** | mapeo: `start`/`end`→`start_datetime`; reagendar usa `new_start_datetime` (el backend recalcula el fin); cancelar/reagendar son `PATCH`; `origin`→`created_by`; filtro por `date` (no `from`/`to`) |
+| **businesses / settings** | mock | el backend no expone `assistant_config.display_name` ni `autonomous` (solo `tone`/`welcome_message`/`language` en `BusinessConfig`, y `tone` usa `friendly` no `neutral`), ni `GET /business/onboarding`. Falta eso para conectar. |
+| **records (fichas)** | mock | `RecordOut` no incluye `schema` (definición de campos) ni `audit`; el formulario dinámico los necesita. |
+| **agents** | mock | el backend no tiene endpoint de agentes (`apps/agents` es un esqueleto vacío). |
+| **conversations** | mock | se conecta en F4-C (requiere SSE). |
+
+**Gaps de mapeo con caveat conocido:**
+- `getAppointmentHistory` devuelve `[]`: el backend aún no tiene endpoint/modelo de auditoría de citas.
+- El estado de cita `no_show` del backend no tiene equivalente en la UI (no hay badge); `rescheduled`
+  no existe en el backend (reagendar mantiene `scheduled`).
+
+El backend corre en Docker (`http://localhost:8050`); las listas devuelven arrays crudos (sin
+`{items,count}`), los IDs son enteros y los precios `Decimal` serializados como string — todo eso
+se normaliza en `lib/api/<dominio>.ts`.
 
 ## Comandos
 

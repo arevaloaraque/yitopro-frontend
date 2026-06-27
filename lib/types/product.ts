@@ -1,7 +1,8 @@
 /** Producto vendible. Reflejo del schema `Product`. */
 export interface Product {
   id: string;
-  business_id: string;
+  /** No expuesto por el backend (scope por tenant); presente solo en mocks. */
+  business_id?: string;
   name: string;
   /** Precio en la unidad menor de la moneda del negocio (entero). */
   price: number;

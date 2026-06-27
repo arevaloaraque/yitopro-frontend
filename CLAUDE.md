@@ -112,6 +112,11 @@ NEXT_PUBLIC_META_CONFIG_ID=                  # configuration_id de Embedded Sign
 
 > MSW requiere `public/mockServiceWorker.js` (gitignored): generarlo con `npx msw init public`.
 
+**Conexión por dominio (F4-B):** el interruptor está en `mocks/handlers/index.ts` (`DOMAIN_LIVE`).
+Real: auth, services, products, customers, appointments. Mock todavía: businesses/settings y
+records (el backend no expone el shape completo), agents (sin endpoint) y conversations (F4-C).
+Los desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
+
 ## Flujo de trabajo por sesión
 
 1. Cada sesión del plan es independiente y trae todo su contexto.

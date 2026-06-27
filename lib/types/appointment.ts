@@ -6,7 +6,8 @@ export type AppointmentStatus = "scheduled" | "cancelled" | "rescheduled" | "com
 /** Cita agendada. Reflejo del schema `Appointment`. */
 export interface Appointment {
   id: string;
-  business_id: string;
+  /** No expuesto por el backend (scope por tenant); presente solo en mocks. */
+  business_id?: string;
   service_id: string;
   customer_id: string;
   /** Inicio en ISO 8601. */
