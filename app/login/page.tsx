@@ -84,7 +84,7 @@ export default function LoginPage() {
                 <Input
                   id="email"
                   type="email"
-                  autoComplete="email"
+                  autoComplete="off"
                   placeholder="tu@negocio.com"
                   disabled={isSubmitting}
                   aria-invalid={!!errors.email}
@@ -99,7 +99,7 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete="off"
                   placeholder="••••••••"
                   disabled={isSubmitting}
                   aria-invalid={!!errors.password}
