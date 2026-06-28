@@ -1,5 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
+
+import { BrandLogo, BrandMark } from "@/components/brand/logo";
 
 /** Marca de la barra lateral: isotipo cuando colapsada, logo horizontal cuando expandida. */
 export function SidebarBrand({ collapsed = false }: { collapsed?: boolean }) {
@@ -10,15 +11,9 @@ export function SidebarBrand({ collapsed = false }: { collapsed?: boolean }) {
       className="flex items-center"
     >
       {collapsed ? (
-        <Image src="/brand/isotipo.svg" alt="Yitopro" width={28} height={28} priority />
+        <BrandMark className="size-7" decorative />
       ) : (
-        <Image
-          src="/brand/horizontal.svg"
-          alt="Yitopro"
-          width={132}
-          height={32}
-          priority
-        />
+        <BrandLogo className="text-[21px]" />
       )}
     </Link>
   );
