@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -17,7 +16,9 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandLogo } from "@/components/brand/logo";
 import { BootSplash } from "@/components/states";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { type LoginValues, loginSchema } from "@/lib/validation/schemas";
@@ -62,10 +63,13 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center bg-gradient-to-b from-surface to-background px-4">
+    <main className="relative flex min-h-svh flex-col items-center justify-center bg-gradient-to-b from-surface to-background px-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm">
         <div className="mb-8 flex justify-center">
-          <Image src="/brand/horizontal.svg" alt="Yitopro" width={160} height={44} priority />
+          <BrandLogo className="text-[26px]" />
         </div>
 
         <Card elevated>
