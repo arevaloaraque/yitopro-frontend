@@ -67,9 +67,12 @@ const statusLabels: Record<string, string> = {
   draft: "Borrador",
 };
 
-const statusVariants: Record<string, "default" | "secondary" | "outline"> = {
-  pending: "default",
-  confirmed: "secondary",
+const statusVariants: Record<
+  string,
+  "warning" | "success" | "outline"
+> = {
+  pending: "warning",
+  confirmed: "success",
   draft: "outline",
 };
 
@@ -312,7 +315,7 @@ export default function ProductsPage() {
                             onChange={() => toggleActive(p)}
                             aria-label={p.is_active ? "Desactivar producto" : "Activar producto"}
                           />
-                          <Badge variant={p.is_active ? "default" : "secondary"} className="text-xs tabular-nums">
+                          <Badge variant={p.is_active ? "success" : "secondary"} className="text-xs tabular-nums">
                             {p.is_active ? "Activo" : "Inactivo"}
                           </Badge>
                         </div>

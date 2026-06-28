@@ -43,13 +43,13 @@ function formatTime(iso: string): string {
 function statusBadge(status: Appointment["status"]) {
   switch (status) {
     case "scheduled":
-      return { label: "Agendada", variant: "default" as const };
+      return { label: "Agendada", variant: "info" as const };
     case "cancelled":
       return { label: "Cancelada", variant: "destructive" as const };
     case "rescheduled":
-      return { label: "Reagendada", variant: "secondary" as const };
+      return { label: "Reagendada", variant: "warning" as const };
     case "completed":
-      return { label: "Completada", variant: "outline" as const };
+      return { label: "Completada", variant: "success" as const };
   }
 }
 

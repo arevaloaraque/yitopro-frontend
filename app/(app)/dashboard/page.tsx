@@ -94,22 +94,22 @@ function intentLabel(intent: string | null): string {
 
 function statusBadge(status: Conversation["status"]) {
   if (status === "ai_active")
-    return { label: "IA activa", variant: "default" as const };
+    return { label: "IA activa", variant: "info" as const };
   if (status === "human_handoff")
-    return { label: "Derivada", variant: "secondary" as const };
+    return { label: "Derivada", variant: "warning" as const };
   return { label: "Cerrada", variant: "outline" as const };
 }
 
 function appointmentStatusBadge(status: Appointment["status"]) {
   switch (status) {
     case "scheduled":
-      return { label: "Agendada", variant: "default" as const };
+      return { label: "Agendada", variant: "info" as const };
     case "cancelled":
       return { label: "Cancelada", variant: "destructive" as const };
     case "rescheduled":
-      return { label: "Reagendada", variant: "secondary" as const };
+      return { label: "Reagendada", variant: "warning" as const };
     case "completed":
-      return { label: "Completada", variant: "outline" as const };
+      return { label: "Completada", variant: "success" as const };
   }
 }
 

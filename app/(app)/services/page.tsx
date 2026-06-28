@@ -255,7 +255,7 @@ export default function ServicesPage() {
                         onChange={() => toggleActive(s)}
                         aria-label={s.is_active ? "Desactivar servicio" : "Activar servicio"}
                       />
-                      <Badge variant={s.is_active ? "default" : "secondary"} className="text-xs tabular-nums">
+                      <Badge variant={s.is_active ? "success" : "secondary"} className="text-xs tabular-nums">
                         {s.is_active ? "Activo" : "Inactivo"}
                       </Badge>
                     </div>

@@ -55,12 +55,12 @@ function statusLabel(status: ConversationStatus): string {
 
 function statusVariant(
   status: ConversationStatus,
-): "default" | "secondary" | "outline" {
+): "info" | "warning" | "outline" {
   switch (status) {
     case "ai_active":
-      return "default";
+      return "info";
     case "human_handoff":
-      return "secondary";
+      return "warning";
     case "closed":
       return "outline";
   }

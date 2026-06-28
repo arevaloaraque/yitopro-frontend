@@ -233,7 +233,7 @@ export default function AgentsPage() {
                         aria-label={agent.is_active ? "Desactivar agente" : "Activar agente"}
                       />
                       <Badge
-                        variant={agent.is_active ? "default" : "secondary"}
+                        variant={agent.is_active ? "success" : "secondary"}
                         className="text-xs"
                       >
                         {agent.is_active ? "Activo" : "Inactivo"}

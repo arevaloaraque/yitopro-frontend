@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { BootSplash } from "@/components/states";
+
 import { useAuth } from "./useAuth";
 
 interface RequireAuthProps {
@@ -16,15 +18,18 @@ interface RequireAuthProps {
  * Se cableará en el layout autenticado en F2-A.
  */
 export function RequireAuth({ children, redirectTo = "/login" }: RequireAuthProps) {
-  const { isAuthenticated } = useAuth();
+  const { status } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Solo redirige cuando el arranque ya descartó la sesión. Durante "loading"
+    // (refresh silencioso en curso) espera, para no rebotar a /login.
+    if (status === "unauthenticated") {
       router.replace(redirectTo);
     }
-  }, [isAuthenticated, redirectTo, router]);
+  }, [status, redirectTo, router]);
 
-  if (!isAuthenticated) return null;
+  if (status === "loading") return <BootSplash />;
+  if (status !== "authenticated") return null;
   return <>{children}</>;
 }

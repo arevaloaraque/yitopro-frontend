@@ -42,3 +42,19 @@ export function logoutRequest(): Promise<{ detail: string }> {
     skipRefresh: true,
   });
 }
+
+/** Perfil del usuario autenticado (para reconstruir la identidad visible). */
+export interface MeResponse {
+  id: string;
+  email: string;
+  name: string;
+}
+
+/**
+ * Devuelve el perfil del usuario del access token vigente (`GET /api/auth/me/`).
+ * Lo usa el arranque (tras un refresh silencioso) y el login para fijar la
+ * identidad real, en vez de derivarla del email del formulario.
+ */
+export function getMe(): Promise<MeResponse> {
+  return api.get<MeResponse>("/auth/me/");
+}

@@ -159,7 +159,7 @@ export function AppointmentCalendar({
   return (
     <div className="rounded-xl border border-border bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -174,7 +174,7 @@ export function AppointmentCalendar({
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <h2 className="min-w-48 text-center text-sm font-semibold text-foreground">
+          <h2 className="min-w-0 text-center text-sm font-semibold text-foreground sm:min-w-48">
             {formatDayHeader(
               view === "month" ? monthStart : view === "week" ? weekStart : cursor,
               view,
@@ -304,8 +304,8 @@ function TimeGrid({
     const e = new Date(end);
     const startMinutes = s.getHours() * 60 + s.getMinutes();
     const endMinutes = e.getHours() * 60 + e.getMinutes();
-    const top = ((startMinutes - 480) / 60) * 64; // 8:00 → 0px
-    const height = Math.max(((endMinutes - startMinutes) / 60) * 64, 32);
+    const top = ((startMinutes - 480) / 60) * 80; // 8:00 → 0px
+    const height = Math.max(((endMinutes - startMinutes) / 60) * 80, 46);
     return { top, height };
   }
 
@@ -322,7 +322,7 @@ function TimeGrid({
           {HOURS.map((h) => (
             <div
               key={h}
-              className="flex h-16 items-start justify-end pr-2 pt-0 text-xs text-muted-foreground"
+              className="flex h-20 items-start justify-end pr-2 pt-0 text-xs text-muted-foreground"
             >
               {String(h).padStart(2, "0")}:00
             </div>
@@ -343,27 +343,29 @@ function TimeGrid({
               {HOURS.map((h) => (
                 <div
                   key={h}
-                  className="h-16 border-b border-border/50"
+                  className="h-20 border-b border-border/50"
                 />
               ))}
               {/* Appointments */}
               {dayApps.map((apt) => {
                 const { top, height } = getPosition(apt.start, apt.end);
+                const showService = height >= 64;
                 const timeLabel = `${new Date(apt.start).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} – ${new Date(apt.end).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}`;
                 return (
                   <div
                     key={apt.id}
+                    title={`${apt.customerName} · ${apt.serviceName} · ${timeLabel}`}
                     className={cn(
-                      "absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-md border-l-2 px-1.5 py-0.5 text-xs leading-tight",
+                      "absolute left-0.5 right-0.5 z-10 flex flex-col gap-0.5 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-xs leading-tight",
                       statusBarColor(apt.status),
                     )}
                     style={{ top: `${top}px`, height: `${height}px` }}
                   >
-                    <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-start justify-between gap-1">
                       <span className="truncate font-medium">
                         {apt.customerName}
                       </span>
-                      <div className="flex shrink-0 items-center gap-0.5">
+                      <div className="-mt-0.5 -mr-1 flex shrink-0 items-center gap-0.5">
                         {apt.created_by === "ai" && (
                           <Badge variant="outline" className="h-4 px-1 text-[0.625rem] leading-none">
                             IA
@@ -377,10 +379,14 @@ function TimeGrid({
                         />
                       </div>
                     </div>
-                    <p className="truncate text-muted-foreground">
-                      {apt.serviceName}
-                    </p>
-                    <p className="text-muted-foreground">{timeLabel}</p>
+                    <span className="truncate text-[0.6875rem] text-muted-foreground">
+                      {timeLabel}
+                    </span>
+                    {showService && (
+                      <span className="truncate text-muted-foreground">
+                        {apt.serviceName}
+                      </span>
+                    )}
                   </div>
                 );
               })}

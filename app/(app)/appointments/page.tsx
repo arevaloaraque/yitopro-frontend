@@ -196,7 +196,7 @@ export default function AppointmentsPage() {
       </div>
 
       {/* Toolbar: tabs + view toggle */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <StatusTabs value={statusFilter} onChange={setStatusFilter} />
         <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
           <button

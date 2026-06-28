@@ -10,7 +10,12 @@ import {
 } from "react";
 
 import { configureApiAuth } from "@/lib/api/client";
-import { loginRequest, logoutRequest, refreshRequest } from "@/lib/api/auth";
+import {
+  getMe,
+  loginRequest,
+  logoutRequest,
+  refreshRequest,
+} from "@/lib/api/auth";
 
 /** Usuario autenticado (mínimo necesario para el shell). */
 export interface AuthUser {
@@ -19,7 +24,7 @@ export interface AuthUser {
   name: string;
 }
 
-export type AuthStatus = "unauthenticated" | "authenticated";
+export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
 
 export interface AuthContextValue {
   user: AuthUser | null;
@@ -47,6 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // El access token vive SOLO en memoria. Nunca localStorage/sessionStorage.
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  // Mientras corre el refresh silencioso de arranque, la sesión está "loading".
+  const [bootstrapped, setBootstrapped] = useState(false);
 
   // Ref para que el cliente HTTP lea siempre el token vigente.
   const tokenRef = useRef<string | null>(null);
@@ -68,16 +75,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Reconstruye la identidad visible desde el backend (`GET /api/auth/me/`).
+  // Best-effort: si falla, se deja el `user` como esté (UserMenu cae a "Operador").
+  const loadUser = useCallback(async () => {
+    try {
+      const me = await getMe();
+      setUser({ id: me.id, email: me.email, name: me.name });
+    } catch {
+      // sin perfil disponible
+    }
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     if (!email || !password) {
       throw new Error("Email y contraseña son obligatorios.");
     }
     const { access_token } = await loginRequest(email, password);
-    // El backend no devuelve perfil (solo el token); la identidad visible se
-    // arma con el email del formulario. El token JWE es opaco: no se decodifica.
+    // El token JWE es opaco: no se decodifica. La identidad real se obtiene de
+    // GET /api/auth/me/; si falla, se cae al nombre derivado del email.
     tokenRef.current = access_token;
     setToken(access_token);
-    setUser({ id: email, email, name: nameFromEmail(email) });
+    try {
+      const me = await getMe();
+      setUser({ id: me.id, email: me.email, name: me.name });
+    } catch {
+      setUser({ id: email, email, name: nameFromEmail(email) });
+    }
   }, []);
 
   const logout = useCallback(() => {
@@ -106,16 +129,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [refresh, handleSessionExpired]);
 
+  // Arranque: intenta restaurar la sesión con la cookie httpOnly de refresh.
+  // Si funciona, reconstruye la identidad. Un timeout evita quedar atrapado en
+  // el splash si el backend no responde; pase lo que pase, termina el "loading".
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), 10_000);
+    });
+    (async () => {
+      const ok = await Promise.race([refresh(), timeout]);
+      clearTimeout(timer);
+      if (ok && active) await loadUser();
+      if (active) setBootstrapped(true);
+    })();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [refresh, loadUser]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      status: token ? "authenticated" : "unauthenticated",
+      status: !bootstrapped
+        ? "loading"
+        : token
+          ? "authenticated"
+          : "unauthenticated",
       isAuthenticated: token !== null,
       login,
       logout,
       refresh,
     }),
-    [user, token, login, logout, refresh],
+    [user, token, bootstrapped, login, logout, refresh],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;
