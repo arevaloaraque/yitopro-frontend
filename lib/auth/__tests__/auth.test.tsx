@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { server } from "@/mocks/server";
@@ -20,21 +20,35 @@ function Probe() {
   );
 }
 
-describe("AuthContext login flow", () => {
-  it("logs in: token in memory, email derived from the form, marked authenticated", async () => {
+describe("AuthContext", () => {
+  // Por defecto, el refresh silencioso de arranque no encuentra sesión (401),
+  // así que la app arranca como "out" de forma determinista. Los tests que
+  // prueban la restauración de sesión sobreescriben este handler.
+  beforeEach(() => {
+    server.use(
+      http.post(`${BASE}/auth/refresh/`, () =>
+        HttpResponse.json({ detail: "no session" }, { status: 401 }),
+      ),
+    );
+  });
+
+  it("logs in: token en memoria, identidad desde /api/auth/me, marca authenticated", async () => {
     let body: unknown;
     server.use(
       http.post(`${BASE}/auth/login/`, async ({ request }) => {
         body = await request.json();
         return HttpResponse.json({ access_token: "jwe", expires_in: 3600, token_type: "Bearer" });
       }),
+      http.get(`${BASE}/auth/me/`, () =>
+        HttpResponse.json({ id: "u1", email: "a@b.com", name: "Demo User" }),
+      ),
     );
     render(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
     );
-    expect(screen.getByTestId("status").textContent).toBe("out");
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("out"));
     await userEvent.click(screen.getByText("login"));
     await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("in"));
     expect(screen.getByTestId("email").textContent).toBe("a@b.com");
@@ -62,6 +76,9 @@ describe("AuthContext login flow", () => {
       http.post(`${BASE}/auth/login/`, () =>
         HttpResponse.json({ access_token: "jwe", expires_in: 3600, token_type: "Bearer" }),
       ),
+      http.get(`${BASE}/auth/me/`, () =>
+        HttpResponse.json({ id: "u1", email: "a@b.com", name: "Demo User" }),
+      ),
       http.post(`${BASE}/auth/logout/`, () => {
         loggedOut = true;
         return HttpResponse.json({ detail: "logged out" });
@@ -77,5 +94,24 @@ describe("AuthContext login flow", () => {
     await userEvent.click(screen.getByText("logout"));
     await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("out"));
     await waitFor(() => expect(loggedOut).toBe(true));
+  });
+
+  it("restaura la sesión en el arranque vía refresh + /me (persistencia al recargar)", async () => {
+    server.use(
+      http.post(`${BASE}/auth/refresh/`, () =>
+        HttpResponse.json({ access_token: "jwe2", expires_in: 3600, token_type: "Bearer" }),
+      ),
+      http.get(`${BASE}/auth/me/`, () =>
+        HttpResponse.json({ id: "u9", email: "boot@b.com", name: "Boot User" }),
+      ),
+    );
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    // Sin pasar por login: el arranque restaura la sesión usando la cookie de refresh.
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("in"));
+    expect(screen.getByTestId("email").textContent).toBe("boot@b.com");
   });
 });

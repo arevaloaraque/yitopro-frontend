@@ -17,12 +17,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BootSplash } from "@/components/states";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { type LoginValues, loginSchema } from "@/lib/validation/schemas";
 
 export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, status } = useAuth();
   const router = useRouter();
 
   const {
@@ -52,6 +53,12 @@ export default function LoginPage() {
             : "No pudimos conectar con el servidor. Inténtalo de nuevo.",
       });
     }
+  }
+
+  // Durante el arranque (refresh silencioso) o si ya hay sesión, no mostramos el
+  // formulario: se restaura/redirige sin parpadeo.
+  if (status === "loading" || isAuthenticated) {
+    return <BootSplash />;
   }
 
   return (

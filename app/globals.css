@@ -22,7 +22,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +39,9 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-clay-line: var(--clay-line);
+  --color-info-foreground: var(--info-foreground);
+  --color-info: var(--info);
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-success-foreground: var(--success-foreground);
@@ -66,13 +69,26 @@
   --radius-3xl: calc(var(--radius) * 2.5);
   --radius-4xl: calc(var(--radius) * 3);
 
-  --shadow-xs: 0 1px 2px 0 rgb(7 26 58 / 0.03);
+  /* Elevación: escala suave navy-tinted (nivel 1→5). Contacto fino + ambiente
+     difuso. Suaves pero presentes — comunican profundidad sin llamar la atención. */
+  --shadow-xs: 0 1px 2px 0 rgb(7 26 58 / 0.05);
   --shadow-sm:
-    0 1px 2px 0 rgb(7 26 58 / 0.03), 0 1px 3px 0 rgb(7 26 58 / 0.03);
+    0 1px 2px -1px rgb(7 26 58 / 0.06), 0 2px 4px -1px rgb(7 26 58 / 0.06);
   --shadow-md:
-    0 2px 4px -1px rgb(7 26 58 / 0.03), 0 4px 12px -2px rgb(7 26 58 / 0.06);
+    0 2px 4px -2px rgb(7 26 58 / 0.06), 0 6px 14px -3px rgb(7 26 58 / 0.09);
   --shadow-lg:
-    0 4px 8px -2px rgb(7 26 58 / 0.04), 0 12px 24px -6px rgb(7 26 58 / 0.08);
+    0 4px 8px -3px rgb(7 26 58 / 0.07), 0 14px 28px -6px rgb(7 26 58 / 0.11);
+  --shadow-xl:
+    0 8px 16px -6px rgb(7 26 58 / 0.10), 0 28px 56px -12px rgb(7 26 58 / 0.20);
+
+  /* Sombras "clay" — offset duro sin blur, color de línea de marca (navy).
+     Lenguaje visual de la referencia (claymorphism / soft-neobrutalism). */
+  --shadow-clay-xs: 1px 1px 0 0 var(--clay-line);
+  --shadow-clay: 3px 3px 0 0 var(--clay-line);
+  --shadow-clay-lg: 4px 4px 0 0 var(--clay-line);
+
+  /* Movimiento: easing y duración consistentes en todo el sistema. */
+  --ease-out-quad: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -84,7 +100,7 @@
   --background: #ffffff;
   --foreground: #071a3a;
 
-  --surface: #f7f8fb;
+  --surface: #faf6ef;
 
   --card: #ffffff;
   --card-foreground: #071a3a;
@@ -115,9 +131,16 @@
   --warning: #f59e0b;
   --warning-foreground: #071a3a;
 
-  --border: #e7e8ee;
-  --input: #e7e8ee;
+  --info: #2f6df0;
+  --info-foreground: #ffffff;
+
+  --border: #e6e8ef;
+  --input: #dcdfe9;
   --ring: #6d35f2;
+
+  /* Línea y sombra "clay": navy de marca, ligeramente elevado para una versión
+     más sobria (equivale al slate de la referencia, no negro puro). */
+  --clay-line: #1b3354;
 
   --chart-1: #6d35f2;
   --chart-2: #ff7a1a;
@@ -172,9 +195,15 @@
   --warning: #fbbf24;
   --warning-foreground: #1a1206;
 
-  --border: #1e3a66;
-  --input: #24406b;
+  --info: #5b8def;
+  --info-foreground: #061227;
+
+  --border: #203a63;
+  --input: #2a466f;
   --ring: #8b5cff;
+
+  /* En oscuro la línea clay se aclara para seguir siendo visible. */
+  --clay-line: #36537f;
 
   --chart-1: #8b5cff;
   --chart-2: #ff8a33;
@@ -198,8 +227,38 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
+  }
+  /* Jerarquía tipográfica: títulos con tracking ligeramente cerrado (óptica
+     Inter) para un escaneo más nítido, sin tocar cada componente. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  /* Cifras tabulares para datos alineados (precios, métricas, tablas). */
+  th,
+  td {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Accesibilidad: respeta la preferencia de movimiento reducido del sistema. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

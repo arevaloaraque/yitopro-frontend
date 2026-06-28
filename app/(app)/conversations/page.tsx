@@ -23,6 +23,7 @@ import type {
   Message,
 } from "@/lib/types";
 import { EmptyState } from "@/components/states/empty-state";
+import { cn } from "@/lib/utils";
 
 import { ConversationDetail } from "./_components/conversation-detail";
 import { ConversationList } from "./_components/conversation-list";
@@ -267,8 +268,14 @@ export default function ConversationsPage() {
 
   return (
     <div className="-my-8 -mx-6 flex h-[calc(100vh-var(--spacing)*20)] md:-my-12 md:-mx-12">
-      {/* Left panel — Inbox */}
-      <div className="w-80 shrink-0 border-r border-border/60 bg-card md:w-96">
+      {/* Left panel — Inbox. En móvil ocupa todo el ancho; se oculta al abrir
+          una conversación (patrón maestro-detalle). En desktop siempre visible. */}
+      <div
+        className={cn(
+          "w-full shrink-0 border-r border-border/60 bg-card lg:w-96",
+          selectedId && "hidden lg:block",
+        )}
+      >
         <ConversationList
           conversations={conversations}
           selectedId={selectedId}
@@ -283,11 +290,18 @@ export default function ConversationsPage() {
         />
       </div>
 
-      {/* Right panel — Detail */}
-      <div className="flex flex-1 flex-col bg-background">
+      {/* Right panel — Detail. En móvil sólo se muestra al seleccionar; en
+          desktop ocupa el espacio restante. min-w-0 permite que encoja. */}
+      <div
+        className={cn(
+          "min-w-0 flex-1 flex-col bg-background",
+          selectedId ? "flex" : "hidden lg:flex",
+        )}
+      >
         {selectedConversation ? (
           <ConversationDetail
             conversation={selectedConversation}
+            onBack={() => setSelectedId(null)}
             messages={messages}
             customerName={
               customerNames.get(selectedConversation.customer_id) ??

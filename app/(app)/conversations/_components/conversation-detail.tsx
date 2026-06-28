@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { AlertCircle, MessageSquare } from "lucide-react";
+import { AlertCircle, ChevronLeft, MessageSquare } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ interface ConversationDetailProps {
   sendingMessage: boolean;
   actionError: string | null;
   onDismissError: () => void;
+  /** Vuelve a la bandeja en la vista móvil (maestro-detalle). */
+  onBack: () => void;
 }
 
 function statusLabel(status: Conversation["status"]): string {
@@ -40,12 +42,12 @@ function statusLabel(status: Conversation["status"]): string {
 
 function statusVariant(
   status: Conversation["status"],
-): "default" | "secondary" | "outline" {
+): "info" | "warning" | "outline" {
   switch (status) {
     case "ai_active":
-      return "default";
+      return "info";
     case "human_handoff":
-      return "secondary";
+      return "warning";
     case "closed":
       return "outline";
   }
@@ -64,6 +66,7 @@ export function ConversationDetail({
   sendingMessage,
   actionError,
   onDismissError,
+  onBack,
 }: ConversationDetailProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -80,8 +83,18 @@ export function ConversationDetail({
       {/* Header */}
       <div className="shrink-0 border-b border-border/60 bg-background/50 px-5 py-3.5">
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">{customerName}</h2>
+          <div className="flex min-w-0 items-start gap-2">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="-ml-1 shrink-0 lg:hidden"
+              onClick={onBack}
+              aria-label="Volver a la bandeja"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-semibold">{customerName}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <Badge
                 variant={statusVariant(conversation.status)}
@@ -99,6 +112,7 @@ export function ConversationDetail({
                   {agentName}
                 </span>
               ) : null}
+            </div>
             </div>
           </div>
           <div className="flex shrink-0 gap-1.5">

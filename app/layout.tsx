@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans, Fredoka } from "next/font/google";
 import "./globals.css";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -7,8 +7,16 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { Providers } from "./providers";
 
-const inter = Inter({
+// Cuerpo: DM Sans (limpio, legible). Títulos: Fredoka (display redondeada),
+// el lenguaje tipográfico de la referencia visual.
+const dmSans = DM_Sans({
   variable: "--font-sans",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const fredoka = Fredoka({
+  variable: "--font-display",
   subsets: ["latin"],
   display: "swap",
 });
@@ -37,7 +45,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${inter.variable} h-full antialiased`}
+      className={`${dmSans.variable} ${fredoka.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">

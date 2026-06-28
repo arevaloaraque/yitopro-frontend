@@ -20,14 +20,14 @@ interface StatusTabsProps {
 
 export function StatusTabs({ value, onChange }: StatusTabsProps) {
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
+    <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {STATUS_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
           className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            "shrink-0 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors",
             value === opt.value
               ? "bg-background text-foreground shadow-xs"
               : "text-muted-foreground hover:text-foreground",

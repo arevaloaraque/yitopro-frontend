@@ -22,7 +22,7 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-1 flex-col gap-0.5 px-3 py-5">
+    <nav className="flex flex-1 flex-col gap-1 px-3 py-5">
       {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
