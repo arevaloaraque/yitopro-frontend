@@ -57,3 +57,52 @@ export interface MeResponse {
 export function getMe(): Promise<MeResponse> {
   return api.get<MeResponse>("/auth/me/");
 }
+
+// --- Password reset --------------------------------------------------------
+// All three routes are unauthenticated and use `skipRefresh` (a 401 here is not
+// a dead session). The request endpoint never reveals whether the email exists,
+// so the UI always shows the same generic confirmation.
+
+/** Generic `{ detail }` response from the reset request/confirm endpoints. */
+export interface GenericDetailResponse {
+  detail: string;
+}
+
+/**
+ * Requests a password-reset email. Resolves the same way for any input — the
+ * backend doesn't disclose whether the address belongs to an account. A 429
+ * (`ApiError`) means the IP hit the abuse throttle.
+ */
+export function requestPasswordReset(
+  email: string,
+): Promise<GenericDetailResponse> {
+  return api.post<GenericDetailResponse>(
+    "/auth/password/reset/request/",
+    { email },
+    { skipRefresh: true },
+  );
+}
+
+/** Checks whether a reset token is still usable, without consuming it. */
+export function validateResetToken(token: string): Promise<{ valid: boolean }> {
+  return api.get<{ valid: boolean }>("/auth/password/reset/validate/", {
+    query: { token },
+    skipRefresh: true,
+  });
+}
+
+/**
+ * Sets a new password using a reset token. Throws `ApiError` with status 400
+ * when the token is invalid/expired or the password fails the policy (the
+ * message is safe to show).
+ */
+export function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<GenericDetailResponse> {
+  return api.post<GenericDetailResponse>(
+    "/auth/password/reset/confirm/",
+    { token, new_password: newPassword },
+    { skipRefresh: true },
+  );
+}

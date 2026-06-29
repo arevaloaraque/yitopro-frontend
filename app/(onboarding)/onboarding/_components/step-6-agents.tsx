@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -13,19 +15,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useOnboarding } from "@/lib/onboarding";
 import type { AgentAutonomy } from "@/lib/types";
-
-const ALL_SKILLS = [
-  "detectar_intencion",
-  "derivar_agente",
-  "agendar",
-  "reagendar",
-  "cancelar",
-  "consultar_stock",
-  "tomar_pedido",
-  "leer_ficha",
-  "actualizar_ficha",
-  "responder_faq",
-];
 
 const AUTONOMY_OPTIONS: { value: AgentAutonomy; label: string }[] = [
   { value: "full", label: "Total (sin supervisión)" },
@@ -51,23 +40,34 @@ function skillLabel(skill: string): string {
 
 function agentTypeLabel(type: string): string {
   const map: Record<string, string> = {
-    orchestrator: "Orquestador",
     scheduling: "Agendamiento",
-    products: "Productos",
+    sales: "Ventas",
     records: "Fichas",
-    support: "Soporte",
+    human: "Humano",
   };
   return map[type] ?? type;
 }
 
 export function Step6Agents() {
-  const { data, updateAgent, toggleAgentSkill } = useOnboarding();
+  const { data, toggleAgent, setAgentAutonomy } = useOnboarding();
+  const [error, setError] = useState<string | null>(null);
+
+  function run(promise: Promise<void>) {
+    setError(null);
+    promise.catch((err: unknown) => {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo actualizar el agente.",
+      );
+    });
+  }
 
   if (data.agents.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
         <p className="text-sm text-muted-foreground">
-          Selecciona una industria en el paso 2 para generar agentes automáticamente.
+          No hay agentes disponibles para tu plan todavía.
         </p>
       </div>
     );
@@ -75,11 +75,14 @@ export function Step6Agents() {
 
   return (
     <div className="space-y-4">
+      {error ? (
+        <p role="alert" className="text-[0.8rem] text-destructive">
+          {error}
+        </p>
+      ) : null}
+
       {data.agents.map((agent) => (
-        <div
-          key={agent.id}
-          className="rounded-xl border border-border/40 p-4"
-        >
+        <div key={agent.type} className="rounded-xl border border-border/40 p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[0.85rem] font-semibold text-foreground">
@@ -93,9 +96,7 @@ export function Step6Agents() {
               <Label className="text-xs">Activo</Label>
               <Switch
                 checked={agent.is_active}
-                onChange={(checked) =>
-                  updateAgent(agent.id, { is_active: checked })
-                }
+                onChange={(checked) => run(toggleAgent(agent.type, checked))}
               />
             </div>
           </div>
@@ -105,7 +106,7 @@ export function Step6Agents() {
             <Select
               value={agent.autonomy}
               onValueChange={(v) =>
-                updateAgent(agent.id, { autonomy: v as AgentAutonomy })
+                run(setAgentAutonomy(agent.type, v as AgentAutonomy))
               }
             >
               <SelectTrigger className="w-full" size="sm">
@@ -123,29 +124,22 @@ export function Step6Agents() {
             </Select>
           </div>
 
-          <div className="mt-3">
-            <Label className="text-xs">Skills</Label>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {ALL_SKILLS.map((skill) => {
-                const active = agent.skills.includes(skill);
-                return (
-                  <button
+          {agent.skills.length > 0 ? (
+            <div className="mt-3">
+              <Label className="text-xs">Skills</Label>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {agent.skills.map((skill) => (
+                  <Badge
                     key={skill}
-                    type="button"
-                    onClick={() => toggleAgentSkill(agent.id, skill)}
-                    className="cursor-pointer"
+                    variant="outline"
+                    className="text-[0.65rem]"
                   >
-                    <Badge
-                      variant={active ? "default" : "outline"}
-                      className="text-[0.65rem] transition-colors"
-                    >
-                      {skillLabel(skill)}
-                    </Badge>
-                  </button>
-                );
-              })}
+                    {skillLabel(skill)}
+                  </Badge>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       ))}
     </div>

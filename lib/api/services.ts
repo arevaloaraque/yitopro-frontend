@@ -57,3 +57,7 @@ export function updateService(
   if (patch.is_active !== undefined) body.active = patch.is_active;
   return api.patch<BackendService>(`/services/${id}/`, body).then(fromBackend);
 }
+
+export function deleteService(id: string): Promise<void> {
+  return api.delete<void>(`/services/${id}/`);
+}

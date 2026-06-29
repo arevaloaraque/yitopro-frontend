@@ -9,13 +9,16 @@ import { server } from "@/mocks/server";
 const BASE = "http://localhost:8050/api";
 
 function Probe() {
-  const { isAuthenticated, user, login, logout } = useAuth();
+  const { isAuthenticated, user, login, logout, acceptInvite } = useAuth();
   return (
     <div>
       <span data-testid="status">{isAuthenticated ? "in" : "out"}</span>
       <span data-testid="email">{user?.email ?? ""}</span>
       <button onClick={() => login("a@b.com", "pw").catch(() => {})}>login</button>
       <button onClick={() => logout()}>logout</button>
+      <button onClick={() => acceptInvite("inv-tok", "S3cret!!").catch(() => {})}>
+        accept-invite
+      </button>
     </div>
   );
 }
@@ -113,5 +116,35 @@ describe("AuthContext", () => {
     // Without going through login: boot restores the session using the refresh cookie.
     await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("in"));
     expect(screen.getByTestId("email").textContent).toBe("boot@b.com");
+  });
+
+  it("acceptInvite: sets token in memory and loads identity → status becomes authenticated", async () => {
+    server.use(
+      http.post(`${BASE}/auth/invite/accept/`, async ({ request }) => {
+        const body = await request.json();
+        expect(body).toEqual({ token: "inv-tok", password: "S3cret!!" });
+        return HttpResponse.json({
+          access_token: "inv-jwe",
+          expires_in: 3600,
+          token_type: "Bearer",
+        });
+      }),
+      http.get(`${BASE}/auth/me/`, () =>
+        HttpResponse.json({ id: "u2", email: "invited@b.com", name: "Invited User" }),
+      ),
+    );
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("status").textContent).toBe("out"),
+    );
+    await userEvent.click(screen.getByText("accept-invite"));
+    await waitFor(() =>
+      expect(screen.getByTestId("status").textContent).toBe("in"),
+    );
+    expect(screen.getByTestId("email").textContent).toBe("invited@b.com");
   });
 });

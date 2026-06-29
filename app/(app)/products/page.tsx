@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Receipt, Search, ShoppingBag } from "lucide-react";
-import type { Product } from "@/lib/types";
+import type { Product, SSEEvent } from "@/lib/types";
 import {
   searchProducts,
   createProduct,
@@ -11,6 +11,8 @@ import {
   type Order,
   type OrderStatus,
 } from "@/lib/api";
+import { subscribeToEvents } from "@/lib/sse";
+import { formatPrice } from "@/lib/utils";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,14 +45,6 @@ interface FormData {
 }
 
 const emptyForm: FormData = { name: "", price: "", stock: "0", sellable_via_whatsapp: true };
-
-function formatPrice(price: number): string {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(price);
-}
 
 function productToForm(p: Product): FormData {
   return {
@@ -101,13 +95,13 @@ export default function ProductsPage() {
 
   // Product list: search + server-side pagination ("load more").
   const loadProducts = useCallback(
-    async (opts: { search: string; offset: number; append: boolean }) => {
+    async (opts: { search: string; offset: number; append: boolean; limit?: number }) => {
       setListLoading(true);
       setError(null);
       try {
         const res = await searchProducts({
           search: opts.search || undefined,
-          limit: PAGE_SIZE,
+          limit: opts.limit ?? PAGE_SIZE,
           offset: opts.offset,
         });
         setProducts((prev) =>
@@ -143,21 +137,51 @@ export default function ProductsPage() {
   // does not block the products page.
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      try {
-        const data = await listOrders();
+    listOrders()
+      .then((data) => {
         if (!cancelled) setOrders(data);
-      } catch {
-        /* noop */
-      } finally {
+      })
+      .catch(() => {
+        /* noop: orders are secondary to the products page */
+      })
+      .finally(() => {
         if (!cancelled) setOrdersLoading(false);
-      }
-    }
-    load();
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Latest search + visible count, read by the SSE handler (registered once).
+  // Synced in an effect (not during render) to keep render pure and match the
+  // appointments/conversations idiom.
+  const searchRef = useRef(search);
+  const shownRef = useRef(0);
+  useEffect(() => {
+    searchRef.current = search;
+    shownRef.current = products.length;
+  });
+
+  // Real-time: when the sales agent confirms an order (`pedido_creado`), refresh
+  // the Pedidos tab and the products list (stock is decremented on confirmation).
+  // The SSE stream is multiplexed; NotificationsProvider owns the toasts, this
+  // screen owns the data refresh (same pattern as appointments/conversations).
+  useEffect(() => {
+    const unsub = subscribeToEvents((event: SSEEvent) => {
+      if (event.type === "pedido_creado") {
+        listOrders()
+          .then(setOrders)
+          .catch((err) => console.error("Error al refrescar pedidos vía SSE:", err));
+        loadProducts({
+          search: searchRef.current,
+          offset: 0,
+          append: false,
+          limit: Math.max(shownRef.current, PAGE_SIZE),
+        });
+      }
+    });
+    return unsub;
+  }, [loadProducts]);
 
   function validate(f: FormData): Record<string, string> {
     const errs: Record<string, string> = {};
@@ -497,6 +521,7 @@ export default function ProductsPage() {
                   id="prod-price"
                   type="number"
                   min={0}
+                  step="0.01"
                   value={form.price}
                   onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
                   placeholder="8990"

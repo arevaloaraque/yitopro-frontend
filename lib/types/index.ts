@@ -9,3 +9,5 @@ export * from "./conversation";
 export * from "./message";
 export * from "./agent";
 export * from "./events";
+export * from "./professional";
+export * from "./user";

@@ -61,3 +61,6 @@ public/mockServiceWorker.js
 
 # archivos de configuración local
 .opencode/
+
+# superpowers
+.superpowers/
