@@ -1,9 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Search, ShoppingBag } from "lucide-react";
+import { Pencil, Plus, Receipt, Search, ShoppingBag } from "lucide-react";
 import type { Product } from "@/lib/types";
-import { searchProducts, createProduct, updateProduct } from "@/lib/api";
+import {
+  searchProducts,
+  createProduct,
+  updateProduct,
+  listOrders,
+  type Order,
+  type OrderStatus,
+} from "@/lib/api";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,27 +61,21 @@ function productToForm(p: Product): FormData {
   };
 }
 
-const MOCK_ORDERS = [
-  { id: "ord_1", customer: "María García", items: "Shampoo hipoalergénico 250ml x2, Snacks dentales x1", total: 22970, status: "pending" as const },
-  { id: "ord_2", customer: "Carlos López", items: "Cepillo deslanador x1", total: 12990, status: "confirmed" as const },
-  { id: "ord_3", customer: "Ana Martínez", items: "Perfume canino x1, Snacks dentales x2", total: 16970, status: "draft" as const },
-  { id: "ord_4", customer: "Pedro Ruiz", items: "Shampoo hipoalergénico 250ml x1", total: 8990, status: "pending" as const },
-];
-
-const statusLabels: Record<string, string> = {
-  pending: "Pendiente",
-  confirmed: "Confirmado",
+const statusLabels: Record<OrderStatus, string> = {
   draft: "Borrador",
+  confirmed: "Confirmado",
+  cancelled: "Cancelado",
 };
 
-const statusVariants: Record<
-  string,
-  "warning" | "success" | "outline"
-> = {
-  pending: "warning",
+const statusVariants: Record<OrderStatus, "warning" | "success" | "secondary"> = {
+  draft: "warning",
   confirmed: "success",
-  draft: "outline",
+  cancelled: "secondary",
 };
+
+function orderItemsLabel(items: Order["items"]): string {
+  return items.map((i) => `${i.product_name} ×${i.quantity}`).join(", ");
+}
 
 const PAGE_SIZE = 20;
 
@@ -92,6 +93,9 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -134,6 +138,26 @@ export default function ProductsPage() {
     setLoading(true);
     loadProducts({ search, offset: 0, append: false });
   }
+
+  // Pedidos (los crea el agente de ventas o el panel). Secundarios: un fallo
+  // no bloquea la página de productos.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await listOrders();
+        if (!cancelled) setOrders(data);
+      } catch {
+        /* noop */
+      } finally {
+        if (!cancelled) setOrdersLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function validate(f: FormData): Record<string, string> {
     const errs: Record<string, string> = {};
@@ -402,34 +426,46 @@ export default function ProductsPage() {
         </TabsContent>
 
         <TabsContent value="orders" className="mt-4">
-          <div className="rounded-xl border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Ítems</TableHead>
-                  <TableHead className="w-32 text-right">Total</TableHead>
-                  <TableHead className="w-28">Estado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {MOCK_ORDERS.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">{order.customer}</TableCell>
-                    <TableCell className="text-muted-foreground">{order.items}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatPrice(order.total)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariants[order.status]}>
-                        {statusLabels[order.status]}
-                      </Badge>
-                    </TableCell>
+          {ordersLoading ? (
+            <Loading rows={3} label="Cargando pedidos…" />
+          ) : orders.length === 0 ? (
+            <EmptyState
+              icon={Receipt}
+              title="Sin pedidos"
+              description="Los pedidos creados por el asistente o el panel aparecerán aquí."
+            />
+          ) : (
+            <div className="rounded-xl border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Ítems</TableHead>
+                    <TableHead className="w-32 text-right">Total</TableHead>
+                    <TableHead className="w-28">Estado</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {orders.map((order) => (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-medium">{order.customer}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {orderItemsLabel(order.items)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatPrice(order.total)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariants[order.status]}>
+                          {statusLabels[order.status]}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
