@@ -1,10 +1,5 @@
-/** Tipo / especialidad de un agente. */
-export type AgentType =
-  | "orchestrator"
-  | "scheduling"
-  | "products"
-  | "records"
-  | "support";
+/** Tipo / especialidad de un agente (refleja las rutas del backend). */
+export type AgentType = "scheduling" | "sales" | "records" | "human";
 
 /** Nivel de autonomía del agente. */
 export type AgentAutonomy = "full" | "supervised" | "manual";

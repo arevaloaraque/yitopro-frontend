@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Pencil, Plus, ShoppingBag } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Pencil, Plus, Search, ShoppingBag } from "lucide-react";
 import type { Product } from "@/lib/types";
-import { listProducts, createProduct, updateProduct } from "@/lib/api";
+import { searchProducts, createProduct, updateProduct } from "@/lib/api";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,9 +76,14 @@ const statusVariants: Record<
   draft: "outline",
 };
 
+const PAGE_SIZE = 20;
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [count, setCount] = useState(0);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<Product | null>(null);
@@ -88,31 +93,46 @@ export default function ProductsPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Lista de productos: búsqueda + paginación server-side ("cargar más").
+  const loadProducts = useCallback(
+    async (opts: { search: string; offset: number; append: boolean }) => {
+      setListLoading(true);
       setError(null);
       try {
-        const data = await listProducts();
-        if (!cancelled) setProducts(data);
+        const res = await searchProducts({
+          search: opts.search || undefined,
+          limit: PAGE_SIZE,
+          offset: opts.offset,
+        });
+        setProducts((prev) =>
+          opts.append ? [...prev, ...res.items] : res.items,
+        );
+        setCount(res.count);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Error al cargar productos");
+        setError(e instanceof Error ? e.message : "Error al cargar productos");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
+        setListLoading(false);
       }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, []);
+    },
+    [],
+  );
+
+  // Debounce de la búsqueda (vuelve a la primera página en cada cambio).
+  useEffect(() => {
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(
+      () => loadProducts({ search, offset: 0, append: false }),
+      250,
+    );
+    return () => clearTimeout(searchTimer.current);
+  }, [search, loadProducts]);
 
   function refetch() {
     setLoading(true);
-    setError(null);
-    listProducts()
-      .then(setProducts)
-      .catch((e) => setError(e instanceof Error ? e.message : "Error al cargar productos"))
-      .finally(() => setLoading(false));
+    loadProducts({ search, offset: 0, append: false });
   }
 
   function validate(f: FormData): Record<string, string> {
@@ -142,17 +162,18 @@ export default function ProductsPage() {
           sellable_via_whatsapp: form.sellable_via_whatsapp,
         });
         setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        closeDialog();
       } else {
-        const created = await createProduct({
+        await createProduct({
           name: form.name.trim(),
           price: Number(form.price),
           stock: Number(form.stock),
           sellable_via_whatsapp: form.sellable_via_whatsapp,
           is_active: true,
         });
-        setProducts((prev) => [...prev, created]);
+        closeDialog();
+        loadProducts({ search, offset: 0, append: false });
       }
-      closeDialog();
     } catch (e) {
       setFormErrors({ _form: e instanceof Error ? e.message : "Error al guardar" });
     } finally {
@@ -265,19 +286,37 @@ export default function ProductsPage() {
           <TabsTrigger value="orders">Pedidos / Borradores</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="products" className="mt-4">
-          {products.length === 0 ? (
-            <EmptyState
-              icon={ShoppingBag}
-              title="Sin productos"
-              description="Agrega tu primer producto al catálogo."
-              action={
-                <Button onClick={openCreate}>
-                  <Plus className="size-4" />
-                  Nuevo producto
-                </Button>
-              }
+        <TabsContent value="products" className="mt-4 space-y-4">
+          <div className="relative max-w-xs">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar producto…"
+              className="pl-8"
             />
+          </div>
+
+          {products.length === 0 ? (
+            search ? (
+              <EmptyState
+                icon={Search}
+                title="Sin resultados"
+                description={`No hay productos que coincidan con "${search}".`}
+              />
+            ) : (
+              <EmptyState
+                icon={ShoppingBag}
+                title="Sin productos"
+                description="Agrega tu primer producto al catálogo."
+                action={
+                  <Button onClick={openCreate}>
+                    <Plus className="size-4" />
+                    Nuevo producto
+                  </Button>
+                }
+              />
+            )
           ) : (
             <div className="rounded-xl border border-border">
               <Table>
@@ -334,6 +373,30 @@ export default function ProductsPage() {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {products.length > 0 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                Mostrando {products.length} de {count}
+              </span>
+              {products.length < count && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={listLoading}
+                  onClick={() =>
+                    loadProducts({
+                      search,
+                      offset: products.length,
+                      append: true,
+                    })
+                  }
+                >
+                  {listLoading ? "Cargando…" : "Cargar más"}
+                </Button>
+              )}
             </div>
           )}
         </TabsContent>

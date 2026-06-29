@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -8,6 +8,7 @@ import {
   ClipboardList,
   MessageSquare,
   Plus,
+  Search,
   Users,
 } from "lucide-react";
 
@@ -32,10 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, Loading } from "@/components/states";
-import {
-  listCustomers,
-  createCustomer,
-} from "@/lib/api/customers";
+import { searchCustomers, createCustomer } from "@/lib/api/customers";
 import { listConversations } from "@/lib/api/conversations";
 import type { Conversation, Customer } from "@/lib/types";
 
@@ -88,10 +86,15 @@ interface FormData {
 
 const emptyForm: FormData = { name: "", phone: "" };
 
+const PAGE_SIZE = 20;
+
 export default function CustomersPage() {
   const router = useRouter();
   const [state, setState] = useState<PageState>("loading");
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [count, setCount] = useState(0);
+  const [search, setSearch] = useState("");
+  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -102,63 +105,70 @@ export default function CustomersPage() {
   >({});
 
   const detailReqRef = useRef(0);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  // Conteo de conversaciones por cliente.
+  // ponytail: aún carga TODAS las conversaciones; anotar el conteo en el
+  // endpoint de clientes (`Count("conversations")`) si las conversaciones crecen.
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      setState("loading");
-      setError(null);
-      try {
-        const [customerData, convData] = await Promise.all([
-          listCustomers(),
-          listConversations(),
-        ]);
-        if (!cancelled) {
-          setCustomers(customerData);
-          const counts: Record<string, number> = {};
-          for (const c of convData) {
-            counts[c.customer_id] = (counts[c.customer_id] ?? 0) + 1;
-          }
-          setConversationCounts(counts);
-          setState("ready");
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Error al cargar clientes");
-          setState("error");
-        }
-      }
-    }
-    load();
+    listConversations()
+      .then((convs) => {
+        if (cancelled) return;
+        const counts: Record<string, number> = {};
+        for (const c of convs)
+          counts[c.customer_id] = (counts[c.customer_id] ?? 0) + 1;
+        setConversationCounts(counts);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
 
-  async function refetch() {
-    setState("loading");
-    setError(null);
-    try {
-      const [customerData, convData] = await Promise.all([
-        listCustomers(),
-        listConversations(),
-      ]);
-      setCustomers(customerData);
-      const counts: Record<string, number> = {};
-      for (const c of convData) {
-        counts[c.customer_id] = (counts[c.customer_id] ?? 0) + 1;
+  // Lista de clientes: búsqueda + paginación server-side ("cargar más").
+  const loadCustomers = useCallback(
+    async (opts: { search: string; offset: number; append: boolean }) => {
+      setListLoading(true);
+      setError(null);
+      try {
+        const res = await searchCustomers({
+          search: opts.search || undefined,
+          limit: PAGE_SIZE,
+          offset: opts.offset,
+        });
+        setCustomers((prev) =>
+          opts.append ? [...prev, ...res.items] : res.items,
+        );
+        setCount(res.count);
+        setState("ready");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Error al cargar clientes");
+        setState("error");
+      } finally {
+        setListLoading(false);
       }
-      setConversationCounts(counts);
-      setState("ready");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al cargar clientes");
-      setState("error");
-    }
+    },
+    [],
+  );
+
+  // Debounce de la búsqueda (vuelve a la primera página en cada cambio).
+  useEffect(() => {
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(
+      () => loadCustomers({ search, offset: 0, append: false }),
+      250,
+    );
+    return () => clearTimeout(searchTimer.current);
+  }, [search, loadCustomers]);
+
+  function refetch() {
+    loadCustomers({ search, offset: 0, append: false });
   }
 
   async function loadDetail(customerId: string) {
@@ -200,12 +210,12 @@ export default function CustomersPage() {
 
     setSaving(true);
     try {
-      const created = await createCustomer({
+      await createCustomer({
         name: form.name.trim(),
         phone: form.phone.trim(),
       });
-      setCustomers((prev) => [...prev, created]);
       closeCreate();
+      loadCustomers({ search, offset: 0, append: false });
     } catch (e) {
       setFormErrors({
         _form: e instanceof Error ? e.message : "Error al guardar",
@@ -266,18 +276,36 @@ export default function CustomersPage() {
         </Button>
       </div>
 
-      {customers.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="Sin clientes"
-          description="Agrega tu primer cliente para empezar."
-          action={
-            <Button onClick={openCreate}>
-              <Plus className="size-4" />
-              Nuevo cliente
-            </Button>
-          }
+      <div className="relative max-w-xs">
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nombre o teléfono…"
+          className="pl-8"
         />
+      </div>
+
+      {customers.length === 0 ? (
+        search ? (
+          <EmptyState
+            icon={Search}
+            title="Sin resultados"
+            description={`No hay clientes que coincidan con "${search}".`}
+          />
+        ) : (
+          <EmptyState
+            icon={Users}
+            title="Sin clientes"
+            description="Agrega tu primer cliente para empezar."
+            action={
+              <Button onClick={openCreate}>
+                <Plus className="size-4" />
+                Nuevo cliente
+              </Button>
+            }
+          />
+        )
       ) : (
         <div className="rounded-xl border border-border">
           <Table>
@@ -409,6 +437,30 @@ export default function CustomersPage() {
               })}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {customers.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Mostrando {customers.length} de {count}
+          </span>
+          {customers.length < count && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={listLoading}
+              onClick={() =>
+                loadCustomers({
+                  search,
+                  offset: customers.length,
+                  append: true,
+                })
+              }
+            >
+              {listLoading ? "Cargando…" : "Cargar más"}
+            </Button>
+          )}
         </div>
       )}
 

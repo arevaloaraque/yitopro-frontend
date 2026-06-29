@@ -267,7 +267,6 @@ export default function AppointmentsPage() {
       <CreateDialog
         open={creating}
         onOpenChange={setCreating}
-        customers={customers}
         services={services}
         onCreate={handleCreate}
       />

@@ -1,8 +1,8 @@
 /** Estado del onboarding del negocio. */
 export type OnboardingStatus = "not_started" | "in_progress" | "completed";
 
-/** Tono con el que responde el asistente de IA. */
-export type AssistantTone = "formal" | "neutral" | "casual";
+/** Tono con el que responde el asistente de IA (refleja el backend). */
+export type AssistantTone = "formal" | "friendly" | "casual";
 
 /** Configuración del asistente de IA del negocio. */
 export interface AssistantConfig {

@@ -27,10 +27,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState, ErrorState, Loading } from "@/components/states";
-import { listCustomers } from "@/lib/api/customers";
+import { CustomerCombobox } from "@/components/customers/customer-combobox";
+import { getCustomer } from "@/lib/api/customers";
 import { getRecord, updateRecordValues } from "@/lib/api/records";
 import type {
-  Customer,
   CustomerRecord,
   RecordField,
   RecordFieldType,
@@ -137,9 +137,11 @@ export default function RecordsPage() {
   const searchParams = useSearchParams();
   const preselectedId = searchParams.get("customer");
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     preselectedId,
+  );
+  const [selectedCustomerName, setSelectedCustomerName] = useState<string | null>(
+    null,
   );
   const [state, setState] = useState<PageState>("idle");
   const [record, setRecord] = useState<CustomerRecord | null>(null);
@@ -157,21 +159,20 @@ export default function RecordsPage() {
     };
   }, []);
 
+  // Preselección por URL (?customer=X): traer su nombre para mostrarlo en el
+  // combobox y el título, sin cargar la lista completa de clientes.
   useEffect(() => {
+    if (!preselectedId) return;
     let cancelled = false;
-    async function load() {
-      try {
-        const data = await listCustomers();
-        if (!cancelled) setCustomers(data);
-      } catch {
-        if (!cancelled) setError("Error al cargar clientes");
-      }
-    }
-    load();
+    getCustomer(preselectedId)
+      .then((c) => {
+        if (!cancelled) setSelectedCustomerName(c.name);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [preselectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,10 +245,6 @@ export default function RecordsPage() {
     }
   }
 
-  const selectedCustomer = customers.find(
-    (c) => c.id === selectedCustomerId,
-  );
-
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
       <div>
@@ -261,23 +258,18 @@ export default function RecordsPage() {
 
       <div className="space-y-1.5">
         <Label>Cliente</Label>
-        <Select
-          value={selectedCustomerId ?? ""}
-          onValueChange={(v) => setSelectedCustomerId(v || null)}
-        >
-          <SelectTrigger className="w-full max-w-xs">
-            <SelectValue placeholder="Selecciona un cliente…" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {customers.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <CustomerCombobox
+          value={
+            selectedCustomerId
+              ? { id: selectedCustomerId, name: selectedCustomerName ?? "" }
+              : null
+          }
+          onChange={(c) => {
+            setSelectedCustomerId(c?.id ?? null);
+            setSelectedCustomerName(c?.name ?? null);
+          }}
+          className="max-w-xs"
+        />
       </div>
 
       {!selectedCustomerId && (
@@ -303,7 +295,7 @@ export default function RecordsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Ficha de {selectedCustomer?.name}
+                Ficha de {selectedCustomerName}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">

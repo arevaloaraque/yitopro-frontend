@@ -21,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Customer, Service } from "@/lib/types";
+import { CustomerCombobox } from "@/components/customers/customer-combobox";
+import type { Service } from "@/lib/types";
 
 interface FormData {
   customer_id: string;
@@ -42,7 +43,6 @@ const emptyForm: FormData = {
 interface CreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  customers: Customer[];
   services: Service[];
   onCreate: (input: {
     service_id: string;
@@ -61,16 +61,19 @@ function todayStr(): string {
 export function CreateDialog({
   open,
   onOpenChange,
-  customers,
   services,
   onCreate,
 }: CreateDialogProps) {
   const [form, setForm] = useState<FormData>(emptyForm);
+  const [customer, setCustomer] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   function reset() {
     setForm(emptyForm);
+    setCustomer(null);
     setErrors({});
     setSaving(false);
   }
@@ -136,24 +139,15 @@ export function CreateDialog({
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="create-customer">Cliente</Label>
-            <Select
-              value={form.customer_id}
-              onValueChange={(v) =>
-                setForm((prev) => ({ ...prev, customer_id: v ?? "" }))
-              }
-            >
-              <SelectTrigger id="create-customer" className="w-full">
-                <SelectValue placeholder="Seleccionar cliente" />
-              </SelectTrigger>
-              <SelectContent>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Cliente</Label>
+            <CustomerCombobox
+              value={customer}
+              onChange={(c) => {
+                setCustomer(c);
+                setForm((prev) => ({ ...prev, customer_id: c?.id ?? "" }));
+              }}
+              placeholder="Buscar cliente…"
+            />
             {errors.customer_id && (
               <p className="text-xs text-destructive">{errors.customer_id}</p>
             )}

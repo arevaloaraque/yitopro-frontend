@@ -52,9 +52,12 @@ describe("products mapper", () => {
   it("maps whatsapp_enabled->sellable_via_whatsapp and active->is_active", async () => {
     server.use(
       http.get(`${BASE}/products/`, () =>
-        HttpResponse.json([
-          { id: 2, name: "Croqueta", description: "", price: "14.00", stock: 20, active: true, whatsapp_enabled: false, category_id: 1 },
-        ]),
+        HttpResponse.json({
+          items: [
+            { id: 2, name: "Croqueta", description: "", price: "14.00", stock: 20, active: true, whatsapp_enabled: false, category_id: 1 },
+          ],
+          count: 1,
+        }),
       ),
     );
     expect((await listProducts())[0]).toEqual({
@@ -72,9 +75,12 @@ describe("customers mapper", () => {
   it("maps display_name->name and create posts {phone, display_name}", async () => {
     server.use(
       http.get(`${BASE}/customers/`, () =>
-        HttpResponse.json([
-          { id: 3, phone: "569", display_name: "Ana", email: "", created_at: "2026-06-01T00:00:00Z" },
-        ]),
+        HttpResponse.json({
+          items: [
+            { id: 3, phone: "569", display_name: "Ana", email: "", created_at: "2026-06-01T00:00:00Z" },
+          ],
+          count: 1,
+        }),
       ),
     );
     expect((await listCustomers())[0]).toMatchObject({ id: "3", name: "Ana", phone: "569" });
