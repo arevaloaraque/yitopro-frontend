@@ -1,7 +1,7 @@
-/** Quién originó una acción: el agente de IA o un operador humano. */
+/** Who originated an action: the AI agent or a human operator. */
 export type ActorType = "ai" | "human";
 
-/** Envelope de paginación de Django Ninja. */
+/** Django Ninja pagination envelope. */
 export interface Paginated<T> {
   items: T[];
   count: number;

@@ -6,9 +6,9 @@ import { RequireAuth } from "@/lib/auth";
 import { NotificationsProvider } from "@/lib/notifications";
 
 /**
- * Layout autenticado que envuelve todas las pantallas internas.
- * - Guard: sin sesión redirige a /login.
- * - SSE: `NotificationsProvider` abre la suscripción UNA sola vez aquí.
+ * Authenticated layout that wraps all internal screens.
+ * - Guard: redirects to /login when there is no session.
+ * - SSE: `NotificationsProvider` opens the subscription ONCE here.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (

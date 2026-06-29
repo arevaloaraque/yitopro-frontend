@@ -5,9 +5,9 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/lib/auth";
 
 /**
- * Providers globales del cliente: tema (next-themes) + sesión (AuthProvider,
- * token en memoria). El backend real es la única fuente de datos; ya no hay MSW
- * en runtime (los tests usan `mocks/server.ts` aparte).
+ * Global client providers: theme (next-themes) + session (AuthProvider,
+ * in-memory token). The real backend is the single source of data; there is no
+ * longer MSW at runtime (tests use `mocks/server.ts` separately).
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   return (

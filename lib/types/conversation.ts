@@ -1,19 +1,19 @@
-/** Estado de una conversación de WhatsApp. */
+/** Status of a WhatsApp conversation. */
 export type ConversationStatus = "ai_active" | "human_handoff" | "closed";
 
-/** Conversación de WhatsApp con un cliente. Reflejo del schema `Conversation`. */
+/** WhatsApp conversation with a customer. Mirror of the `Conversation` schema. */
 export interface Conversation {
   id: string;
-  /** No expuesto por el backend (scope por tenant); presente solo en mocks. */
+  /** Not exposed by the backend (scoped per tenant); present only in mocks. */
   business_id?: string;
   customer_id: string;
   status: ConversationStatus;
-  /** Id del agente que atiende actualmente, o `null` si nadie. */
+  /** Id of the agent currently handling it, or `null` if no one. */
   active_agent: string | null;
-  /** Intención detectada por la IA (p.ej. "agendar_cita"), o `null`. */
+  /** Intent detected by the AI (e.g. "agendar_cita"), or `null`. */
   detected_intent: string | null;
-  /** ISO 8601 del último mensaje. */
+  /** ISO 8601 of the last message. */
   last_message_at: string;
-  /** Cantidad de mensajes sin leer por el operador. */
+  /** Number of messages unread by the operator. */
   unread: number;
 }

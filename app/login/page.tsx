@@ -37,7 +37,7 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
-  // Si ya hay sesión, no mostramos el login.
+  // If there's already a session, don't show the login.
   useEffect(() => {
     if (isAuthenticated) router.replace("/dashboard");
   }, [isAuthenticated, router]);
@@ -56,8 +56,8 @@ export default function LoginPage() {
     }
   }
 
-  // Durante el arranque (refresh silencioso) o si ya hay sesión, no mostramos el
-  // formulario: se restaura/redirige sin parpadeo.
+  // During boot (silent refresh) or if there's already a session, don't show the
+  // form: it restores/redirects without flicker.
   if (status === "loading" || isAuthenticated) {
     return <BootSplash />;
   }

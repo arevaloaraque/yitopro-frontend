@@ -20,8 +20,8 @@ import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 
 /**
- * Barra superior: navegación móvil (sheet), estado del asistente, campana de
- * notificaciones y menú de usuario.
+ * Top bar: mobile navigation (sheet), assistant status, notification bell and
+ * user menu.
  */
 export function Topbar() {
   const [mobileOpen, setMobileOpen] = useState(false);

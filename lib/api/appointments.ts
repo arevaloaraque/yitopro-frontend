@@ -3,10 +3,10 @@ import type { Appointment, AppointmentAuditEntry } from "@/lib/types";
 import { api } from "./client";
 
 /**
- * Shape real del backend (Django Ninja `AppointmentOut`). Diferencias con la
- * UI: `start_datetime`/`end_datetime` (la UI usa `start`/`end`), `origin`
- * (admin|ai|human) en vez de `created_by` (ai|human), `id`s enteros. El mapeo
- * vive aquí; los componentes consumen `Appointment` sin cambios.
+ * Actual backend shape (Django Ninja `AppointmentOut`). Differences from the
+ * UI: `start_datetime`/`end_datetime` (the UI uses `start`/`end`), `origin`
+ * (admin|ai|human) instead of `created_by` (ai|human), integer `id`s. The
+ * mapping lives here; components consume `Appointment` unchanged.
  */
 interface BackendAppointment {
   id: number;
@@ -28,9 +28,9 @@ function fromBackend(a: BackendAppointment): Appointment {
     customer_id: String(a.customer_id),
     start: a.start_datetime,
     end: a.end_datetime,
-    // El backend no tiene estado "rescheduled"; puede devolver "no_show".
+    // The backend has no "rescheduled" status; it may return "no_show".
     status: a.status as Appointment["status"],
-    // El panel (admin) cuenta como humano frente a la IA.
+    // The admin panel counts as human as opposed to the AI.
     created_by: a.origin === "ai" ? "ai" : "human",
     notes: a.notes || null,
   };
@@ -38,7 +38,7 @@ function fromBackend(a: BackendAppointment): Appointment {
 
 export interface ListAppointmentsParams {
   status?: Appointment["status"];
-  /** Rango (ISO 8601) — el backend solo filtra por fecha; se usa el día de `from`. */
+  /** Range (ISO 8601) — the backend only filters by date; the day of `from` is used. */
   from?: string;
   to?: string;
   customer_id?: string;
@@ -47,9 +47,9 @@ export interface ListAppointmentsParams {
 export async function listAppointments(
   params: ListAppointmentsParams = {},
 ): Promise<Appointment[]> {
-  // El backend solo expone un filtro `date` (un día). Mapeamos el día de
-  // `from`; `to`/`customer_id` no tienen equivalente y se omiten (la agenda
-  // pide sin filtros y filtra en cliente; el dashboard pide el día de hoy).
+  // The backend only exposes a `date` filter (a single day). We map the day of
+  // `from`; `to`/`customer_id` have no equivalent and are omitted (the schedule
+  // requests without filters and filters client-side; the dashboard requests today).
   const query: Record<string, string> = {};
   if (params.from) query.date = params.from.slice(0, 10);
   if (params.status) query.status = params.status;
@@ -66,8 +66,8 @@ export interface CreateAppointmentInput {
 }
 
 export function createAppointment(input: CreateAppointmentInput): Promise<Appointment> {
-  // El backend calcula `end` desde la duración del servicio; solo enviamos el
-  // inicio. `origin` por defecto = admin (creada desde el panel).
+  // The backend computes `end` from the service duration; we only send the
+  // start. `origin` defaults to admin (created from the panel).
   return api
     .post<BackendAppointment>("/appointments/", {
       service_id: Number(input.service_id),
@@ -90,7 +90,7 @@ export function rescheduleAppointment(
   id: string,
   next: { start: string; end: string },
 ): Promise<Appointment> {
-  // El backend reagenda solo por inicio (recalcula el fin); `next.end` se ignora.
+  // The backend reschedules by start only (recomputes the end); `next.end` is ignored.
   return api
     .patch<BackendAppointment>(`/appointments/${id}/reschedule/`, {
       new_start_datetime: next.start,
@@ -101,7 +101,7 @@ export function rescheduleAppointment(
 export async function getAppointmentHistory(
   _id: string,
 ): Promise<AppointmentAuditEntry[]> {
-  // El backend aún no expone historial de auditoría de citas (no hay endpoint
-  // ni modelo). Devolvemos vacío hasta que exista; ver README (F4-B).
+  // The backend does not yet expose appointment audit history (no endpoint
+  // nor model). We return empty until it exists; see README (F4-B).
   return [];
 }

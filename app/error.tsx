@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { messageForStatus, titleForStatus } from "@/lib/errors";
 
 /**
- * Error boundary de ruta. Captura excepciones no manejadas (incluido un
- * `ApiError` lanzado en render) y muestra SIEMPRE un mensaje seguro — nunca el
- * stack ni el detalle técnico. `reset()` reintenta el render.
+ * Route error boundary. Catches unhandled exceptions (including an
+ * `ApiError` thrown during render) and ALWAYS shows a safe message — never the
+ * stack or technical detail. `reset()` retries the render.
  */
 export default function RouteError({
   error,
@@ -23,7 +23,7 @@ export default function RouteError({
   const status = typeof error.status === "number" ? error.status : undefined;
 
   useEffect(() => {
-    // Observabilidad mínima (no se muestra nada de esto al usuario).
+    // Minimal observability (none of this is shown to the user).
     console.error("[route-error]", error.digest ?? error.name);
   }, [error]);
 

@@ -2,16 +2,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface LoadingProps {
-  /** Número de filas de esqueleto a renderizar. */
+  /** Number of skeleton rows to render. */
   rows?: number;
   className?: string;
-  /** Texto accesible para lectores de pantalla. */
+  /** Accessible text for screen readers. */
   label?: string;
 }
 
 /**
- * Estado de carga reutilizable basado en esqueletos.
- * Úsalo en cualquier pantalla mientras se resuelven los datos.
+ * Reusable skeleton-based loading state.
+ * Use it on any screen while data is being resolved.
  */
 export function Loading({ rows = 4, className, label = "Cargando…" }: LoadingProps) {
   return (

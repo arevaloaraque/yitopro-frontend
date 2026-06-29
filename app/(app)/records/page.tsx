@@ -159,8 +159,8 @@ export default function RecordsPage() {
     };
   }, []);
 
-  // Preselección por URL (?customer=X): traer su nombre para mostrarlo en el
-  // combobox y el título, sin cargar la lista completa de clientes.
+  // URL preselection (?customer=X): fetch their name to show it in the
+  // combobox and the title, without loading the full customer list.
   useEffect(() => {
     if (!preselectedId) return;
     let cancelled = false;

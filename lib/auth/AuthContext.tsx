@@ -17,7 +17,7 @@ import {
   refreshRequest,
 } from "@/lib/api/auth";
 
-/** Usuario autenticado (mínimo necesario para el shell). */
+/** Authenticated user (the minimum the shell needs). */
 export interface AuthUser {
   id: string;
   email: string;
@@ -30,10 +30,10 @@ export interface AuthContextValue {
   user: AuthUser | null;
   status: AuthStatus;
   isAuthenticated: boolean;
-  /** Autentica contra el backend real (`POST /api/auth/login/`). */
+  /** Authenticates against the real backend (`POST /api/auth/login/`). */
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  /** Rota la sesión usando la cookie httpOnly (`POST /api/auth/refresh/`). */
+  /** Rotates the session using the httpOnly cookie (`POST /api/auth/refresh/`). */
   refresh: () => Promise<boolean>;
 }
 
@@ -49,13 +49,13 @@ function nameFromEmail(email: string): string {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // El access token vive SOLO en memoria. Nunca localStorage/sessionStorage.
+  // The access token lives ONLY in memory. Never localStorage/sessionStorage.
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
-  // Mientras corre el refresh silencioso de arranque, la sesión está "loading".
+  // While the silent boot refresh runs, the session is "loading".
   const [bootstrapped, setBootstrapped] = useState(false);
 
-  // Ref para que el cliente HTTP lea siempre el token vigente.
+  // Ref so the HTTP client always reads the current token.
   const tokenRef = useRef<string | null>(null);
   useEffect(() => {
     tokenRef.current = token;
@@ -64,9 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async (): Promise<boolean> => {
     try {
       const { access_token } = await refreshRequest();
-      // Sincroniza el ref de inmediato: el reintento del interceptor lee
-      // `tokenRef.current` justo tras este await, antes de que React
-      // re-renderice y corra el effect que lo actualiza.
+      // Sync the ref immediately: the interceptor retry reads
+      // `tokenRef.current` right after this await, before React
+      // re-renders and runs the effect that updates it.
       tokenRef.current = access_token;
       setToken(access_token);
       return true;
@@ -75,14 +75,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Reconstruye la identidad visible desde el backend (`GET /api/auth/me/`).
-  // Best-effort: si falla, se deja el `user` como esté (UserMenu cae a "Operador").
+  // Rebuilds the visible identity from the backend (`GET /api/auth/me/`).
+  // Best-effort: on failure, `user` is left as-is (UserMenu falls back to "Operador").
   const loadUser = useCallback(async () => {
     try {
       const me = await getMe();
       setUser({ id: me.id, email: me.email, name: me.name });
     } catch {
-      // sin perfil disponible
+      // no profile available
     }
   }, []);
 
@@ -91,8 +91,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Email y contraseña son obligatorios.");
     }
     const { access_token } = await loginRequest(email, password);
-    // El token JWE es opaco: no se decodifica. La identidad real se obtiene de
-    // GET /api/auth/me/; si falla, se cae al nombre derivado del email.
+    // The JWE token is opaque: it is not decoded. The real identity comes from
+    // GET /api/auth/me/; on failure, fall back to the name derived from the email.
     tokenRef.current = access_token;
     setToken(access_token);
     try {
@@ -104,15 +104,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    // Best-effort: revoca el refresh token en el backend (usa la cookie).
-    // No bloquea el cierre de sesión local si la red falla.
+    // Best-effort: revokes the refresh token on the backend (uses the cookie).
+    // Does not block local logout if the network fails.
     void logoutRequest().catch(() => {});
     tokenRef.current = null;
     setToken(null);
     setUser(null);
   }, []);
 
-  // Session expired: limpia sesion (RequireAuth redirige a /login).
+  // Session expired: clears the session (RequireAuth redirects to /login).
   const handleSessionExpired = useCallback(() => {
     setToken(null);
     setUser(null);
@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // and redirects to /login automatically.
   }, []);
 
-  // Registra los hooks de auth en el cliente HTTP (una sola vez).
+  // Registers the auth hooks on the HTTP client (only once).
   useEffect(() => {
     configureApiAuth({
       getAccessToken: () => tokenRef.current,
@@ -129,9 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [refresh, handleSessionExpired]);
 
-  // Arranque: intenta restaurar la sesión con la cookie httpOnly de refresh.
-  // Si funciona, reconstruye la identidad. Un timeout evita quedar atrapado en
-  // el splash si el backend no responde; pase lo que pase, termina el "loading".
+  // Boot: tries to restore the session with the httpOnly refresh cookie.
+  // If it works, rebuilds the identity. A timeout avoids getting stuck on the
+  // splash if the backend doesn't respond; no matter what, "loading" ends.
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -139,9 +139,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       timer = setTimeout(() => resolve(false), 10_000);
     });
     (async () => {
-      // Single-flight: en dev, StrictMode monta este effect dos veces. Sin el
-      // dedup, las dos llamadas presentan el mismo refresh token y la rotación
-      // revoca uno → el backend borra la cookie → logout al recargar.
+      // Single-flight: in dev, StrictMode mounts this effect twice. Without the
+      // dedup, both calls present the same refresh token and rotation revokes
+      // one → the backend deletes the cookie → logout on reload.
       const ok = await Promise.race([refreshAuthOnce(), timeout]);
       clearTimeout(timer);
       if (ok && active) await loadUser();

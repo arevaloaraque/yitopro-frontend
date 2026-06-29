@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 
-/** 404 global consistente — reutiliza el mismo componente visual de error. */
+/** Consistent global 404 — reuses the same visual error component. */
 export default function NotFound() {
   const router = useRouter();
   return (

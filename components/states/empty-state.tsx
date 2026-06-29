@@ -6,16 +6,16 @@ import { cn } from "@/lib/utils";
 interface EmptyStateProps {
   title: string;
   description?: string;
-  /** Icono de lucide-react. Por defecto: Inbox. */
+  /** lucide-react icon. Default: Inbox. */
   icon?: LucideIcon;
-  /** Acción opcional (p.ej. un <Button>). */
+  /** Optional action (e.g. a <Button>). */
   action?: React.ReactNode;
   className?: string;
 }
 
 /**
- * Estado vacío reutilizable. Toda pantalla con datos debe mostrarlo
- * cuando no hay resultados.
+ * Reusable empty state. Every screen with data should show it
+ * when there are no results.
  */
 export function EmptyState({
   title,

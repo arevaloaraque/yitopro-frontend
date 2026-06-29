@@ -1,11 +1,11 @@
-/** Servicio que el negocio ofrece y agenda. Reflejo del schema `Service`. */
+/** Service the business offers and schedules. Mirrors the `Service` schema. */
 export interface Service {
   id: string;
-  /** No expuesto por el backend (scope por tenant); presente solo en mocks. */
+  /** Not exposed by the backend (scoped per tenant); present only in mocks. */
   business_id?: string;
   name: string;
   duration_minutes: number;
-  /** Precio en la unidad menor de la moneda del negocio (entero). */
+  /** Price in the business currency's minor unit (integer). */
   price: number;
   is_active: boolean;
 }

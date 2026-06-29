@@ -26,7 +26,7 @@ function initials(name?: string): string {
     .join("");
 }
 
-/** Menú de usuario del topbar: identidad + cerrar sesión. */
+/** Topbar user menu: identity + sign out. */
 export function UserMenu() {
   const { user, logout } = useAuth();
   const router = useRouter();

@@ -3,14 +3,15 @@
 Panel de administración SaaS de Yitopro. Negocios atienden clientes por WhatsApp con agentes de
 IA; este repo es la interfaz operativa. Backend Django separado (repo `yitopro-backend`).
 
-El desarrollo sigue `yitopro_frontend_execution_plan.md`, sesión por sesión. **Construcción
-mock-first:** primero todo con datos falsos, luego se conecta el backend real.
+El desarrollo sigue `yitopro_frontend_execution_plan.md`, sesión por sesión. **El backend Django
+real es la única fuente de datos.** No hay mocks en runtime: la UI siempre habla con el backend
+(`NEXT_PUBLIC_API_URL`). MSW sobrevive solo en los tests.
 
 ## Stack
 
 - Next.js App Router (v16, Turbopack) + TypeScript + React 19
 - Tailwind CSS **v4** (tokens CSS-first vía `@theme` en `globals.css`, sin `tailwind.config`) + shadcn/ui (base: Base UI)
-- MSW (Mock Service Worker) para mocks
+- MSW (Mock Service Worker) **solo en tests** (Node); no se carga en runtime
 - `EventSource` nativo para SSE
 - Fuente Inter
 - Tests: Vitest/Jest + React Testing Library (desde F5)
@@ -18,7 +19,7 @@ mock-first:** primero todo con datos falsos, luego se conecta el backend real.
 ## Comandos
 
 ```bash
-npm run dev       # desarrollo (MSW activo si NEXT_PUBLIC_API_MOCKING=enabled)
+npm run dev       # desarrollo (siempre contra el backend real en NEXT_PUBLIC_API_URL)
 npm run build     # build de producción
 npm run lint      # ESLint
 npm run typecheck # tsc --noEmit
@@ -36,11 +37,11 @@ Después de cualquier cambio, antes de dar una tarea por terminada: `npm run lin
 2. **Tipos en `lib/types/`** reflejan los schemas del backend (Django Ninja). Una sola fuente de
    verdad. Si un shape no calza con el backend real, se ajusta el tipo/mapeo en `lib/api`,
    **nunca** en los componentes.
-3. **MSW intercepta las mismas rutas que usa `lib/api`.** Conectar el backend = apagar MSW
-   (`NEXT_PUBLIC_API_MOCKING=disabled`) + apuntar `NEXT_PUBLIC_API_URL` al Django real. Conectar
-   no debe requerir reescribir componentes.
-4. **`lib/sse` tiene una interfaz estable** (`subscribeToEvents`). En modo mock emite eventos
-   simulados; en real usa `EventSource`. Cambia la implementación interna, nunca la firma pública.
+3. **Toda la red va al backend real** vía `NEXT_PUBLIC_API_URL`. No hay interceptación en runtime;
+   si un shape no calza con el backend, se mapea en `lib/api/<dominio>.ts`, **nunca** en los
+   componentes. (En tests, MSW intercepta estas mismas rutas — ver Testing.)
+4. **`lib/sse` tiene una interfaz estable** (`subscribeToEvents`) sobre `fetch`+Bearer contra el
+   stream real del backend. Cambia la implementación interna, nunca la firma pública.
 5. **Suscripción SSE una sola vez**, a nivel del layout autenticado — no por pantalla.
 
 ## Reglas de diseño visual (no negociables)
@@ -91,34 +92,32 @@ lib/
   sse/                # abstracción de eventos en tiempo real (interfaz estable)
   auth/               # AuthContext, useAuth, login/refresh/logout
 mocks/
-  handlers/           # handlers MSW (mismas rutas que lib/api)
-  data/               # seed PET (datos mock realistas)
+  server.ts           # setupServer() de MSW para tests (Node); sin handlers por defecto
 ```
 
-## Datos mock
+## Caso de dominio para tests
 
 Caso **PET Spa** (peluquería/veterinaria canina): negocio PET Spa, servicios Baño/Corte/Baño+Corte,
 clientes con mascotas, fichas con `pet_name`/`species`/`weight_kg`/`vet_notes`, conversaciones de
-WhatsApp realistas. Mantener este caso al crear/ampliar mocks para que la validación se sienta real.
+WhatsApp realistas. Es el escenario de referencia al escribir tests para que la validación se
+sienta real.
 
 ## Variables de entorno
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:8050   # backend Django (auth real desde F4-A)
-NEXT_PUBLIC_API_MOCKING=enabled             # enabled = MSW intercepta todo MENOS auth; disabled = backend real
+NEXT_PUBLIC_API_URL=http://localhost:8050   # backend Django (puerto API_PORT=8050; ver yitopro-backend)
 NEXT_PUBLIC_META_APP_ID=                     # WhatsApp Embedded Signup (F4-C)
 NEXT_PUBLIC_META_CONFIG_ID=                  # configuration_id de Embedded Signup (F4-C)
 ```
 
-> MSW requiere `public/mockServiceWorker.js` (gitignored): generarlo con `npx msw init public`.
+> El backend escucha en **8050** (no 8000). Si el front recibe `ERR_CONNECTION_REFUSED`, casi
+> siempre es `NEXT_PUBLIC_API_URL` apuntando al puerto equivocado o el backend caído.
 
-**Conexión por dominio (F4/F5):** real contra el backend: auth, services, products, customers,
-appointments, conversations (inbox + tomar/cerrar/reactivar/responder), **SSE** (`lib/sse` lee
+**Dominios contra el backend real:** auth, services, products, customers, appointments,
+conversations (inbox + tomar/cerrar/reactivar/responder), **SSE** (`lib/sse` lee
 `GET /api/events/stream/` por `fetch`+Bearer, no `EventSource`, porque el token va por header) y
 **WhatsApp Embedded Signup** (`POST /api/whatsapp/embedded-signup/callback/`, solo viaja el `code`).
-**Mock** (únicos handlers en `mocks/handlers/`): businesses/settings y records (shape incompleto en
-el backend), agents (sin endpoint) — cuando el backend los exponga, se borra su handler. Los
-desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
+Los desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
 
 **Endurecimiento (F5):**
 - **Errores**: `lib/errors.ts` (mensajes seguros por código HTTP, sin stack traces) + boundaries
@@ -129,7 +128,7 @@ desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. V
   (`mocks/server.ts`). **Forms**: RHF + Zod con esquemas en `lib/validation/schemas.ts` (login
   convertido; resto pendiente de migrar — ver README).
 - **CI**: `.github/workflows/ci.yml` (install→lint→typecheck→test→build). **Deploy**: `vercel.json`
-  + `.env.production.example`; en prod `NEXT_PUBLIC_API_MOCKING=disabled` ⇒ MSW no se carga.
+  + `.env.production.example`; en prod `NEXT_PUBLIC_API_URL` apunta al backend desplegado.
 - Antes de cerrar cualquier tarea: `npm run lint`, `npm run typecheck`, `npm run test` y
   `npm run build` deben pasar limpios.
 
@@ -137,8 +136,7 @@ desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. V
 
 1. Cada sesión del plan es independiente y trae todo su contexto.
 2. No avanzar a la siguiente sesión si la actual quedó incompleta.
-3. Respetar los **checkpoints** (fin de F2-E y F3-C): son validación humana de la UI mockeada
-   antes de seguir.
+3. Respetar los **checkpoints** (fin de F2-E y F3-C): son validación humana de la UI antes de seguir.
 4. Commit al cerrar cada sesión:
    ```bash
    git add . && git commit -m "sesión F1-A: proyecto base + fundación de diseño"
@@ -149,6 +147,6 @@ desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. V
 - No llamar `fetch` desde componentes.
 - No escribir hex literales en componentes (solo tokens).
 - No persistir el access token fuera de memoria.
-- No apagar MSW de golpe al conectar el backend; hacerlo dominio por dominio (F4-B).
-- No adelantar la integración real (F4) si el backend no tiene el endpoint listo; dejar ese
-  dominio en mock y anotarlo.
+- No reintroducir mocks en runtime ni leer `NEXT_PUBLIC_API_MOCKING` (variable eliminada). MSW es
+  solo de tests.
+- No mapear desajustes de shape en componentes; hacerlo en `lib/api/<dominio>.ts`.

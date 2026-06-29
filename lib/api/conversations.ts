@@ -3,14 +3,14 @@ import type { Conversation, ConversationStatus, Message } from "@/lib/types";
 import { api } from "./client";
 
 /**
- * Shapes reales del backend (Django Ninja). El mapeo a los tipos de UI vive
- * aquí; los componentes consumen `Conversation`/`Message` sin cambios.
+ * Actual backend shapes (Django Ninja). The mapping to the UI types lives
+ * here; components consume `Conversation`/`Message` unchanged.
  *
- * Diferencias clave:
- * - ids enteros (UI usa string); `customer` viene anidado (UI usa `customer_id`).
- * - status backend: open|waiting_customer|waiting_business|assigned_to_human|closed.
- * - `MessageOut` no trae `sender` ni `status`; `direction` es `in`/`out`.
- * - el backend no expone `detected_intent` ni un contador `unread`.
+ * Key differences:
+ * - integer ids (UI uses string); `customer` comes nested (UI uses `customer_id`).
+ * - backend status: open|waiting_customer|waiting_business|assigned_to_human|closed.
+ * - `MessageOut` carries neither `sender` nor `status`; `direction` is `in`/`out`.
+ * - the backend exposes neither `detected_intent` nor an `unread` counter.
  */
 interface BackendConversation {
   id: number;
@@ -31,7 +31,7 @@ interface BackendMessage {
   created_at: string;
 }
 
-/** open/waiting_* => la IA atiende; assigned_to_human => handoff; closed => closed. */
+/** open/waiting_* => the AI handles it; assigned_to_human => handoff; closed => closed. */
 function mapStatus(s: string): ConversationStatus {
   if (s === "assigned_to_human") return "human_handoff";
   if (s === "closed") return "closed";
@@ -44,9 +44,9 @@ function convFromBackend(c: BackendConversation): Conversation {
     customer_id: String(c.customer.id),
     status: mapStatus(c.status),
     active_agent: c.active_agent || null,
-    detected_intent: null, // no expuesto por el backend
+    detected_intent: null, // not exposed by the backend
     last_message_at: c.last_message_at ?? c.created_at,
-    unread: 0, // no expuesto; el SSE `mensaje_recibido` lo incrementa en vivo
+    unread: 0, // not exposed; the SSE `mensaje_recibido` increments it live
   };
 }
 
@@ -60,12 +60,12 @@ function msgFromBackend(
     id: String(m.id),
     conversation_id: conversationId,
     direction: inbound ? "inbound" : "outbound",
-    // El backend no distingue ai/humano en salientes; al listar asumimos "ai".
-    // Al responder manualmente (sendMessage) sabemos que es "human".
+    // The backend does not distinguish ai/human in outbound; when listing we assume "ai".
+    // When replying manually (sendMessage) we know it is "human".
     sender: sender ?? (inbound ? "customer" : "ai"),
     text: m.content,
     created_at: m.created_at,
-    status: "sent", // el backend no expone estado de entrega
+    status: "sent", // the backend does not expose delivery status
   };
 }
 
@@ -76,8 +76,8 @@ export interface ListConversationsParams {
 export async function listConversations(
   params: ListConversationsParams = {},
 ): Promise<Conversation[]> {
-  // El backend filtra por su propio status. "human_handoff"/"closed" mapean 1:1;
-  // "ai_active" abarca varios estados → traemos todo y filtramos en cliente.
+  // The backend filters by its own status. "human_handoff"/"closed" map 1:1;
+  // "ai_active" spans several states → we fetch everything and filter client-side.
   const backendStatus =
     params.status === "human_handoff"
       ? "assigned_to_human"
@@ -104,8 +104,8 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
   return res.map((m) => msgFromBackend(m, conversationId));
 }
 
-/** Responde como operador humano. El backend exige que la conversación esté
- *  tomada por este operador (si no, responde 403). */
+/** Replies as a human operator. The backend requires that the conversation be
+ *  taken by this operator (otherwise it responds 403). */
 export function sendMessage(conversationId: string, text: string): Promise<Message> {
   return api
     .post<BackendMessage>(`/conversations/${conversationId}/messages/`, {
@@ -126,7 +126,7 @@ export function closeConversation(id: string): Promise<Conversation> {
     .then(convFromBackend);
 }
 
-/** Devuelve el control a la IA. */
+/** Returns control to the AI. */
 export function reactivateAI(id: string): Promise<Conversation> {
   return api
     .post<BackendConversation>(`/conversations/${id}/reactivate/`)

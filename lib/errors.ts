@@ -1,16 +1,16 @@
 import { ApiError } from "@/lib/api";
 
 /**
- * Mensaje seguro para el usuario a partir de cualquier error. NUNCA expone
- * stack traces, detalles internos ni mensajes técnicos del backend: mapea por
- * código HTTP a textos consistentes en español.
+ * Safe user-facing message derived from any error. NEVER exposes stack traces,
+ * internal details, or technical backend messages: it maps by HTTP status code
+ * to consistent Spanish copy.
  */
 export function friendlyMessage(error: unknown): string {
   if (error instanceof ApiError) return messageForStatus(error.status);
   return "Algo salió mal. Inténtalo de nuevo.";
 }
 
-/** Mensaje consistente por código HTTP (compartido por páginas de error y boundaries). */
+/** Consistent message per HTTP status code (shared by error pages and boundaries). */
 export function messageForStatus(status: number): string {
   switch (status) {
     case 0:
@@ -32,7 +32,7 @@ export function messageForStatus(status: number): string {
   }
 }
 
-/** Título corto por código (para las páginas de estado 401/403/404/500). */
+/** Short title per status code (for the 401/403/404/500 status pages). */
 export function titleForStatus(status: number): string {
   switch (status) {
     case 401:

@@ -17,7 +17,7 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
-/** Navegación del panel autenticado, en orden. */
+/** Authenticated panel navigation, in order. */
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Conversaciones", href: "/conversations", icon: MessageSquare },

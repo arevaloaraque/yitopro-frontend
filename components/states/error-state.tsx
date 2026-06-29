@@ -8,16 +8,16 @@ import { cn } from "@/lib/utils";
 interface ErrorStateProps {
   title?: string;
   description?: string;
-  /** Si se provee, muestra un botón "Reintentar". */
+  /** If provided, shows a "Reintentar" button. */
   onRetry?: () => void;
-  /** Acción adicional (p.ej. un enlace "Ir al inicio") debajo del botón. */
+  /** Additional action (e.g. an "Ir al inicio" link) below the button. */
   action?: React.ReactNode;
   className?: string;
 }
 
 /**
- * Estado de error reutilizable. Toda pantalla con datos debe mostrarlo
- * cuando la carga falla, ofreciendo reintentar.
+ * Reusable error state. Every screen with data should show it
+ * when loading fails, offering a retry.
  */
 export function ErrorState({
   title = "Algo salió mal",

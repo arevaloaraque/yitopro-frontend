@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 /**
- * Esquemas Zod compartidos: única fuente de verdad de validación de formularios.
- * Los formularios los consumen vía `zodResolver` (React Hook Form); el tipo de
- * cada formulario se infiere con `z.infer`.
+ * Shared Zod schemas: the single source of truth for form validation.
+ * Forms consume them via `zodResolver` (React Hook Form); each form's type
+ * is inferred with `z.infer`.
  */
 
 export const loginSchema = z.object({

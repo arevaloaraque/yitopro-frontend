@@ -14,10 +14,10 @@ import { toast } from "sonner";
 import { subscribeToEvents } from "@/lib/sse";
 import type { SSEEvent, SSEEventType } from "@/lib/types";
 
-/** Severidad visual de una notificación. */
+/** Visual severity of a notification. */
 export type NotificationTone = "default" | "accent" | "error";
 
-/** Notificación derivada de un evento SSE, lista para mostrar en la UI. */
+/** Notification derived from an SSE event, ready to show in the UI. */
 export interface AppNotification {
   id: string;
   type: SSEEventType;
@@ -38,10 +38,10 @@ interface NotificationsContextValue {
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
 
-/** Cuántas notificaciones conservamos en memoria. */
+/** How many notifications we keep in memory. */
 const MAX_NOTIFICATIONS = 30;
 
-/** Traduce un evento SSE a su presentación de notificación. */
+/** Translates an SSE event into its notification presentation. */
 function toNotification(event: SSEEvent): AppNotification {
   const base = { id: event.id, type: event.type, at: event.emitted_at, read: false };
 
@@ -105,7 +105,7 @@ function toNotification(event: SSEEvent): AppNotification {
   }
 }
 
-/** Lanza un toast no invasivo acorde a la severidad de la notificación. */
+/** Fires a non-intrusive toast according to the notification's severity. */
 function notify(notification: AppNotification): void {
   const options = { description: notification.description };
   switch (notification.tone) {
@@ -125,13 +125,13 @@ function notify(notification: AppNotification): void {
 }
 
 /**
- * Provee el store de notificaciones y abre la suscripción SSE UNA sola vez.
- * Debe montarse a nivel del layout autenticado, no por pantalla.
+ * Provides the notifications store and opens the SSE subscription ONLY once.
+ * Must be mounted at the authenticated layout level, not per screen.
  */
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Evita toasts duplicados si un evento llega dos veces (dedupe por id).
+  // Avoids duplicate toasts if an event arrives twice (dedupe by id).
   const seenIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {

@@ -31,7 +31,7 @@ export const STEP_LABELS: Record<OnboardingStep, string> = {
 };
 
 export interface OnboardingData {
-  // Step 1 — Datos del negocio
+  // Step 1 — Business details
   businessName: string;
   country: string;
   currency: string;
@@ -41,16 +41,16 @@ export interface OnboardingData {
   // Step 2 — Template
   selectedTemplate: IndustryTemplate | null;
 
-  // Step 3 — Servicios editables
+  // Step 3 — Editable services
   services: Service[];
 
-  // Step 4 — Productos editables
+  // Step 4 — Editable products
   products: Product[];
 
-  // Step 5 — Campos de ficha editables
+  // Step 5 — Editable record fields
   recordFields: RecordFieldWithKey[];
 
-  // Step 6 — Agentes editables
+  // Step 6 — Editable agents
   agents: Agent[];
 
   // Step 7 — WhatsApp (Embedded Signup real)

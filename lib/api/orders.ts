@@ -7,7 +7,7 @@ export interface OrderLine {
   quantity: number;
 }
 
-/** Pedido del tenant (reflejo de `OrderOut`, con nombres ya resueltos). */
+/** Tenant order (mirrors `OrderOut`, with names already resolved). */
 export interface Order {
   id: string;
   customer: string;
@@ -52,7 +52,7 @@ function fromBackend(o: BackendOrder): Order {
   };
 }
 
-/** Lista de pedidos del negocio (los crea el agente de ventas o el panel). */
+/** List of the business's orders (created by the sales agent or the panel). */
 export async function listOrders(status?: OrderStatus): Promise<Order[]> {
   const res = await api.get<BackendOrder[]>("/orders/", { query: { status } });
   return res.map(fromBackend);

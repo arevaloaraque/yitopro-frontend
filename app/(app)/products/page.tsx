@@ -99,7 +99,7 @@ export default function ProductsPage() {
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Lista de productos: búsqueda + paginación server-side ("cargar más").
+  // Product list: search + server-side pagination ("load more").
   const loadProducts = useCallback(
     async (opts: { search: string; offset: number; append: boolean }) => {
       setListLoading(true);
@@ -124,7 +124,7 @@ export default function ProductsPage() {
     [],
   );
 
-  // Debounce de la búsqueda (vuelve a la primera página en cada cambio).
+  // Search debounce (resets to the first page on each change).
   useEffect(() => {
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(
@@ -139,8 +139,8 @@ export default function ProductsPage() {
     loadProducts({ search, offset: 0, append: false });
   }
 
-  // Pedidos (los crea el agente de ventas o el panel). Secundarios: un fallo
-  // no bloquea la página de productos.
+  // Orders (created by the sales agent or the panel). Secondary: a failure
+  // does not block the products page.
   useEffect(() => {
     let cancelled = false;
     async function load() {

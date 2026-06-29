@@ -2,12 +2,12 @@ import type { CustomerRecord, RecordField, RecordValue } from "@/lib/types";
 
 import { api } from "./client";
 
-/** Ficha de un cliente (relación 1:1 vía `customer_id`). */
+/** A customer's record (1:1 relationship via `customer_id`). */
 export function getRecord(customerId: string): Promise<CustomerRecord> {
   return api.get<CustomerRecord>(`/customers/${customerId}/record/`);
 }
 
-/** Crea el schema de fichas del negocio (definición de campos). */
+/** Creates the business's record schema (field definitions). */
 export function createRecordSchema(
   name: string,
   fields: RecordField[],
@@ -17,7 +17,7 @@ export function createRecordSchema(
     .then((r) => ({ id: String(r.id) }));
 }
 
-/** Actualiza los valores de la ficha; el backend registra el `audit`. */
+/** Updates the record's values; the backend records the `audit`. */
 export function updateRecordValues(
   customerId: string,
   values: { [field: string]: RecordValue },

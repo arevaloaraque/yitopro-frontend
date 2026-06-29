@@ -3,10 +3,11 @@ import type { Service } from "@/lib/types";
 import { api } from "./client";
 
 /**
- * Shape real del backend (Django Ninja `ServiceOut`). Difiere del tipo de UI:
- * `id` es entero, `active` (no `is_active`), `price` es Decimal serializado
- * como string, y no incluye `business_id` (va por scope de tenant). El mapeo
- * vive aquí para que los componentes consuman `Service` sin cambios.
+ * Actual backend shape (Django Ninja `ServiceOut`). It differs from the UI
+ * type: `id` is an integer, `active` (not `is_active`), `price` is a Decimal
+ * serialized as a string, and it does not include `business_id` (handled via
+ * tenant scope). The mapping lives here so components consume `Service`
+ * unchanged.
  */
 interface BackendService {
   id: number;

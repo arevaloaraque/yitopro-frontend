@@ -21,9 +21,9 @@ function Probe() {
 }
 
 describe("AuthContext", () => {
-  // Por defecto, el refresh silencioso de arranque no encuentra sesión (401),
-  // así que la app arranca como "out" de forma determinista. Los tests que
-  // prueban la restauración de sesión sobreescriben este handler.
+  // By default, the silent boot refresh finds no session (401), so the app
+  // starts as "out" deterministically. Tests that exercise session restoration
+  // override this handler.
   beforeEach(() => {
     server.use(
       http.post(`${BASE}/auth/refresh/`, () =>
@@ -110,7 +110,7 @@ describe("AuthContext", () => {
         <Probe />
       </AuthProvider>,
     );
-    // Sin pasar por login: el arranque restaura la sesión usando la cookie de refresh.
+    // Without going through login: boot restores the session using the refresh cookie.
     await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("in"));
     expect(screen.getByTestId("email").textContent).toBe("boot@b.com");
   });

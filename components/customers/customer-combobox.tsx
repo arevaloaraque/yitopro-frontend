@@ -11,13 +11,13 @@ type Option = { value: string; label: string };
 type Selection = { id: string; name: string } | null;
 
 /**
- * Buscador de cliente con búsqueda server-side (combobox accesible de Base UI).
- * Reemplaza al `Select` que cargaba TODOS los clientes — escala a miles de
- * registros porque solo trae los resultados de lo que se escribe (debounce →
+ * Customer search with server-side search (accessible Base UI combobox).
+ * Replaces the `Select` that loaded ALL customers — scales to thousands of
+ * records because it only fetches the results for what is typed (debounce →
  * `GET /customers/?search=&limit=20`).
  *
- * Totalmente controlado: el padre es dueño de la selección (`value`), así que
- * no hay estado de selección duplicado ni efectos de sincronización.
+ * Fully controlled: the parent owns the selection (`value`), so there is no
+ * duplicated selection state or synchronization effects.
  */
 export function CustomerCombobox({
   value,
@@ -45,7 +45,7 @@ export function CustomerCombobox({
     }
   }
 
-  // Primer set de opciones (primeros 20) al montar.
+  // First set of options (first 20) on mount.
   React.useEffect(() => {
     let cancelled = false;
     async function loadInitial() {
@@ -72,7 +72,7 @@ export function CustomerCombobox({
     timer.current = setTimeout(() => void fetchOptions(q), 250);
   };
 
-  // Estable entre renders (si no, Base UI reescribiría el input en cada render).
+  // Stable across renders (otherwise Base UI would rewrite the input on every render).
   const selected = React.useMemo<Option | null>(
     () => (value ? { value: value.id, label: value.name } : null),
     [value],

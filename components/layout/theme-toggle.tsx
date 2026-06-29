@@ -6,9 +6,9 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 
 /**
- * Alterna entre modo claro y oscuro. next-themes persiste la preferencia
- * (localStorage `theme`) y respeta el sistema por defecto. El ícono se
- * resuelve por CSS (`dark:`), evitando mismatch de hidratación.
+ * Toggles between light and dark mode. next-themes persists the preference
+ * (localStorage `theme`) and respects the system default. The icon is
+ * resolved via CSS (`dark:`), avoiding hydration mismatch.
  */
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
