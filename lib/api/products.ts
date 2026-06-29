@@ -1,4 +1,4 @@
-import type { Product } from "@/lib/types";
+import type { Paginated, Product } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -19,6 +19,11 @@ interface BackendProduct {
   category_id: number | null;
 }
 
+interface Page {
+  items: BackendProduct[];
+  count: number;
+}
+
 function fromBackend(p: BackendProduct): Product {
   return {
     id: String(p.id),
@@ -30,9 +35,37 @@ function fromBackend(p: BackendProduct): Product {
   };
 }
 
+/**
+ * Todos los productos (para consumidores que esperan la lista completa).
+ * ponytail: tope de 1000; la tabla de Productos usa `searchProducts` paginado.
+ */
 export async function listProducts(): Promise<Product[]> {
-  const res = await api.get<BackendProduct[]>("/products/");
-  return res.map(fromBackend);
+  const res = await api.get<Page>("/products/", { query: { limit: 1000 } });
+  return res.items.map(fromBackend);
+}
+
+export interface ProductSearchParams {
+  search?: string;
+  limit?: number;
+  offset?: number;
+  active?: boolean;
+  category_id?: number;
+}
+
+/** Búsqueda/paginación server-side (tabla de Productos). */
+export async function searchProducts(
+  params: ProductSearchParams = {},
+): Promise<Paginated<Product>> {
+  const res = await api.get<Page>("/products/", {
+    query: {
+      search: params.search,
+      limit: params.limit ?? 20,
+      offset: params.offset ?? 0,
+      active: params.active,
+      category_id: params.category_id,
+    },
+  });
+  return { items: res.items.map(fromBackend), count: res.count };
 }
 
 export type CreateProductInput = Omit<Product, "id" | "business_id">;

@@ -88,17 +88,6 @@ export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
     ],
     agents: [
       {
-        name: "Orquestador",
-        type: "orchestrator",
-        is_active: true,
-        autonomy: "supervised",
-        skills: ["detectar_intencion", "derivar_agente"],
-        tools: ["routing"],
-        escalation_rules: [
-          { condition: "cliente_molesto", action: "handoff_humano" },
-        ],
-      },
-      {
         name: "Agendamiento",
         type: "scheduling",
         is_active: true,
@@ -110,8 +99,8 @@ export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
         ],
       },
       {
-        name: "Productos",
-        type: "products",
+        name: "Ventas",
+        type: "sales",
         is_active: true,
         autonomy: "supervised",
         skills: ["consultar_stock", "tomar_pedido"],
@@ -215,17 +204,6 @@ export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
     ],
     agents: [
       {
-        name: "Orquestador",
-        type: "orchestrator",
-        is_active: true,
-        autonomy: "supervised",
-        skills: ["detectar_intencion", "derivar_agente"],
-        tools: ["routing"],
-        escalation_rules: [
-          { condition: "cliente_molesto", action: "handoff_humano" },
-        ],
-      },
-      {
         name: "Agendamiento",
         type: "scheduling",
         is_active: true,
@@ -237,8 +215,8 @@ export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
         ],
       },
       {
-        name: "Productos",
-        type: "products",
+        name: "Ventas",
+        type: "sales",
         is_active: true,
         autonomy: "supervised",
         skills: ["consultar_stock", "tomar_pedido"],
@@ -341,17 +319,6 @@ export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
       },
     ],
     agents: [
-      {
-        name: "Orquestador",
-        type: "orchestrator",
-        is_active: true,
-        autonomy: "supervised",
-        skills: ["detectar_intencion", "derivar_agente"],
-        tools: ["routing"],
-        escalation_rules: [
-          { condition: "cliente_molesto", action: "handoff_humano" },
-        ],
-      },
       {
         name: "Agendamiento",
         type: "scheduling",

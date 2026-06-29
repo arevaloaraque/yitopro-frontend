@@ -42,7 +42,7 @@ const LANGUAGES = [
 
 const TONES: { value: AssistantTone; label: string }[] = [
   { value: "formal", label: "Formal" },
-  { value: "neutral", label: "Neutral" },
+  { value: "friendly", label: "Amigable" },
   { value: "casual", label: "Casual" },
 ];
 

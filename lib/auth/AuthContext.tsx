@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 
-import { configureApiAuth } from "@/lib/api/client";
+import { configureApiAuth, refreshAuthOnce } from "@/lib/api/client";
 import {
   getMe,
   loginRequest,
@@ -139,7 +139,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       timer = setTimeout(() => resolve(false), 10_000);
     });
     (async () => {
-      const ok = await Promise.race([refresh(), timeout]);
+      // Single-flight: en dev, StrictMode monta este effect dos veces. Sin el
+      // dedup, las dos llamadas presentan el mismo refresh token y la rotación
+      // revoca uno → el backend borra la cookie → logout al recargar.
+      const ok = await Promise.race([refreshAuthOnce(), timeout]);
       clearTimeout(timer);
       if (ok && active) await loadUser();
       if (active) setBootstrapped(true);

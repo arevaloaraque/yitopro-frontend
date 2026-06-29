@@ -24,19 +24,17 @@ import type { Agent, AgentAutonomy, AgentType } from "@/lib/types";
 type PageState = "loading" | "error" | "ready";
 
 const AGENT_TYPE_LABELS: Record<AgentType, string> = {
-  orchestrator: "Orquestador",
   scheduling: "Agendamiento",
-  products: "Productos",
+  sales: "Ventas",
   records: "Fichas",
-  support: "Soporte",
+  human: "Atención humana",
 };
 
 const AGENT_TYPE_ICONS: Record<AgentType, LucideIcon> = {
-  orchestrator: Bot,
   scheduling: CalendarDays,
-  products: Package,
+  sales: Package,
   records: ClipboardList,
-  support: Headphones,
+  human: Headphones,
 };
 
 const AUTONOMY_OPTIONS: { value: AgentAutonomy; label: string; desc: string }[] = [
