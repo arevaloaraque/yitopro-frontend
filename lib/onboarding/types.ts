@@ -53,7 +53,7 @@ export interface OnboardingData {
   // Step 6 — Agentes editables
   agents: Agent[];
 
-  // Step 7 — WhatsApp mock
+  // Step 7 — WhatsApp (Embedded Signup real)
   whatsappConnected: boolean;
   phoneNumberId: string | null;
   wabaId: string | null;

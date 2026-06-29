@@ -10,7 +10,13 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-import { updateBusiness } from "@/lib/api";
+import {
+  createProduct,
+  createRecordSchema,
+  createService,
+  updateAgent as apiUpdateAgent,
+  updateBusiness,
+} from "@/lib/api";
 import type { Agent, Product, RecordField, Service } from "@/lib/types";
 import { INDUSTRY_TEMPLATES } from "./templates";
 import {
@@ -65,7 +71,7 @@ interface OnboardingContextValue {
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   toggleAgentSkill: (agentId: string, skill: string) => void;
 
-  // Step 7 — WhatsApp (mock)
+  // Step 7 — WhatsApp (Embedded Signup real)
   setWhatsappConnected: (phoneNumberId: string, wabaId: string) => void;
 
   // Step 9 — Activation
@@ -316,6 +322,52 @@ export function OnboardingProvider({
   const activate = useCallback(async () => {
     setActivateError(null);
     try {
+      // Persistir lo configurado en el wizard ANTES de marcar el onboarding como
+      // completado: así un fallo deja el negocio re-activable.
+      // ponytail: sin dedup — si un create falla a mitad y se reintenta puede
+      // duplicar; aceptable para un flujo one-shot (anotar si molesta).
+      await Promise.all([
+        ...data.services.map((s) =>
+          createService({
+            name: s.name,
+            duration_minutes: s.duration_minutes,
+            price: s.price,
+            is_active: s.is_active,
+          }),
+        ),
+        ...data.products.map((p) =>
+          createProduct({
+            name: p.name,
+            price: p.price,
+            stock: p.stock,
+            sellable_via_whatsapp: p.sellable_via_whatsapp,
+            is_active: p.is_active,
+          }),
+        ),
+        // `is_active` ⇔ enabled_agents; `autonomy` se guarda por agente.
+        ...data.agents.map((a) =>
+          apiUpdateAgent(a.type, { is_active: a.is_active, autonomy: a.autonomy }),
+        ),
+        ...(data.recordFields.length > 0
+          ? [
+              createRecordSchema(
+                "Ficha de cliente",
+                data.recordFields.map(
+                  (f): RecordField => ({
+                    name: f.name,
+                    label: f.label,
+                    type: f.type,
+                    required: f.required,
+                    ai_visible: f.ai_visible,
+                    ai_editable: f.ai_editable,
+                    ...(f.options ? { options: f.options } : {}),
+                  }),
+                ),
+              ),
+            ]
+          : []),
+      ]);
+
       await updateBusiness({
         name: data.businessName,
         country: data.country,

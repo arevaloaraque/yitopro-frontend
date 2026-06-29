@@ -13,5 +13,6 @@ export * from "./appointments";
 export * from "./customers";
 export * from "./records";
 export * from "./products";
+export * from "./orders";
 export * from "./conversations";
 export * from "./agents";
