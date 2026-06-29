@@ -322,10 +322,10 @@ export function OnboardingProvider({
   const activate = useCallback(async () => {
     setActivateError(null);
     try {
-      // Persistir lo configurado en el wizard ANTES de marcar el onboarding como
-      // completado: así un fallo deja el negocio re-activable.
-      // ponytail: sin dedup — si un create falla a mitad y se reintenta puede
-      // duplicar; aceptable para un flujo one-shot (anotar si molesta).
+      // Persist what was configured in the wizard BEFORE marking onboarding as
+      // completed: this way a failure leaves the business re-activable.
+      // ponytail: no dedup — if a create fails midway and is retried it may
+      // duplicate; acceptable for a one-shot flow (note it if it becomes a problem).
       await Promise.all([
         ...data.services.map((s) =>
           createService({
@@ -344,7 +344,7 @@ export function OnboardingProvider({
             is_active: p.is_active,
           }),
         ),
-        // `is_active` ⇔ enabled_agents; `autonomy` se guarda por agente.
+        // `is_active` ⇔ enabled_agents; `autonomy` is stored per agent.
         ...data.agents.map((a) =>
           apiUpdateAgent(a.type, { is_active: a.is_active, autonomy: a.autonomy }),
         ),

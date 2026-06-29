@@ -1,13 +1,13 @@
-/** Dirección del mensaje respecto del negocio. */
+/** Message direction relative to the business. */
 export type MessageDirection = "inbound" | "outbound";
 
-/** Quién envió el mensaje. */
+/** Who sent the message. */
 export type MessageSender = "customer" | "ai" | "human";
 
-/** Estado de entrega del mensaje. */
+/** Message delivery status. */
 export type MessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
 
-/** Mensaje dentro de una conversación. Reflejo del schema `Message`. */
+/** Message within a conversation. Mirror of the `Message` schema. */
 export interface Message {
   id: string;
   conversation_id: string;

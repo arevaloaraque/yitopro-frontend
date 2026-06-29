@@ -1,18 +1,18 @@
-/** Tipo / especialidad de un agente (refleja las rutas del backend). */
+/** Type / specialty of an agent (mirrors the backend routes). */
 export type AgentType = "scheduling" | "sales" | "records" | "human";
 
-/** Nivel de autonomía del agente. */
+/** Agent autonomy level. */
 export type AgentAutonomy = "full" | "supervised" | "manual";
 
-/** Regla de escalamiento a un humano. */
+/** Rule for escalating to a human. */
 export interface EscalationRule {
-  /** Condición que dispara el escalamiento (p.ej. "cliente_molesto"). */
+  /** Condition that triggers the escalation (e.g. "cliente_molesto"). */
   condition: string;
-  /** Acción a tomar (p.ej. "handoff_humano"). */
+  /** Action to take (e.g. "handoff_humano"). */
   action: string;
 }
 
-/** Agente de IA configurable. Reflejo del schema `Agent`. */
+/** Configurable AI agent. Mirror of the `Agent` schema. */
 export interface Agent {
   id: string;
   business_id: string;
@@ -20,9 +20,9 @@ export interface Agent {
   type: AgentType;
   is_active: boolean;
   autonomy: AgentAutonomy;
-  /** Capacidades habilitadas (p.ej. "agendar", "reagendar"). */
+  /** Enabled capabilities (e.g. "agendar", "reagendar"). */
   skills: string[];
-  /** Herramientas / integraciones disponibles para el agente. */
+  /** Tools / integrations available to the agent. */
   tools: string[];
   escalation_rules: EscalationRule[];
 }

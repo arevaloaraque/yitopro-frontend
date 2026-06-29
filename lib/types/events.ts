@@ -1,6 +1,6 @@
 import type { ActorType } from "./common";
 
-/** Nombres de los eventos SSE que emite el backend. */
+/** Names of the SSE events emitted by the backend. */
 export type SSEEventType =
   | "nueva_cita"
   | "cita_cancelada"
@@ -11,12 +11,12 @@ export type SSEEventType =
   | "error_operativo"
   | "error_integracion";
 
-/** Envoltura común de todo evento SSE. */
+/** Common wrapper for every SSE event. */
 interface SSEEventBase<T extends SSEEventType, P> {
-  /** Id único del evento (para dedupe en el cliente). */
+  /** Unique event id (for client-side dedupe). */
   id: string;
   type: T;
-  /** ISO 8601 de emisión. */
+  /** ISO 8601 of emission. */
   emitted_at: string;
   data: P;
 }
@@ -83,7 +83,7 @@ export type ErrorIntegracionEvent = SSEEventBase<
   { integration: string; message: string }
 >;
 
-/** Unión discriminada de todos los eventos SSE. */
+/** Discriminated union of all SSE events. */
 export type SSEEvent =
   | NuevaCitaEvent
   | CitaCanceladaEvent

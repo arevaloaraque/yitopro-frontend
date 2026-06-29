@@ -3,9 +3,9 @@ import type { Customer, Paginated } from "@/lib/types";
 import { api } from "./client";
 
 /**
- * Shape real del backend (Django Ninja `CustomerOut`). Renombre: backend usa
- * `display_name`, la UI usa `name`; `id` entero; expone `email` (la UI no lo
- * usa). El mapeo vive aquí; los componentes consumen `Customer` sin cambios.
+ * Actual backend shape (Django Ninja `CustomerOut`). Renaming: the backend uses
+ * `display_name`, the UI uses `name`; integer `id`; exposes `email` (the UI does
+ * not use it). The mapping lives here; components consume `Customer` unchanged.
  */
 interface BackendCustomer {
   id: number;
@@ -30,10 +30,10 @@ function fromBackend(c: BackendCustomer): Customer {
 }
 
 /**
- * Todos los clientes — para los mapas id→nombre (appointments/conversations/
- * dashboard) que necesitan resolver cualquier id de la página.
- * ponytail: tope de 1000; si un negocio supera eso, incrustar el nombre del
- * cliente en esos payloads en vez de traerlos todos aquí.
+ * All customers — for the id→name maps (appointments/conversations/dashboard)
+ * that need to resolve any id on the page.
+ * ponytail: cap of 1000; if a business exceeds that, embed the customer name in
+ * those payloads instead of fetching them all here.
  */
 export async function listCustomers(): Promise<Customer[]> {
   const res = await api.get<Page>("/customers/", { query: { limit: 1000 } });
@@ -46,7 +46,7 @@ export interface CustomerSearchParams {
   offset?: number;
 }
 
-/** Búsqueda/paginación server-side (combobox de cliente y tabla de Clientes). */
+/** Server-side search/pagination (customer combobox and Customers table). */
 export async function searchCustomers(
   params: CustomerSearchParams = {},
 ): Promise<Paginated<Customer>> {

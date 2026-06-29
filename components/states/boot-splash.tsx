@@ -1,9 +1,9 @@
 import { Loader2 } from "lucide-react";
 
 /**
- * Pantalla de carga a pantalla completa durante el arranque, mientras el
- * `AuthProvider` intenta restaurar la sesión con la cookie httpOnly de refresh.
- * Evita el parpadeo del formulario de login y el rebote a `/login`.
+ * Full-screen loading screen during startup, while the `AuthProvider` tries to
+ * restore the session using the httpOnly refresh cookie. Prevents the login
+ * form from flickering and the bounce back to `/login`.
  */
 export function BootSplash() {
   return (

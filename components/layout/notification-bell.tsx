@@ -27,7 +27,7 @@ function timeAgo(iso: string): string {
   return `hace ${Math.round(hours / 24)} d`;
 }
 
-/** Campana del topbar: contador de no leídas + panel con las últimas notificaciones. */
+/** Topbar bell: unread count + panel with the latest notifications. */
 export function NotificationBell() {
   const { notifications, unreadCount, markAllRead } = useNotifications();
 

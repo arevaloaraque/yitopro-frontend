@@ -1,18 +1,19 @@
 /**
- * Cliente HTTP centralizado. ÚNICO punto donde la app habla con la red.
- * Los componentes nunca llaman `fetch` directo: consumen los servicios
- * tipados de `lib/api/*`, que a su vez usan este cliente.
+ * Centralized HTTP client. The ONLY place where the app talks to the network.
+ * Components never call `fetch` directly: they consume the typed services in
+ * `lib/api/*`, which in turn use this client.
  *
- * Al conectar el backend real (F4) no cambia nada aquí: solo se apaga MSW.
+ * All network traffic goes to the real Django backend (`NEXT_PUBLIC_API_URL`);
+ * there are no runtime mocks. MSW is only used in tests.
  */
 
-/** Base del backend. En mock, MSW intercepta estas mismas URLs. */
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+/** Django backend base. Defaults to the local port API_PORT=8050. */
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8050";
 
-/** Prefijo de la API (Django Ninja monta en `/api`). */
+/** API prefix (Django Ninja mounts at `/api`). */
 const API_PREFIX = "/api";
 
-/** Error tipado de la capa de red. */
+/** Typed error from the network layer. */
 export class ApiError extends Error {
   readonly status: number;
   readonly body: unknown;
@@ -25,9 +26,9 @@ export class ApiError extends Error {
   }
 }
 
-// --- Punto de inyección de auth -------------------------------------------
-// El AuthContext registra aquí cómo obtener el access token (en memoria) y
-// cómo refrescar la sesión. Mientras no se registre, son no-ops seguros.
+// --- Auth injection point --------------------------------------------------
+// The AuthContext registers here how to obtain the access token (in memory) and
+// how to refresh the session. Until registered, they are safe no-ops.
 
 type AccessTokenGetter = () => string | null;
 type SessionRefresher = () => Promise<boolean>;
@@ -37,7 +38,7 @@ let getAccessToken: AccessTokenGetter = () => null;
 let refreshSession: SessionRefresher = async () => false;
 let onSessionExpired: SessionExpiredHandler = () => {};
 
-/** Registra los hooks de auth. Lo llama `AuthProvider`. */
+/** Registers the auth hooks. Called by `AuthProvider`. */
 export function configureApiAuth(opts: {
   getAccessToken?: AccessTokenGetter;
   refreshSession?: SessionRefresher;
@@ -48,19 +49,19 @@ export function configureApiAuth(opts: {
   if (opts.onSessionExpired) onSessionExpired = opts.onSessionExpired;
 }
 
-// --- Núcleo ----------------------------------------------------------------
+// --- Core --------------------------------------------------------------------
 
 type QueryValue = string | number | boolean | null | undefined;
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
-  /** Cuerpo JSON; se serializa automáticamente. */
+  /** JSON body; serialized automatically. */
   body?: unknown;
-  /** Parámetros de query; los `undefined`/`null` se omiten. */
+  /** Query parameters; `undefined`/`null` values are omitted. */
   query?: Record<string, QueryValue>;
   /**
-   * Salta el interceptor de refresh ante 401. Lo usan las propias rutas de
-   * auth: en `/login` un 401 es "credenciales inválidas" (no hay que refrescar)
-   * y en `/refresh` un 401 es "sesión muerta" (refrescar provocaría recursión).
+   * Skips the refresh interceptor on 401. Used by the auth routes themselves:
+   * on `/login` a 401 means "invalid credentials" (no need to refresh) and on
+   * `/refresh` a 401 means "dead session" (refreshing would cause recursion).
    */
   skipRefresh?: boolean;
 }
@@ -111,32 +112,33 @@ function extractErrorMessage(
   return `Error ${status} en ${path}`;
 }
 
-// Single-flight: un único refresh aunque N requests reciban 401 a la vez.
+// Single-flight: a single refresh even if N requests receive a 401 at once.
 let refreshInFlight: Promise<boolean> | null = null;
 const refreshOnce = () =>
   (refreshInFlight ??= refreshSession().finally(() => {
     refreshInFlight = null;
   }));
 
-// --- Auth para el stream SSE -----------------------------------------------
-// El stream SSE va por `fetch` (no `EventSource`) porque el backend autentica
-// por header Bearer y el access token vive en memoria; `EventSource` no puede
-// enviar headers. `lib/sse` reutiliza estos hooks ya configurados por AuthProvider.
+// --- Auth for the SSE stream -------------------------------------------------
+// The SSE stream goes through `fetch` (not `EventSource`) because the backend
+// authenticates via Bearer header and the access token lives in memory;
+// `EventSource` cannot send headers. `lib/sse` reuses these hooks already
+// configured by AuthProvider.
 
-/** Access token vigente (en memoria), para el header del stream SSE. */
+/** Current access token (in memory), for the SSE stream header. */
 export function peekAccessToken(): string | null {
   return getAccessToken();
 }
 
-/** Refresca la sesión una vez (single-flight compartido con `apiFetch`). */
+/** Refreshes the session once (single-flight shared with `apiFetch`). */
 export function refreshAuthOnce(): Promise<boolean> {
   return refreshOnce();
 }
 
 /**
- * Hace una petición a la API. Lanza `ApiError` ante respuestas no-OK.
- * Ante `401`, intenta refrescar la sesión una vez (single-flight) y reintenta.
- * Si el refresh falla, dispara `onSessionExpired`.
+ * Makes a request to the API. Throws `ApiError` on non-OK responses.
+ * On `401`, it tries to refresh the session once (single-flight) and retries.
+ * If the refresh fails, it fires `onSessionExpired`.
  */
 export async function apiFetch<T>(
   path: string,
@@ -194,7 +196,7 @@ export async function apiFetch<T>(
   return payload as T;
 }
 
-// --- Atajos por método -----------------------------------------------------
+// --- Shortcuts by method -----------------------------------------------------
 
 export const api = {
   get: <T>(path: string, options?: RequestOptions) =>

@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-/** Respuesta del callback de Embedded Signup (metadatos públicos de la WABA). */
+/** Response from the Embedded Signup callback (public WABA metadata). */
 export interface EmbeddedSignupResult {
   waba_id: string;
   phone_number_id: string;
@@ -8,10 +8,10 @@ export interface EmbeddedSignupResult {
 }
 
 /**
- * Envía el `code` corto del Embedded Signup de Meta al backend, que hace el
- * exchange/subscribe/persistencia del `ChannelAccount`. SOLO viaja el `code`:
- * ningún token de Meta llega ni sale por el cliente. El `business_id` lo deriva
- * el backend del access token (no del body).
+ * Sends the short Embedded Signup `code` from Meta to the backend, which does
+ * the exchange/subscribe/persistence of the `ChannelAccount`. ONLY the `code`
+ * travels: no Meta token enters or leaves through the client. The backend
+ * derives the `business_id` from the access token (not from the body).
  */
 export function submitEmbeddedSignupCode(code: string): Promise<EmbeddedSignupResult> {
   return api.post<EmbeddedSignupResult>("/whatsapp/embedded-signup/callback/", {

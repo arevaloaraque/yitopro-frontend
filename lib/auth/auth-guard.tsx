@@ -9,21 +9,21 @@ import { useAuth } from "./useAuth";
 
 interface RequireAuthProps {
   children: React.ReactNode;
-  /** Ruta a la que redirigir si no hay sesión. */
+  /** Route to redirect to when there is no session. */
   redirectTo?: string;
 }
 
 /**
- * Guard de sesión: redirige a `/login` si no hay sesión.
- * Se cableará en el layout autenticado en F2-A.
+ * Session guard: redirects to `/login` when there is no session.
+ * Will be wired into the authenticated layout in F2-A.
  */
 export function RequireAuth({ children, redirectTo = "/login" }: RequireAuthProps) {
   const { status } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    // Solo redirige cuando el arranque ya descartó la sesión. Durante "loading"
-    // (refresh silencioso en curso) espera, para no rebotar a /login.
+    // Only redirect once boot has ruled out a session. During "loading"
+    // (silent refresh in progress) wait, so we don't bounce to /login.
     if (status === "unauthenticated") {
       router.replace(redirectTo);
     }

@@ -1,48 +1,48 @@
-/** Estado del onboarding del negocio. */
+/** Status of the business onboarding. */
 export type OnboardingStatus = "not_started" | "in_progress" | "completed";
 
-/** Tono con el que responde el asistente de IA (refleja el backend). */
+/** Tone the AI assistant responds with (mirrors the backend). */
 export type AssistantTone = "formal" | "friendly" | "casual";
 
-/** Configuración del asistente de IA del negocio. */
+/** Configuration of the business's AI assistant. */
 export interface AssistantConfig {
-  /** Nombre con el que el asistente se presenta a los clientes. */
+  /** Name the assistant introduces itself with to customers. */
   display_name: string;
-  /** Tono de las respuestas. */
+  /** Tone of the responses. */
   tone: AssistantTone;
-  /** Idioma principal de las respuestas (BCP-47, p.ej. "es"). */
+  /** Primary language of the responses (BCP-47, e.g. "es"). */
   language: string;
-  /** Mensaje de bienvenida que envía el asistente al iniciar una conversación. */
+  /** Welcome message the assistant sends when starting a conversation. */
   welcome_message: string;
-  /** Si el asistente puede operar de forma autónoma sin supervisión humana. */
+  /** Whether the assistant can operate autonomously without human supervision. */
   autonomous: boolean;
 }
 
-/** Negocio (tenant). Reflejo del schema `Business` del backend. */
+/** Business (tenant). Mirror of the backend's `Business` schema. */
 export interface Business {
   id: string;
   name: string;
-  /** Código de país ISO 3166-1 alfa-2 (p.ej. "CL"). */
+  /** ISO 3166-1 alpha-2 country code (e.g. "CL"). */
   country: string;
-  /** Código de moneda ISO 4217 (p.ej. "CLP"). */
+  /** ISO 4217 currency code (e.g. "CLP"). */
   currency: string;
-  /** Idioma del negocio (BCP-47). */
+  /** Business language (BCP-47). */
   language: string;
-  /** Zona horaria IANA (p.ej. "America/Santiago"). */
+  /** IANA time zone (e.g. "America/Santiago"). */
   timezone: string;
   is_active: boolean;
   onboarding_status: OnboardingStatus;
   assistant_config: AssistantConfig;
 }
 
-/** Un paso del flujo de onboarding. */
+/** A step in the onboarding flow. */
 export interface OnboardingStep {
   key: string;
   label: string;
   completed: boolean;
 }
 
-/** Estado detallado del onboarding (devuelto por `getOnboardingStatus`). */
+/** Detailed onboarding status (returned by `getOnboardingStatus`). */
 export interface OnboardingState {
   status: OnboardingStatus;
   steps: OnboardingStep[];

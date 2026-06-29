@@ -3,9 +3,9 @@ import type { Business, OnboardingState } from "@/lib/types";
 import { api } from "./client";
 
 /**
- * El backend expone el negocio en `/businesses/me/` con algunos campos extra y
- * `active`/`id:int`. Mapeamos aquí (capa de contrato) para que los componentes
- * sigan consumiendo el tipo `Business` estable, sin tocar la UI.
+ * The backend exposes the business at `/businesses/me/` with some extra fields
+ * and `active`/`id:int`. We map here (contract layer) so components keep
+ * consuming the stable `Business` type, without touching the UI.
  */
 interface BackendBusiness {
   id: number;
@@ -33,12 +33,12 @@ function toBusiness(b: BackendBusiness): Business {
   };
 }
 
-/** Negocio del tenant actual. */
+/** Current tenant's business. */
 export async function getBusiness(): Promise<Business> {
   return toBusiness(await api.get<BackendBusiness>("/businesses/me/"));
 }
 
-/** Actualiza campos del negocio (incluida `assistant_config` anidada). */
+/** Updates business fields (including the nested `assistant_config`). */
 export async function updateBusiness(
   patch: Partial<Omit<Business, "id">>,
 ): Promise<Business> {
@@ -47,7 +47,7 @@ export async function updateBusiness(
   return toBusiness(await api.patch<BackendBusiness>("/businesses/me/", body));
 }
 
-/** Estado detallado del onboarding (el backend ya devuelve el shape exacto). */
+/** Detailed onboarding status (the backend already returns the exact shape). */
 export function getOnboardingStatus(): Promise<OnboardingState> {
   return api.get<OnboardingState>("/businesses/me/onboarding/");
 }

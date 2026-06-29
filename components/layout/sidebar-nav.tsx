@@ -10,7 +10,7 @@ import { NAV_ITEMS } from "./nav-items";
 
 interface SidebarNavProps {
   collapsed?: boolean;
-  /** Se llama al navegar (p.ej. para cerrar el sheet móvil). */
+  /** Called on navigation (e.g. to close the mobile sheet). */
   onNavigate?: () => void;
 }
 

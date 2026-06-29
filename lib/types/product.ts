@@ -1,10 +1,10 @@
-/** Producto vendible. Reflejo del schema `Product`. */
+/** Sellable product. Mirrors the `Product` schema. */
 export interface Product {
   id: string;
-  /** No expuesto por el backend (scope por tenant); presente solo en mocks. */
+  /** Not exposed by the backend (scoped per tenant); present only in mocks. */
   business_id?: string;
   name: string;
-  /** Precio en la unidad menor de la moneda del negocio (entero). */
+  /** Price in the business currency's minor unit (integer). */
   price: number;
   stock: number;
   sellable_via_whatsapp: boolean;

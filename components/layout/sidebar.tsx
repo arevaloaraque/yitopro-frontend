@@ -10,9 +10,9 @@ import { SidebarBrand } from "./sidebar-brand";
 import { SidebarNav } from "./sidebar-nav";
 
 /**
- * Barra lateral fija de escritorio. Colapsable: alterna entre logo horizontal
- * (expandida) e isotipo (colapsada). Oculta en móvil — ahí se usa el sheet del
- * topbar.
+ * Fixed desktop sidebar. Collapsible: toggles between the horizontal logo
+ * (expanded) and the symbol (collapsed). Hidden on mobile — the topbar sheet
+ * is used there.
  */
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);

@@ -112,9 +112,9 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Conteo de conversaciones por cliente.
-  // ponytail: aún carga TODAS las conversaciones; anotar el conteo en el
-  // endpoint de clientes (`Count("conversations")`) si las conversaciones crecen.
+  // Conversation count per customer.
+  // ponytail: still loads ALL conversations; annotate the count in the
+  // customers endpoint (`Count("conversations")`) if conversations grow.
   useEffect(() => {
     let cancelled = false;
     listConversations()
@@ -131,7 +131,7 @@ export default function CustomersPage() {
     };
   }, []);
 
-  // Lista de clientes: búsqueda + paginación server-side ("cargar más").
+  // Customer list: search + server-side pagination ("load more").
   const loadCustomers = useCallback(
     async (opts: { search: string; offset: number; append: boolean }) => {
       setListLoading(true);
@@ -157,7 +157,7 @@ export default function CustomersPage() {
     [],
   );
 
-  // Debounce de la búsqueda (vuelve a la primera página en cada cambio).
+  // Search debounce (resets to the first page on each change).
   useEffect(() => {
     clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(

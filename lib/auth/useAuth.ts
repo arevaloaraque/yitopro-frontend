@@ -4,7 +4,7 @@ import { useContext } from "react";
 
 import { AuthContext, type AuthContextValue } from "./AuthContext";
 
-/** Acceso a la sesión actual. Debe usarse dentro de `<AuthProvider>`. */
+/** Access to the current session. Must be used inside `<AuthProvider>`. */
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {

@@ -268,8 +268,8 @@ export default function ConversationsPage() {
 
   return (
     <div className="-my-8 -mx-6 flex h-[calc(100vh-var(--spacing)*20)] md:-my-12 md:-mx-12">
-      {/* Left panel — Inbox. En móvil ocupa todo el ancho; se oculta al abrir
-          una conversación (patrón maestro-detalle). En desktop siempre visible. */}
+      {/* Left panel — Inbox. On mobile it takes the full width; it hides when
+          a conversation is opened (master-detail pattern). On desktop always visible. */}
       <div
         className={cn(
           "w-full shrink-0 border-r border-border/60 bg-card lg:w-96",
@@ -290,8 +290,8 @@ export default function ConversationsPage() {
         />
       </div>
 
-      {/* Right panel — Detail. En móvil sólo se muestra al seleccionar; en
-          desktop ocupa el espacio restante. min-w-0 permite que encoja. */}
+      {/* Right panel — Detail. On mobile it only shows when selected; on
+          desktop it takes the remaining space. min-w-0 allows it to shrink. */}
       <div
         className={cn(
           "min-w-0 flex-1 flex-col bg-background",

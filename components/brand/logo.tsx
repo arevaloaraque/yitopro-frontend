@@ -1,14 +1,14 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Marca Yitopro: símbolo "órbita" (arco abierto + núcleo) + wordmark, inline y
- * theme-adaptive. El símbolo usa tokens de color (stroke-primary / fill-accent),
- * así que se aclara solo en modo oscuro como el resto del UI — sin swap de
- * archivos ni flash. El wordmark es texto real en la fuente de títulos (Fredoka)
- * con text-foreground: navy en claro, off-white en oscuro. Sin hex literales.
+ * Yitopro brand: "orbit" symbol (open arc + core) + wordmark, inline and
+ * theme-adaptive. The symbol uses color tokens (stroke-primary / fill-accent),
+ * so it lightens automatically in dark mode like the rest of the UI — no file
+ * swapping or flash. The wordmark is real text in the headings font (Fredoka)
+ * with text-foreground: navy in light, off-white in dark. No hex literals.
  */
 
-/** Solo el símbolo (órbita). Transparente; el tamaño se hereda vía className. */
+/** The symbol only (orbit). Transparent; size is inherited via className. */
 export function BrandMark({
   className,
   decorative = false,
@@ -41,8 +41,8 @@ export function BrandMark({
 }
 
 /**
- * Logo horizontal (símbolo + wordmark). El tamaño se controla con la font-size
- * del contenedor (p. ej. className="text-[21px]").
+ * Horizontal logo (symbol + wordmark). The size is controlled via the
+ * container's font-size (e.g. className="text-[21px]").
  */
 export function BrandLogo({ className }: { className?: string }) {
   return (

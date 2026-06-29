@@ -3,10 +3,10 @@
 import { useEffect } from "react";
 
 /**
- * Boundary raíz: reemplaza al root layout cuando algo falla antes/durante su
- * render, así que NO puede depender de `globals.css` ni de componentes con
- * tokens. Por eso usa estilos inline con los hex de marca.
- * ponytail: excepción consciente — es el único punto sin CSS de tokens disponible.
+ * Root boundary: replaces the root layout when something fails before/during its
+ * render, so it CANNOT depend on `globals.css` or on token-based components.
+ * That's why it uses inline styles with the brand hex values.
+ * ponytail: deliberate exception — it's the only point where no token CSS is available.
  */
 export default function GlobalError({
   error,

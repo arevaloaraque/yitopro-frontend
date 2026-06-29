@@ -1,26 +1,26 @@
 import type { ActorType } from "./common";
 
-/** Estado de una cita. */
+/** Status of an appointment. */
 export type AppointmentStatus = "scheduled" | "cancelled" | "rescheduled" | "completed";
 
-/** Cita agendada. Reflejo del schema `Appointment`. */
+/** Scheduled appointment. Mirror of the `Appointment` schema. */
 export interface Appointment {
   id: string;
-  /** No expuesto por el backend (scope por tenant); presente solo en mocks. */
+  /** Not exposed by the backend (scoped per tenant); present only in mocks. */
   business_id?: string;
   service_id: string;
   customer_id: string;
-  /** Inicio en ISO 8601. */
+  /** Start time in ISO 8601. */
   start: string;
-  /** Fin en ISO 8601. */
+  /** End time in ISO 8601. */
   end: string;
   status: AppointmentStatus;
-  /** Quién creó la cita: la IA o un humano. */
+  /** Who created the appointment: the AI or a human. */
   created_by: ActorType;
   notes: string | null;
 }
 
-/** Evento en el historial de cambios de una cita. */
+/** Event in an appointment's change history. */
 export interface AppointmentAuditEntry {
   id: string;
   appointment_id: string;

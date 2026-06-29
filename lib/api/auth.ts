@@ -1,23 +1,22 @@
 /**
- * Capa de contrato para autenticación. Las rutas de auth NO pasan por el
- * interceptor de refresh (`skipRefresh`): en login un 401 es "credenciales
- * inválidas" y en refresh un 401 es "sesión muerta" — refrescar ahí sería
- * recursivo.
+ * Contract layer for authentication. Auth routes do NOT go through the refresh
+ * interceptor (`skipRefresh`): on login a 401 means "invalid credentials" and
+ * on refresh a 401 means "dead session" — refreshing there would be recursive.
  *
- * El access token (JWE opaco) viaja en el body; el refresh token lo entrega el
- * backend como cookie httpOnly (`yitopro_refresh`, scope `/api/auth/`) y el
- * navegador la reenvía sola gracias a `credentials: "include"`.
+ * The access token (opaque JWE) travels in the body; the backend delivers the
+ * refresh token as an httpOnly cookie (`yitopro_refresh`, scope `/api/auth/`)
+ * and the browser resends it on its own thanks to `credentials: "include"`.
  */
 import { api } from "./client";
 
-/** Respuesta de `/auth/login/` y `/auth/refresh/`. */
+/** Response from `/auth/login/` and `/auth/refresh/`. */
 export interface TokenResponse {
   access_token: string;
   expires_in: number;
   token_type: string;
 }
 
-/** Intercambia credenciales por un access token + cookie de refresh. */
+/** Exchanges credentials for an access token + refresh cookie. */
 export function loginRequest(
   email: string,
   password: string,
@@ -29,21 +28,21 @@ export function loginRequest(
   );
 }
 
-/** Rota el refresh token (vía cookie) y devuelve un access token nuevo. */
+/** Rotates the refresh token (via cookie) and returns a new access token. */
 export function refreshRequest(): Promise<TokenResponse> {
   return api.post<TokenResponse>("/auth/refresh/", undefined, {
     skipRefresh: true,
   });
 }
 
-/** Revoca el refresh token y limpia la cookie en el backend (best-effort). */
+/** Revokes the refresh token and clears the cookie on the backend (best-effort). */
 export function logoutRequest(): Promise<{ detail: string }> {
   return api.post<{ detail: string }>("/auth/logout/", undefined, {
     skipRefresh: true,
   });
 }
 
-/** Perfil del usuario autenticado (para reconstruir la identidad visible). */
+/** Authenticated user's profile (to reconstruct the visible identity). */
 export interface MeResponse {
   id: string;
   email: string;
@@ -51,9 +50,9 @@ export interface MeResponse {
 }
 
 /**
- * Devuelve el perfil del usuario del access token vigente (`GET /api/auth/me/`).
- * Lo usa el arranque (tras un refresh silencioso) y el login para fijar la
- * identidad real, en vez de derivarla del email del formulario.
+ * Returns the user profile for the current access token (`GET /api/auth/me/`).
+ * Used by startup (after a silent refresh) and by login to set the real
+ * identity, instead of deriving it from the form email.
  */
 export function getMe(): Promise<MeResponse> {
   return api.get<MeResponse>("/auth/me/");

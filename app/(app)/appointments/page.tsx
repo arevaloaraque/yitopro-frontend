@@ -94,11 +94,10 @@ export default function AppointmentsPage() {
     };
   }, [load]);
 
-  // SSE subscription: sigue el mismo patrón que dashboard y conversations,
-  // donde cada pantalla se suscribe directamente para reaccionar a eventos
-  // sin recargar. NotificationsProvider maneja los toasts; la página maneja
-  // la actualización de datos. En modo mock comparten el mismo bus; en modo
-  // real cada una abre su propio EventSource (patrón existente en el proyecto).
+  // SSE subscription: follows the same pattern as dashboard and conversations,
+  // where each screen subscribes directly to react to events without
+  // reloading. NotificationsProvider handles the toasts; the page handles
+  // the data refresh (existing pattern in the project).
   useEffect(() => {
     const unsub = subscribeToEvents((event: SSEEvent) => {
       switch (event.type) {

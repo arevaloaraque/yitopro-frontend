@@ -3,10 +3,10 @@ import type { Paginated, Product } from "@/lib/types";
 import { api } from "./client";
 
 /**
- * Shape real del backend (Django Ninja `ProductOut`). Renombres respecto a la
- * UI: `active`→`is_active`, `whatsapp_enabled`→`sellable_via_whatsapp`; `id`
- * entero, `price` Decimal-string. El mapeo vive aquí; los componentes
- * consumen `Product` sin cambios.
+ * Actual backend shape (Django Ninja `ProductOut`). Renames relative to the
+ * UI: `active`→`is_active`, `whatsapp_enabled`→`sellable_via_whatsapp`; integer
+ * `id`, `price` as a Decimal-string. The mapping lives here; components consume
+ * `Product` unchanged.
  */
 interface BackendProduct {
   id: number;
@@ -36,8 +36,8 @@ function fromBackend(p: BackendProduct): Product {
 }
 
 /**
- * Todos los productos (para consumidores que esperan la lista completa).
- * ponytail: tope de 1000; la tabla de Productos usa `searchProducts` paginado.
+ * All products (for consumers that expect the full list).
+ * ponytail: cap of 1000; the Products table uses paginated `searchProducts`.
  */
 export async function listProducts(): Promise<Product[]> {
   const res = await api.get<Page>("/products/", { query: { limit: 1000 } });
@@ -52,7 +52,7 @@ export interface ProductSearchParams {
   category_id?: number;
 }
 
-/** Búsqueda/paginación server-side (tabla de Productos). */
+/** Server-side search/pagination (Products table). */
 export async function searchProducts(
   params: ProductSearchParams = {},
 ): Promise<Paginated<Product>> {

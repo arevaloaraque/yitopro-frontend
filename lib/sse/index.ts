@@ -1,15 +1,15 @@
 /**
- * Abstracción de eventos en tiempo real. La firma pública (`subscribeToEvents`)
- * es ESTABLE: dashboard, agenda, conversaciones y notificaciones la consumen
- * igual. En F4-C cambia solo la implementación interna a SSE real.
+ * Real-time events abstraction. The public signature (`subscribeToEvents`)
+ * is STABLE: dashboard, agenda, conversations, and notifications consume it
+ * the same way. In F4-C only the internal implementation changes to real SSE.
  *
- * Por qué `fetch` y no `EventSource`: el backend autentica `/api/events/stream/`
- * por header `Authorization: Bearer` y nuestro access token vive SOLO en memoria.
- * `EventSource` nativo no puede enviar headers (solo cookies), y la cookie de
- * refresh está acotada a `/api/auth/`. Por eso el stream se lee con `fetch` +
- * `ReadableStream`, con reconexión con backoff y refresh de token propios.
+ * Why `fetch` and not `EventSource`: the backend authenticates `/api/events/stream/`
+ * via the `Authorization: Bearer` header and our access token lives ONLY in memory.
+ * Native `EventSource` can't send headers (only cookies), and the refresh cookie
+ * is scoped to `/api/auth/`. That's why the stream is read with `fetch` +
+ * `ReadableStream`, with its own backoff reconnection and token refresh.
  *
- * Multiplexa: un único stream alimenta a todos los suscriptores.
+ * Multiplexes: a single stream feeds all subscribers.
  */
 import { API_BASE_URL, peekAccessToken, refreshAuthOnce } from "@/lib/api/client";
 import type { SSEEvent, SSEEventType } from "@/lib/types";
@@ -17,13 +17,13 @@ import type { SSEEvent, SSEEventType } from "@/lib/types";
 export type SSEEventHandler = (event: SSEEvent) => void;
 
 let seq = 0;
-/** Id único de evento (para dedupe en el cliente). */
+/** Unique event id (for client-side dedupe). */
 export function nextEventId(): string {
   seq += 1;
   return `evt_${Date.now().toString(36)}_${seq}`;
 }
 
-// --- Stream real (fetch + SSE) ---------------------------------------------
+// --- Real stream (fetch + SSE) ---------------------------------------------
 
 const listeners = new Set<SSEEventHandler>();
 let abort: AbortController | null = null;
@@ -33,10 +33,10 @@ const STREAM_URL = new URL("/api/events/stream/", API_BASE_URL).toString();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Mapea el envelope del backend `{event, data, correlation_id}` al `SSEEvent`
- * del front `{id, type, emitted_at, data}`: renombra `event`→`type`, sintetiza
- * `id`/`emitted_at` (el backend no los manda), coacciona ids enteros a string y
- * normaliza `start_datetime`→`start` / `slot`→`new_start`.
+ * Maps the backend envelope `{event, data, correlation_id}` to the frontend
+ * `SSEEvent` `{id, type, emitted_at, data}`: renames `event`→`type`, synthesizes
+ * `id`/`emitted_at` (the backend doesn't send them), coerces integer ids to string,
+ * and normalizes `start_datetime`→`start` / `slot`→`new_start`.
  */
 export function mapSseEnvelope(raw: unknown): SSEEvent | null {
   if (!raw || typeof raw !== "object") return null;
@@ -58,14 +58,14 @@ export function mapSseEnvelope(raw: unknown): SSEEvent | null {
   } as SSEEvent;
 }
 
-/** Procesa un frame SSE (separado por `\n\n`): toma las líneas `data:`. */
+/** Processes an SSE frame (separated by `\n\n`): takes the `data:` lines. */
 function dispatchFrame(frame: string): void {
   const payload = frame
     .split("\n")
     .filter((l) => l.startsWith("data:"))
     .map((l) => l.slice(5).trim())
     .join("\n");
-  if (!payload) return; // comentario (`: connected` / `: keep-alive`) o vacío
+  if (!payload) return; // comment (`: connected` / `: keep-alive`) or empty
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
@@ -95,8 +95,8 @@ async function runStream(): Promise<void> {
       });
 
       if (res.status === 401) {
-        // Token vencido: refresca y reintenta. No cerramos sesión desde el
-        // stream — la validez de la sesión la gobiernan las llamadas API.
+        // Token expired: refresh and retry. We don't log out from the
+        // stream — session validity is governed by the API calls.
         const refreshed = await refreshAuthOnce();
         if (!refreshed) {
           await sleep(backoff);
@@ -106,7 +106,7 @@ async function runStream(): Promise<void> {
       }
       if (!res.ok || !res.body) throw new Error(`SSE ${res.status}`);
 
-      backoff = 1000; // conexión OK → reinicia backoff
+      backoff = 1000; // connection OK → reset backoff
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -121,7 +121,7 @@ async function runStream(): Promise<void> {
         }
       }
     } catch {
-      // error de red o abort → reconexión con backoff
+      // network error or abort → backoff reconnection
     }
     if (!running) break;
     await sleep(backoff);
@@ -136,8 +136,8 @@ function stopStream(): void {
 }
 
 /**
- * Se suscribe al stream de eventos en tiempo real. Devuelve una función de
- * limpieza. Firma estable entre la implementación mock anterior y la real.
+ * Subscribes to the backend's real-time event stream. Returns a cleanup
+ * function.
  */
 export function subscribeToEvents(onEvent: SSEEventHandler): () => void {
   listeners.add(onEvent);

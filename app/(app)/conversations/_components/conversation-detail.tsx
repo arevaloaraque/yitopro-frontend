@@ -25,7 +25,7 @@ interface ConversationDetailProps {
   sendingMessage: boolean;
   actionError: string | null;
   onDismissError: () => void;
-  /** Vuelve a la bandeja en la vista móvil (maestro-detalle). */
+  /** Returns to the inbox in the mobile view (master-detail). */
   onBack: () => void;
 }
 

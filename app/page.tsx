@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** La raíz entra directo al producto. `RequireAuth` manda a `/login` si no hay sesión. */
+/** The root goes straight into the product. `RequireAuth` sends to `/login` if there's no session. */
 export default function Home() {
   redirect("/dashboard");
 }

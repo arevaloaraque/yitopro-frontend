@@ -4,9 +4,9 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  // Lenguaje "clay": borde grueso + sombra dura (offset, sin blur) + tipografía
-  // semibold + micro-presión al pulsar. Las variantes con relieve comparten el
-  // patrón hover→press (se desplazan hacia su sombra y la encogen).
+  // "Clay" language: thick border + hard shadow (offset, no blur) + semibold
+  // typography + micro-press on click. The raised variants share the
+  // hover→press pattern (they shift toward their shadow and shrink it).
   "group/button inline-flex shrink-0 items-center justify-center rounded-xl border-[1.5px] border-transparent bg-clip-padding text-sm font-semibold whitespace-nowrap transition-all duration-150 ease-out outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {

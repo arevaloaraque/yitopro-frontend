@@ -20,7 +20,7 @@ export function Step8Test() {
     setSending(true);
     setResponse(null);
 
-    // Simula el delay del envío de mensaje + respuesta del bot (~2s).
+    // Simulate the delay of sending the message + bot response (~2s).
     await new Promise((resolve) => setTimeout(resolve, 2000));
     setResponse(SAMPLE_RESPONSE);
     setSending(false);

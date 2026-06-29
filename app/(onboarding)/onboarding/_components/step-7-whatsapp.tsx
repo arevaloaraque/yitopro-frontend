@@ -9,14 +9,14 @@ import { useOnboarding } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
 
 /**
- * WhatsApp Embedded Signup (F4-C) — flujo real de Meta.
+ * WhatsApp Embedded Signup (F4-C) — real Meta flow.
  *
- * 1. Carga el JS SDK de Meta y hace `FB.init` con NEXT_PUBLIC_META_APP_ID.
- * 2. El botón lanza `FB.login` con el `config_id` de Embedded Signup
+ * 1. Loads Meta's JS SDK and calls `FB.init` with NEXT_PUBLIC_META_APP_ID.
+ * 2. The button triggers `FB.login` with the Embedded Signup `config_id`
  *    (response_type "code").
- * 3. Al volver, el cliente obtiene un `code` corto y lo envía al backend
- *    (`POST /api/whatsapp/embedded-signup/callback/`). El backend hace el
- *    exchange/subscribe/persistencia. NUNCA viajan tokens de Meta por el cliente.
+ * 3. On return, the client gets a short `code` and sends it to the backend
+ *    (`POST /api/whatsapp/embedded-signup/callback/`). The backend handles the
+ *    exchange/subscribe/persistence. Meta tokens NEVER travel through the client.
  */
 
 interface FBLoginResponse {
@@ -47,15 +47,15 @@ export function Step7WhatsApp() {
     data.whatsappConnected ? "connected" : "idle",
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // Si el SDK ya estaba cargado (remontaje del paso), parte listo.
+  // If the SDK was already loaded (step remount), start ready.
   const [sdkReady, setSdkReady] = useState(
     () => typeof window !== "undefined" && Boolean(window.FB),
   );
   const displayPhoneRef = useRef<string | null>(null);
 
-  // Carga el JS SDK de Meta una sola vez (solo si hay credenciales).
+  // Load Meta's JS SDK only once (only if credentials are present).
   useEffect(() => {
-    if (!CONFIGURED || window.FB) return; // sin creds, o ya cargado (estado inicial)
+    if (!CONFIGURED || window.FB) return; // no creds, or already loaded (initial state)
     window.fbAsyncInit = () => {
       window.FB?.init({
         appId: APP_ID,
@@ -76,8 +76,8 @@ export function Step7WhatsApp() {
     document.body.appendChild(js);
   }, []);
 
-  // Captura los datos de sesión que Meta postea durante el Embedded Signup
-  // (el backend igual los devuelve; esto es solo para feedback inmediato).
+  // Capture the session data Meta posts during Embedded Signup
+  // (the backend returns it anyway; this is just for immediate feedback).
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (!/\.facebook\.com$/.test(new URL(event.origin).hostname)) return;
@@ -87,7 +87,7 @@ export function Step7WhatsApp() {
           displayPhoneRef.current = info.data.phone_number_id;
         }
       } catch {
-        // payload ajeno al Embedded Signup — ignorar
+        // payload unrelated to Embedded Signup — ignore
       }
     }
     window.addEventListener("message", onMessage);
@@ -108,7 +108,7 @@ export function Step7WhatsApp() {
       (response) => {
         const code = response?.authResponse?.code;
         if (!code) {
-          // El usuario cerró el popup sin completar.
+          // The user closed the popup without completing.
           setState("idle");
           return;
         }

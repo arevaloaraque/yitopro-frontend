@@ -7,8 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { Providers } from "./providers";
 
-// Cuerpo: DM Sans (limpio, legible). Títulos: Fredoka (display redondeada),
-// el lenguaje tipográfico de la referencia visual.
+// Body: DM Sans (clean, readable). Headings: Fredoka (rounded display),
+// the typographic language of the visual reference.
 const dmSans = DM_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
