@@ -1,28 +1,35 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorState, Loading } from "@/components/states";
 import {
   OnboardingProvider,
   useOnboarding,
   type OnboardingStep,
+  STEP_LABELS,
   TOTAL_STEPS,
 } from "@/lib/onboarding";
 
 import { Step1BusinessInfo } from "./_components/step-1-business-info";
-import { Step2Template } from "./_components/step-2-template";
+import { StepProfesionales } from "./_components/step-profesionales";
+import { StepHorarios } from "./_components/step-horarios";
 import { Step3Services } from "./_components/step-3-services";
-import { Step4Products } from "./_components/step-4-products";
-import { Step5Records } from "./_components/step-5-records";
-import { Step6Agents } from "./_components/step-6-agents";
+import { StepUsuarios } from "./_components/step-usuarios";
 import { Step7WhatsApp } from "./_components/step-7-whatsapp";
-import { Step8Test } from "./_components/step-8-test";
-import { Step9Activation } from "./_components/step-9-activation";
+import { Step6Agents } from "./_components/step-6-agents";
+import { StepConfirmar } from "./_components/step-confirmar";
 import { Stepper } from "./_components/stepper";
 
+/**
+ * Per-step gating validation. Returns an error message or `null` if the step
+ * may be left. Steps map to STEP_LABELS:
+ *   1 Negocio · 2 Profesionales · 3 Horarios · 4 Servicios ·
+ *   5 Usuarios · 6 WhatsApp · 7 Agentes · 8 Confirmar
+ */
 function validateStep(
   step: OnboardingStep,
   ctx: ReturnType<typeof useOnboarding>,
@@ -31,7 +38,8 @@ function validateStep(
 
   switch (step) {
     case 1:
-      if (!data.businessName.trim()) return "El nombre del negocio es obligatorio.";
+      if (!data.businessName.trim())
+        return "El nombre del negocio es obligatorio.";
       if (!data.country) return "Selecciona un país.";
       if (!data.currency) return "Selecciona una moneda.";
       if (!data.language) return "Selecciona un idioma.";
@@ -39,64 +47,98 @@ function validateStep(
       return null;
 
     case 2:
-      if (!data.selectedTemplate) return "Selecciona una industria/template.";
+      if (!data.professionals.some((p) => p.name.trim()))
+        return "Agrega al menos un profesional con nombre.";
       return null;
 
     case 3:
+      if (data.weeklySchedule.length === 0)
+        return "Define un horario y aplícalo a todos los profesionales.";
+      return null;
+
+    case 4:
+      if (data.services.length === 0) return "Agrega al menos un servicio.";
       if (data.services.some((s) => !s.name.trim()))
         return "Todos los servicios deben tener un nombre.";
-      if (data.services.some((s) => Number.isNaN(s.duration_minutes) || s.duration_minutes <= 0))
+      if (
+        data.services.some(
+          (s) => Number.isNaN(s.duration_minutes) || s.duration_minutes <= 0,
+        )
+      )
         return "Todos los servicios deben tener una duración válida.";
       if (data.services.some((s) => Number.isNaN(s.price) || s.price < 0))
         return "Todos los servicios deben tener un precio válido.";
       return null;
 
-    case 4:
-      if (data.products.length === 0)
-        return "Agrega al menos un producto.";
-      if (data.products.some((p) => !p.name.trim()))
-        return "Todos los productos deben tener un nombre.";
-      if (data.products.some((p) => Number.isNaN(p.price) || p.price < 0))
-        return "Todos los productos deben tener un precio válido.";
-      return null;
-
     case 5:
-      if (data.recordFields.length === 0)
-        return "Agrega al menos un campo de ficha.";
-      if (data.recordFields.some((f) => !f.label.trim()))
-        return "Todos los campos de ficha deben tener un label.";
-      if (data.recordFields.some((f) => !f.name.trim()))
-        return "Todos los campos de ficha deben tener un nombre interno.";
-      if (data.recordFields.some((f) => f.type === "select" && (!f.options || f.options.length === 0)))
-        return "Los campos de tipo selector deben tener al menos una opción.";
-      return null;
+      return null; // Usuarios — optional
 
     case 6:
-      if (data.agents.length === 0)
-        return "Configura al menos un agente.";
+      if (!data.whatsappConnected) return "Conecta WhatsApp antes de continuar.";
       return null;
 
     case 7:
-      if (!data.whatsappConnected)
-        return "Conecta WhatsApp antes de continuar.";
-      return null;
+      return null; // Agentes — none required
 
     case 8:
-      return null; // No validation needed for test step
+      return null; // Confirmar — terminal
 
     default:
       return null;
   }
 }
 
+function stepTitle(step: OnboardingStep): string {
+  switch (step) {
+    case 1:
+      return "Datos del negocio";
+    case 2:
+      return "Profesionales";
+    case 3:
+      return "Horarios de atención";
+    case 4:
+      return "Servicios";
+    case 5:
+      return "Usuarios";
+    case 6:
+      return "Conectar WhatsApp";
+    case 7:
+      return "Agentes";
+    case 8:
+      return "Confirmar y activar";
+  }
+}
+
 function OnboardingWizard() {
   const ctx = useOnboarding();
-  const { currentStep, setCurrentStep, goNext, goBack } = ctx;
+  const { currentStep, setCurrentStep, goNext, goBack, loading, loadError } =
+    ctx;
 
   const [completedSteps, setCompletedSteps] = useState<Set<OnboardingStep>>(
     new Set(),
   );
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  // One-time init: after rehydration, mark already-satisfied steps complete and
+  // jump to the first pending step (or Confirmar if all are satisfied).
+  useEffect(() => {
+    if (loading || initialized) return;
+    const completed = new Set<OnboardingStep>();
+    (
+      [1, 2, 3, 4, 5, 6, 7] as OnboardingStep[]
+    ).forEach((s) => {
+      if (validateStep(s, ctx) === null) completed.add(s);
+    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading guard pattern
+    setCompletedSteps(completed);
+    const firstPending =
+      ([1, 2, 3, 4, 5, 6, 7, 8] as OnboardingStep[]).find(
+        (s) => validateStep(s, ctx) !== null,
+      ) ?? 8;
+    setCurrentStep(firstPending);
+    setInitialized(true);
+  }, [loading, initialized, ctx, setCurrentStep]);
 
   const handleNext = useCallback(() => {
     const error = validateStep(currentStep, ctx);
@@ -124,23 +166,35 @@ function OnboardingWizard() {
       case 1:
         return <Step1BusinessInfo />;
       case 2:
-        return <Step2Template />;
+        return <StepProfesionales />;
       case 3:
-        return <Step3Services />;
+        return <StepHorarios />;
       case 4:
-        return <Step4Products />;
+        return <Step3Services />;
       case 5:
-        return <Step5Records />;
+        return <StepUsuarios />;
       case 6:
-        return <Step6Agents />;
-      case 7:
         return <Step7WhatsApp />;
+      case 7:
+        return <Step6Agents />;
       case 8:
-        return <Step8Test />;
-      case 9:
-        return <Step9Activation />;
+        return <StepConfirmar />;
     }
   }, [currentStep]);
+
+  if (loading || !initialized) {
+    return <Loading rows={5} label="Cargando el onboarding…" />;
+  }
+
+  if (loadError) {
+    return (
+      <ErrorState
+        title="No pudimos cargar el onboarding"
+        description={loadError}
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
 
   return (
     <>
@@ -152,9 +206,7 @@ function OnboardingWizard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">
-            {getStepTitle(currentStep)}
-          </CardTitle>
+          <CardTitle className="text-lg">{stepTitle(currentStep)}</CardTitle>
         </CardHeader>
         <CardContent className="min-h-[320px]">{stepComponent}</CardContent>
       </Card>
@@ -178,10 +230,10 @@ function OnboardingWizard() {
         </Button>
 
         <span className="text-[0.75rem] text-muted-foreground">
-          Paso {currentStep} de {TOTAL_STEPS}
+          Paso {currentStep} de {TOTAL_STEPS} · {STEP_LABELS[currentStep]}
         </span>
 
-        {currentStep !== 9 && (
+        {currentStep !== TOTAL_STEPS && (
           <Button onClick={handleNext} data-icon="inline-end">
             Siguiente
             <ArrowRight className="size-4" />
@@ -190,29 +242,6 @@ function OnboardingWizard() {
       </div>
     </>
   );
-}
-
-function getStepTitle(step: OnboardingStep): string {
-  switch (step) {
-    case 1:
-      return "Datos del negocio";
-    case 2:
-      return "Selecciona tu industria";
-    case 3:
-      return "Servicios";
-    case 4:
-      return "Productos";
-    case 5:
-      return "Fichas de clientes";
-    case 6:
-      return "Agentes y skills";
-    case 7:
-      return "Conectar WhatsApp";
-    case 8:
-      return "Prueba";
-    case 9:
-      return "Activar negocio";
-  }
 }
 
 export default function OnboardingPage() {

@@ -114,7 +114,7 @@ export function Step7WhatsApp() {
         }
         submitEmbeddedSignupCode(code)
           .then((result) => {
-            setWhatsappConnected(result.phone_number_id, result.waba_id);
+            setWhatsappConnected(result.phone_number_id, result.waba_id, result.display_phone_number);
             setState("connected");
           })
           .catch((err: unknown) => {
@@ -166,13 +166,26 @@ export function Step7WhatsApp() {
               ? "Conectando con WhatsApp..."
               : "Conecta tu cuenta de WhatsApp Business"}
         </p>
-        <p className="max-w-sm text-[0.8rem] leading-relaxed text-muted-foreground">
-          {state === "connected"
-            ? `Tu negocio está vinculado. ID: ${data.phoneNumberId ?? "—"}`
-            : state === "connecting"
+        {state === "connected" ? (
+          <p className="max-w-sm text-[0.8rem] leading-relaxed text-muted-foreground">
+            {data.whatsappNumber ? (
+              <>
+                WhatsApp Business vinculado:{" "}
+                <span className="font-medium text-foreground">{data.whatsappNumber}</span>.{" "}
+                Tu asistente atiende 24/7 y deriva a tu equipo cuando hace falta.
+                Recomendación: usa este número como tu canal de atención principal.
+              </>
+            ) : (
+              "Tu WhatsApp Business está conectado y atendiendo 24/7."
+            )}
+          </p>
+        ) : (
+          <p className="max-w-sm text-[0.8rem] leading-relaxed text-muted-foreground">
+            {state === "connecting"
               ? "Completa el flujo en la ventana de Meta..."
               : "Esto te permitirá recibir y enviar mensajes desde Yitopro a través de la API de WhatsApp Business."}
-        </p>
+          </p>
+        )}
         {state === "error" && errorMsg ? (
           <p role="alert" className="max-w-sm text-[0.8rem] text-destructive">
             {errorMsg}

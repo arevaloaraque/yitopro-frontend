@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, Scissors } from "lucide-react";
 import type { Service } from "@/lib/types";
 import { listServices, createService, updateService } from "@/lib/api";
+import { formatPrice } from "@/lib/utils";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,14 +35,6 @@ interface FormData {
 }
 
 const emptyForm: FormData = { name: "", duration_minutes: "", price: "" };
-
-function formatPrice(price: number): string {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(price);
-}
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -319,6 +312,7 @@ export default function ServicesPage() {
                   id="svc-price"
                   type="number"
                   min={1}
+                  step="0.01"
                   value={form.price}
                   onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
                   placeholder="12000"

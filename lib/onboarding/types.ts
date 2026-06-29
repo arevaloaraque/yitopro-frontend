@@ -1,33 +1,25 @@
-import type { Agent, Product, RecordField, Service } from "@/lib/types";
-import type { IndustryTemplate } from "./templates";
+import type {
+  Agent,
+  Professional,
+  ScheduleWindow,
+  Service,
+  SystemUser,
+} from "@/lib/types";
 
-export interface RecordFieldWithKey extends RecordField {
-  _key: string;
-}
+/** Step in the onboarding wizard (1-based). */
+export type OnboardingStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
-export type OnboardingStep =
-  | 1
-  | 2
-  | 3
-  | 4
-  | 5
-  | 6
-  | 7
-  | 8
-  | 9;
-
-export const TOTAL_STEPS = 9;
+export const TOTAL_STEPS = 8;
 
 export const STEP_LABELS: Record<OnboardingStep, string> = {
   1: "Negocio",
-  2: "Industria",
-  3: "Servicios",
-  4: "Productos",
-  5: "Fichas",
-  6: "Agentes",
-  7: "WhatsApp",
-  8: "Prueba",
-  9: "Activación",
+  2: "Profesionales",
+  3: "Horarios",
+  4: "Servicios",
+  5: "Usuarios",
+  6: "WhatsApp",
+  7: "Agentes",
+  8: "Confirmar",
 };
 
 export interface OnboardingData {
@@ -38,28 +30,28 @@ export interface OnboardingData {
   language: string;
   timezone: string;
 
-  // Step 2 — Template
-  selectedTemplate: IndustryTemplate | null;
+  // Step 2 — Professionals
+  professionals: Professional[];
 
-  // Step 3 — Editable services
+  // Step 3 — Business-wide weekly schedule (the default template).
+  weeklySchedule: ScheduleWindow[];
+  /** Optional per-professional schedule overrides, keyed by professional id. */
+  professionalSchedules: Record<string, ScheduleWindow[]>;
+
+  // Step 4 — Services
   services: Service[];
 
-  // Step 4 — Editable products
-  products: Product[];
+  // Step 5 — System users (owner/staff)
+  users: SystemUser[];
 
-  // Step 5 — Editable record fields
-  recordFields: RecordFieldWithKey[];
-
-  // Step 6 — Editable agents
-  agents: Agent[];
-
-  // Step 7 — WhatsApp (Embedded Signup real)
+  // Step 6 — WhatsApp (Embedded Signup real)
   whatsappConnected: boolean;
   phoneNumberId: string | null;
   wabaId: string | null;
+  whatsappNumber: string | null;
 
-  // Step 9
-  activated: boolean;
+  // Step 7 — Agents (only the available ones, hydrated from GET /agents/).
+  agents: Agent[];
 }
 
 export function createEmptyOnboardingData(): OnboardingData {
@@ -69,14 +61,15 @@ export function createEmptyOnboardingData(): OnboardingData {
     currency: "CLP",
     language: "es",
     timezone: "America/Santiago",
-    selectedTemplate: null,
+    professionals: [],
+    weeklySchedule: [],
+    professionalSchedules: {},
     services: [],
-    products: [],
-    recordFields: [],
-    agents: [],
+    users: [],
     whatsappConnected: false,
     phoneNumberId: null,
     wabaId: null,
-    activated: false,
+    whatsappNumber: null,
+    agents: [],
   };
 }

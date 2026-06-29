@@ -16,6 +16,7 @@ import {
   logoutRequest,
   refreshRequest,
 } from "@/lib/api/auth";
+import { acceptInvite as apiAcceptInvite } from "@/lib/api/invite";
 
 /** Authenticated user (the minimum the shell needs). */
 export interface AuthUser {
@@ -35,6 +36,8 @@ export interface AuthContextValue {
   logout: () => void;
   /** Rotates the session using the httpOnly cookie (`POST /api/auth/refresh/`). */
   refresh: () => Promise<boolean>;
+  /** Accepts a staff invite, sets the token in memory, and loads the user identity. */
+  acceptInvite: (token: string, password: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -103,6 +106,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const acceptInvite = useCallback(
+    async (token: string, password: string) => {
+      const { access_token } = await apiAcceptInvite(token, password);
+      tokenRef.current = access_token;
+      setToken(access_token);
+      try {
+        const me = await getMe();
+        setUser({ id: me.id, email: me.email, name: me.name });
+      } catch {
+        // identity will load later; session is established
+      }
+    },
+    [],
+  );
+
   const logout = useCallback(() => {
     // Best-effort: revokes the refresh token on the backend (uses the cookie).
     // Does not block local logout if the network fails.
@@ -165,8 +183,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       refresh,
+      acceptInvite,
     }),
-    [user, token, bootstrapped, login, logout, refresh],
+    [user, token, bootstrapped, login, logout, refresh, acceptInvite],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -19,9 +20,19 @@ import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/brand/logo";
 import { BootSplash } from "@/components/states";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { ApiError } from "@/lib/api";
+import { ApiError, getOnboardingStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { type LoginValues, loginSchema } from "@/lib/validation/schemas";
+
+/** Fetches onboarding status and returns the target route. Resilient: on error → "/dashboard". */
+async function resolvePostLoginTarget(): Promise<"/onboarding" | "/dashboard"> {
+  try {
+    const { status } = await getOnboardingStatus();
+    return status !== "completed" ? "/onboarding" : "/dashboard";
+  } catch {
+    return "/dashboard";
+  }
+}
 
 export default function LoginPage() {
   const { login, isAuthenticated, status } = useAuth();
@@ -37,15 +48,17 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
-  // If there's already a session, don't show the login.
+  // If there's already a session, redirect to the right place.
   useEffect(() => {
-    if (isAuthenticated) router.replace("/dashboard");
+    if (!isAuthenticated) return;
+    void resolvePostLoginTarget().then((target) => router.replace(target));
   }, [isAuthenticated, router]);
 
   async function onSubmit(values: LoginValues) {
     try {
       await login(values.email, values.password);
-      router.replace("/dashboard");
+      const target = await resolvePostLoginTarget();
+      router.replace(target);
     } catch (err) {
       setError("root", {
         message:
@@ -108,6 +121,14 @@ export default function LoginPage() {
                 {errors.password ? (
                   <p className="text-[0.8rem] text-destructive">{errors.password.message}</p>
                 ) : null}
+                <div className="text-right">
+                  <Link
+                    href="/forgot-password"
+                    className="text-[0.8rem] font-medium text-primary hover:underline"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                </div>
               </div>
 
               {errors.root ? (

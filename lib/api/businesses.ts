@@ -1,6 +1,6 @@
-import type { Business, OnboardingState } from "@/lib/types";
+import type { Business, OnboardingState, ScheduleWindow } from "@/lib/types";
 
-import { api } from "./client";
+import { api, ApiError } from "./client";
 
 /**
  * The backend exposes the business at `/businesses/me/` with some extra fields
@@ -50,4 +50,44 @@ export async function updateBusiness(
 /** Detailed onboarding status (the backend already returns the exact shape). */
 export function getOnboardingStatus(): Promise<OnboardingState> {
   return api.get<OnboardingState>("/businesses/me/onboarding/");
+}
+
+/**
+ * Replaces the business-wide default schedule with the given windows.
+ * Returns how many professionals were updated with the new defaults.
+ */
+export function putBusinessSchedule(
+  windows: ScheduleWindow[],
+): Promise<{ professionals_updated: number }> {
+  return api.put<{ professionals_updated: number }>(
+    "/businesses/me/schedule/",
+    windows,
+  );
+}
+
+/** Fetches the current business-wide default schedule. */
+export function getBusinessSchedule(): Promise<ScheduleWindow[]> {
+  return api.get<ScheduleWindow[]>("/businesses/me/schedule/");
+}
+
+/**
+ * Marks the onboarding flow as complete.
+ * - 200: returns `{ ok: true }`.
+ * - 400: catches `ApiError` and returns `{ ok: false, missing_steps }`.
+ * - Any other error is re-thrown.
+ */
+export async function completeOnboarding(): Promise<{
+  ok: boolean;
+  missing_steps?: string[];
+}> {
+  try {
+    await api.post("/businesses/me/onboarding/complete/");
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 400) {
+      const body = err.body as { missing_steps?: string[] } | null;
+      return { ok: false, missing_steps: body?.missing_steps ?? [] };
+    }
+    throw err;
+  }
 }

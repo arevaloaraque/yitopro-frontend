@@ -5,5 +5,4 @@ export {
   TOTAL_STEPS,
   type OnboardingData,
   type OnboardingStep,
-  type RecordFieldWithKey,
 } from "./types";
