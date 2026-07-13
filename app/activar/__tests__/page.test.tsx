@@ -111,9 +111,7 @@ describe("/activar page", () => {
 
       await userEvent.click(screen.getByRole("button", { name: /activar/i }));
 
-      await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/onboarding"),
-      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/onboarding"));
     });
 
     it("surfaces ApiError 400 backend message on weak password", async () => {

@@ -1,16 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  ChevronDown,
-  ChevronUp,
-  ClipboardList,
-  MessageSquare,
-  Plus,
-  Search,
-  Users,
-} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight, MessageSquare, Plus, Search, Users } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,43 +25,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, Loading } from "@/components/states";
+import { CustomerDrawer } from "@/components/customers/customer-drawer";
 import { searchCustomers, createCustomer } from "@/lib/api/customers";
 import { listConversations } from "@/lib/api/conversations";
-import type { Conversation, Customer } from "@/lib/types";
+import { subscribeToEvents } from "@/lib/sse";
+import type { Customer } from "@/lib/types";
 
 type PageState = "loading" | "error" | "ready";
-
-function statusBadge(status: Conversation["status"]) {
-  if (status === "ai_active")
-    return { label: "IA activa", variant: "default" as const };
-  if (status === "human_handoff")
-    return { label: "Derivada", variant: "secondary" as const };
-  return { label: "Cerrada", variant: "outline" as const };
-}
-
-function intentLabel(intent: string | null): string {
-  if (!intent) return "—";
-  const map: Record<string, string> = {
-    agendar_cita: "Agendar cita",
-    reagendar_cita: "Reagendar cita",
-    consulta_precio: "Consulta precio",
-    consulta_horario: "Consulta horario",
-    reclamo: "Reclamo",
-    comprar_producto: "Comprar producto",
-  };
-  return map[intent] ?? intent.replace(/_/g, " ");
-}
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "ahora";
-  if (mins < 60) return `hace ${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  return `hace ${days}d`;
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("es-CL", {
@@ -82,14 +44,14 @@ function formatDate(iso: string): string {
 interface FormData {
   name: string;
   phone: string;
+  email: string;
 }
 
-const emptyForm: FormData = { name: "", phone: "" };
+const emptyForm: FormData = { name: "", phone: "", email: "" };
 
 const PAGE_SIZE = 20;
 
 export default function CustomersPage() {
-  const router = useRouter();
   const [state, setState] = useState<PageState>("loading");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [count, setCount] = useState(0);
@@ -97,14 +59,13 @@ export default function CustomersPage() {
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [conversationCounts, setConversationCounts] = useState<
-    Record<string, number>
-  >({});
+  const [conversationCounts, setConversationCounts] = useState<Record<string, number>>(
+    {},
+  );
 
-  const detailReqRef = useRef(0);
+  // The customer whose detail drawer is open (null = closed).
+  const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
+
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const [creating, setCreating] = useState(false);
@@ -112,24 +73,25 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Conversation count per customer.
-  // ponytail: still loads ALL conversations; annotate the count in the
-  // customers endpoint (`Count("conversations")`) if conversations grow.
-  useEffect(() => {
-    let cancelled = false;
-    listConversations()
-      .then((convs) => {
-        if (cancelled) return;
-        const counts: Record<string, number> = {};
-        for (const c of convs)
-          counts[c.customer_id] = (counts[c.customer_id] ?? 0) + 1;
-        setConversationCounts(counts);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+  // Conversation count per customer (for the row badge). Re-runs on demand
+  // from the SSE handler below (a new message can create/bump a conversation).
+  const loadConversationCounts = useCallback(async () => {
+    try {
+      const convs = await listConversations();
+      const counts: Record<string, number> = {};
+      for (const c of convs) counts[c.customer_id] = (counts[c.customer_id] ?? 0) + 1;
+      setConversationCounts(counts);
+    } catch {
+      // best-effort — the badge just keeps its last known count
+    }
   }, []);
+
+  useEffect(() => {
+    // Deferred: keeps setState out of the effect's synchronous path
+    // (react-hooks/set-state-in-effect), same idiom as products/page.tsx.
+    const t = setTimeout(loadConversationCounts, 0);
+    return () => clearTimeout(t);
+  }, [loadConversationCounts]);
 
   // Customer list: search + server-side pagination ("load more").
   const loadCustomers = useCallback(
@@ -142,9 +104,7 @@ export default function CustomersPage() {
           limit: PAGE_SIZE,
           offset: opts.offset,
         });
-        setCustomers((prev) =>
-          opts.append ? [...prev, ...res.items] : res.items,
-        );
+        setCustomers((prev) => (opts.append ? [...prev, ...res.items] : res.items));
         setCount(res.count);
         setState("ready");
       } catch (e) {
@@ -167,31 +127,26 @@ export default function CustomersPage() {
     return () => clearTimeout(searchTimer.current);
   }, [search, loadCustomers]);
 
+  // Live refresh: another operator (or the WhatsApp auto-create) added/edited a
+  // customer. Subscribe once; read the live search term via a ref so we don't
+  // re-subscribe on every keystroke. Back to the first page (low-frequency event).
+  const searchRef = useRef(search);
+  useEffect(() => {
+    searchRef.current = search;
+  });
+  useEffect(() => {
+    return subscribeToEvents((event) => {
+      if (event.type === "cliente_creado" || event.type === "cliente_actualizado") {
+        loadCustomers({ search: searchRef.current, offset: 0, append: false });
+      }
+      if (event.type === "mensaje_recibido" || event.type === "cliente_creado") {
+        loadConversationCounts();
+      }
+    });
+  }, [loadCustomers, loadConversationCounts]);
+
   function refetch() {
     loadCustomers({ search, offset: 0, append: false });
-  }
-
-  async function loadDetail(customerId: string) {
-    const reqId = ++detailReqRef.current;
-    setSelectedId(customerId);
-    setLoadingDetail(true);
-    try {
-      const convs = await listConversations();
-      if (reqId !== detailReqRef.current) return;
-      setConversations(
-        convs.filter((c) => c.customer_id === customerId),
-      );
-    } catch {
-      if (reqId !== detailReqRef.current) return;
-      setConversations([]);
-    } finally {
-      if (reqId !== detailReqRef.current) return;
-      setLoadingDetail(false);
-    }
-  }
-
-  function openRecord(customerId: string) {
-    router.push(`/records?customer=${customerId}`);
   }
 
   function validate(f: FormData): Record<string, string> {
@@ -200,6 +155,8 @@ export default function CustomersPage() {
     if (!f.phone.trim()) errs.phone = "Requerido";
     else if (!/^\+?[\d\s-]{7,15}$/.test(f.phone.trim()))
       errs.phone = "Teléfono inválido";
+    if (f.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
+      errs.email = "Email inválido";
     return errs;
   }
 
@@ -210,12 +167,19 @@ export default function CustomersPage() {
 
     setSaving(true);
     try {
-      await createCustomer({
+      const { created } = await createCustomer({
         name: form.name.trim(),
         phone: form.phone.trim(),
+        email: form.email.trim() || undefined,
       });
       closeCreate();
       loadCustomers({ search, offset: 0, append: false });
+      if (!created) {
+        toast.warning("Ya existía un cliente con ese teléfono", {
+          description:
+            "Se muestra el registro existente; los datos escritos no se guardaron.",
+        });
+      }
     } catch (e) {
       setFormErrors({
         _form: e instanceof Error ? e.message : "Error al guardar",
@@ -238,6 +202,11 @@ export default function CustomersPage() {
     setSaving(false);
   }
 
+  /** Reflect a drawer save back into the list row. */
+  function handleCustomerSaved(updated: Customer) {
+    setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+  }
+
   if (state === "loading") return <Loading rows={6} label="Cargando clientes…" />;
 
   if (state === "error") {
@@ -248,13 +217,10 @@ export default function CustomersPage() {
             Clientes
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tus clientes y sus contactos.
+            Tus clientes y sus datos.
           </p>
         </div>
-        <ErrorState
-          description={error ?? "Error desconocido"}
-          onRetry={refetch}
-        />
+        <ErrorState description={error ?? "Error desconocido"} onRetry={refetch} />
       </div>
     );
   }
@@ -267,7 +233,7 @@ export default function CustomersPage() {
             Clientes
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tus clientes y sus contactos.
+            Tus clientes y sus datos.
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -282,6 +248,7 @@ export default function CustomersPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre o teléfono…"
+          aria-label="Buscar clientes"
           className="pl-8"
         />
       </div>
@@ -320,120 +287,38 @@ export default function CustomersPage() {
             </TableHeader>
             <TableBody>
               {customers.map((c) => {
-                const isSelected = selectedId === c.id;
-                const customerConvs = isSelected ? conversations : [];
                 const convCount = conversationCounts[c.id] ?? 0;
                 return (
-                  <Fragment key={c.id}>
-                    <TableRow
-                      className="cursor-pointer hover:bg-surface"
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isSelected}
-                      onClick={() =>
-                        isSelected
-                          ? setSelectedId(null)
-                          : loadDetail(c.id)
+                  <TableRow
+                    key={c.id}
+                    className="cursor-pointer hover:bg-surface"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Ver datos de ${c.name}`}
+                    onClick={() => setOpenCustomerId(c.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setOpenCustomerId(c.id);
                       }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          if (isSelected) {
-                            setSelectedId(null);
-                          } else {
-                            loadDetail(c.id);
-                          }
-                        }
-                      }}
-                    >
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {c.phone}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs tabular-nums">
-                        {formatDate(c.created_at)}
-                      </TableCell>
-                      <TableCell>
-                          <Badge variant="secondary" className="text-xs">
-                            <MessageSquare className="mr-0.5 size-3" />
-                            {convCount}
-                          </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {isSelected ? (
-                          <ChevronUp className="size-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="size-4 text-muted-foreground" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                    {isSelected && (
-                      <TableRow key={`${c.id}-detail`}>
-                        <TableCell colSpan={5} className="bg-surface/50 p-0">
-                          <div className="px-4 py-3">
-                            {loadingDetail ? (
-                              <Loading rows={2} label="Cargando…" />
-                            ) : (
-                              <div className="space-y-3">
-                                <div className="flex items-center gap-4">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openRecord(c.id);
-                                    }}
-                                  >
-                                    <ClipboardList className="size-3.5" />
-                                    Ver ficha
-                                  </Button>
-                                </div>
-                                {customerConvs.length === 0 ? (
-                                  <p className="text-xs text-muted-foreground">
-                                    Sin conversaciones.
-                                  </p>
-                                ) : (
-                                  <div className="space-y-1.5">
-                                    <p className="text-xs font-medium text-muted-foreground">
-                                      Conversaciones
-                                    </p>
-                                    {customerConvs.map((conv) => {
-                                      const s = statusBadge(conv.status);
-                                      return (
-                                        <div
-                                          key={conv.id}
-                                          className="flex items-center justify-between rounded-lg border border-border/30 px-3 py-2"
-                                        >
-                                          <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-medium">
-                                              {intentLabel(
-                                                conv.detected_intent,
-                                              )}
-                                            </p>
-                                            <p className="text-[0.65rem] text-muted-foreground">
-                                              {relativeTime(
-                                                conv.last_message_at,
-                                              )}
-                                            </p>
-                                          </div>
-                                          <Badge
-                                            variant={s.variant}
-                                            className="text-[0.65rem]"
-                                          >
-                                            {s.label}
-                                          </Badge>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </Fragment>                );
+                    }}
+                  >
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.phone}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground tabular-nums">
+                      {formatDate(c.created_at)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-xs">
+                        <MessageSquare className="mr-0.5 size-3" />
+                        {convCount}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <ChevronRight className="size-4 text-muted-foreground" />
+                    </TableCell>
+                  </TableRow>
+                );
               })}
             </TableBody>
           </Table>
@@ -464,16 +349,12 @@ export default function CustomersPage() {
         </div>
       )}
 
-      <Dialog
-        open={creating}
-        onOpenChange={(open) => !open && closeCreate()}
-      >
+      {/* Create dialog (editing happens in the drawer) */}
+      <Dialog open={creating} onOpenChange={(open) => !open && closeCreate()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nuevo cliente</DialogTitle>
-            <DialogDescription>
-              Agrega un cliente a tu negocio.
-            </DialogDescription>
+            <DialogDescription>Agrega un cliente a tu negocio.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
@@ -481,9 +362,7 @@ export default function CustomersPage() {
               <Input
                 id="cust-name"
                 value={form.name}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, name: e.target.value }))
-                }
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Ej. Ana Fuentes"
               />
               {formErrors.name && (
@@ -504,6 +383,21 @@ export default function CustomersPage() {
                 <p className="text-xs text-destructive">{formErrors.phone}</p>
               )}
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cust-email">Email (opcional)</Label>
+              <Input
+                id="cust-email"
+                type="email"
+                value={form.email}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, email: e.target.value }))
+                }
+                placeholder="cliente@correo.com"
+              />
+              {formErrors.email && (
+                <p className="text-xs text-destructive">{formErrors.email}</p>
+              )}
+            </div>
             {formErrors._form && (
               <p className="text-sm text-destructive">{formErrors._form}</p>
             )}
@@ -515,6 +409,14 @@ export default function CustomersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CustomerDrawer
+        customerId={openCustomerId}
+        onOpenChange={(open) => {
+          if (!open) setOpenCustomerId(null);
+        }}
+        onCustomerSaved={handleCustomerSaved}
+      />
     </div>
   );
 }

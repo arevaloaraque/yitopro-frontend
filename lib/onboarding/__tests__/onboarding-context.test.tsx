@@ -35,12 +35,8 @@ function Probe() {
   return (
     <div>
       <span data-testid="loading">{loading ? "yes" : "no"}</span>
-      <span data-testid="pros">
-        {data.professionals.map((p) => p.name).join(",")}
-      </span>
-      <span data-testid="services">
-        {data.services.map((s) => s.name).join(",")}
-      </span>
+      <span data-testid="pros">{data.professionals.map((p) => p.name).join(",")}</span>
+      <span data-testid="services">{data.services.map((s) => s.name).join(",")}</span>
       <span data-testid="whatsapp-connected">
         {data.whatsappConnected ? "yes" : "no"}
       </span>
@@ -95,15 +91,13 @@ function mockRehydration() {
     http.get(`${BASE}/professionals/`, () =>
       HttpResponse.json([{ id: 3, name: "Ana", active: true }]),
     ),
-    http.get(`${BASE}/services/`, () => HttpResponse.json([])),
+    http.get(`${BASE}/services/`, () => HttpResponse.json({ items: [], count: 0 })),
     http.get(`${BASE}/users/`, () =>
       HttpResponse.json([
         { id: 1, email: "owner@petspa.cl", role: "owner", is_active: true },
       ]),
     ),
-    http.get(`${BASE}/agents/`, () =>
-      HttpResponse.json({ items: [], count: 0 }),
-    ),
+    http.get(`${BASE}/agents/`, () => HttpResponse.json({ items: [], count: 0 })),
     http.get(`${BASE}/businesses/me/`, () =>
       HttpResponse.json({
         id: 1,
@@ -113,6 +107,9 @@ function mockRehydration() {
         language: "es",
         timezone: "America/Santiago",
         active: false,
+        is_operative: false,
+        whatsapp_connected: false,
+        whatsapp_number: "",
         onboarding_status: "in_progress",
         assistant_config: {},
       }),
@@ -122,9 +119,7 @@ function mockRehydration() {
       HttpResponse.json({ status: "in_progress", steps: [] }),
     ),
     // Default: no schedule windows
-    http.get(`${BASE}/businesses/me/schedule/`, () =>
-      HttpResponse.json([]),
-    ),
+    http.get(`${BASE}/businesses/me/schedule/`, () => HttpResponse.json([])),
   );
 }
 
@@ -140,9 +135,7 @@ describe("OnboardingProvider", () => {
   it("rehydrates a seeded professional into data on mount", async () => {
     renderProbe();
 
-    await waitFor(() =>
-      expect(screen.getByTestId("loading").textContent).toBe("no"),
-    );
+    await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("no"));
     expect(screen.getByTestId("pros").textContent).toBe("Ana");
   });
 
@@ -167,9 +160,7 @@ describe("OnboardingProvider", () => {
 
     renderProbe();
 
-    await waitFor(() =>
-      expect(screen.getByTestId("loading").textContent).toBe("no"),
-    );
+    await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("no"));
 
     await userEvent.click(screen.getByText("add-service"));
 
@@ -197,9 +188,7 @@ describe("OnboardingProvider", () => {
 
     server.use(
       http.get(`${BASE}/businesses/me/schedule/`, () =>
-        HttpResponse.json([
-          { day_of_week: 2, start_time: "10:00", end_time: "19:00" },
-        ]),
+        HttpResponse.json([{ day_of_week: 2, start_time: "10:00", end_time: "19:00" }]),
       ),
     );
 
@@ -211,9 +200,7 @@ describe("OnboardingProvider", () => {
       </AuthProvider>,
     );
 
-    await waitFor(() =>
-      expect(screen.getByTestId("loading").textContent).toBe("no"),
-    );
+    await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("no"));
     expect(screen.getByTestId("schedule-count").textContent).toBe("1");
   });
 
@@ -226,15 +213,11 @@ describe("OnboardingProvider", () => {
 
     renderProbe();
 
-    await waitFor(() =>
-      expect(screen.getByTestId("loading").textContent).toBe("no"),
-    );
+    await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("no"));
 
     await userEvent.click(screen.getByText("complete"));
 
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith("/dashboard"),
-    );
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/dashboard"));
   });
 
   it("rehydrates data.whatsappConnected as true when the onboarding status endpoint returns whatsapp step completed", async () => {
@@ -242,18 +225,14 @@ describe("OnboardingProvider", () => {
       http.get(`${BASE}/businesses/me/onboarding/`, () =>
         HttpResponse.json({
           status: "in_progress",
-          steps: [
-            { key: "whatsapp", label: "WhatsApp", completed: true },
-          ],
+          steps: [{ key: "whatsapp", label: "WhatsApp", completed: true }],
         }),
       ),
     );
 
     renderProbe();
 
-    await waitFor(() =>
-      expect(screen.getByTestId("loading").textContent).toBe("no"),
-    );
+    await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("no"));
 
     expect(screen.getByTestId("whatsapp-connected").textContent).toBe("yes");
   });
@@ -267,9 +246,7 @@ describe("OnboardingProvider", () => {
 
     renderProbe();
 
-    await waitFor(() =>
-      expect(screen.getByTestId("loading").textContent).toBe("no"),
-    );
+    await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("no"));
 
     // Wizard loaded (not blanked) and whatsappConnected remains false
     expect(screen.getByTestId("pros").textContent).toBe("Ana");

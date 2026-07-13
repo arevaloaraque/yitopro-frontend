@@ -10,12 +10,7 @@ import {
 } from "react";
 
 import { configureApiAuth, refreshAuthOnce } from "@/lib/api/client";
-import {
-  getMe,
-  loginRequest,
-  logoutRequest,
-  refreshRequest,
-} from "@/lib/api/auth";
+import { getMe, loginRequest, logoutRequest, refreshRequest } from "@/lib/api/auth";
 import { acceptInvite as apiAcceptInvite } from "@/lib/api/invite";
 
 /** Authenticated user (the minimum the shell needs). */
@@ -23,6 +18,8 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  /** Session role ("owner" | "staff"); undefined when derived from the login email as a fallback. */
+  role?: "owner" | "staff";
 }
 
 export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
@@ -83,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadUser = useCallback(async () => {
     try {
       const me = await getMe();
-      setUser({ id: me.id, email: me.email, name: me.name });
+      setUser({ id: me.id, email: me.email, name: me.name, role: me.role });
     } catch {
       // no profile available
     }
@@ -100,26 +97,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(access_token);
     try {
       const me = await getMe();
-      setUser({ id: me.id, email: me.email, name: me.name });
+      setUser({ id: me.id, email: me.email, name: me.name, role: me.role });
     } catch {
       setUser({ id: email, email, name: nameFromEmail(email) });
     }
   }, []);
 
-  const acceptInvite = useCallback(
-    async (token: string, password: string) => {
-      const { access_token } = await apiAcceptInvite(token, password);
-      tokenRef.current = access_token;
-      setToken(access_token);
-      try {
-        const me = await getMe();
-        setUser({ id: me.id, email: me.email, name: me.name });
-      } catch {
-        // identity will load later; session is established
-      }
-    },
-    [],
-  );
+  const acceptInvite = useCallback(async (token: string, password: string) => {
+    const { access_token } = await apiAcceptInvite(token, password);
+    tokenRef.current = access_token;
+    setToken(access_token);
+    try {
+      const me = await getMe();
+      setUser({ id: me.id, email: me.email, name: me.name, role: me.role });
+    } catch {
+      // identity will load later; session is established
+    }
+  }, []);
 
   const logout = useCallback(() => {
     // Best-effort: revokes the refresh token on the backend (uses the cookie).
@@ -174,11 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      status: !bootstrapped
-        ? "loading"
-        : token
-          ? "authenticated"
-          : "unauthenticated",
+      status: !bootstrapped ? "loading" : token ? "authenticated" : "unauthenticated",
       isAuthenticated: token !== null,
       login,
       logout,

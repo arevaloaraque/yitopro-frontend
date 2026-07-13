@@ -1,15 +1,3 @@
-import { ApiError } from "@/lib/api";
-
-/**
- * Safe user-facing message derived from any error. NEVER exposes stack traces,
- * internal details, or technical backend messages: it maps by HTTP status code
- * to consistent Spanish copy.
- */
-export function friendlyMessage(error: unknown): string {
-  if (error instanceof ApiError) return messageForStatus(error.status);
-  return "Algo salió mal. Inténtalo de nuevo.";
-}
-
 /** Consistent message per HTTP status code (shared by error pages and boundaries). */
 export function messageForStatus(status: number): string {
   switch (status) {

@@ -5,11 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Appointment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -28,8 +24,18 @@ const VIEW_OPTIONS: { value: CalendarView; label: string }[] = [
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8..20
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
 ];
 
 function startOfWeek(d: Date): Date {
@@ -94,10 +100,10 @@ function statusBarColor(status: Appointment["status"]): string {
       return "border-l-primary bg-primary/5";
     case "cancelled":
       return "border-l-destructive/50 bg-destructive/5";
-    case "rescheduled":
-      return "border-l-accent bg-accent/5";
     case "completed":
       return "border-l-muted-foreground/30 bg-muted/30";
+    case "no_show":
+      return "border-l-warning/50 bg-warning/5";
   }
 }
 
@@ -165,10 +171,7 @@ export function AppointmentCalendar({
             variant="ghost"
             size="icon-xs"
             onClick={() =>
-              navigate(
-                -1,
-                view === "day" ? "day" : view === "week" ? "week" : "month",
-              )
+              navigate(-1, view === "day" ? "day" : view === "week" ? "week" : "month")
             }
             aria-label="Anterior"
           >
@@ -184,10 +187,7 @@ export function AppointmentCalendar({
             variant="ghost"
             size="icon-xs"
             onClick={() =>
-              navigate(
-                1,
-                view === "day" ? "day" : view === "week" ? "week" : "month",
-              )
+              navigate(1, view === "day" ? "day" : view === "week" ? "week" : "month")
             }
             aria-label="Siguiente"
           >
@@ -220,9 +220,7 @@ export function AppointmentCalendar({
       <div
         className={cn(
           "grid border-b border-border bg-muted/30",
-          view === "day"
-            ? "grid-cols-[3rem_1fr]"
-            : "grid-cols-7",
+          view === "day" ? "grid-cols-[3rem_1fr]" : "grid-cols-7",
         )}
       >
         {view === "day" ? (
@@ -286,11 +284,14 @@ function TimeGrid({
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
 }) {
-  const days = view === "day" ? [cursor] : Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
+  const days =
+    view === "day"
+      ? [cursor]
+      : Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(weekStart);
+          d.setDate(d.getDate() + i);
+          return d;
+        });
 
   function getAppointmentsForDay(day: Date) {
     return appointments.filter((a) => {
@@ -322,7 +323,7 @@ function TimeGrid({
           {HOURS.map((h) => (
             <div
               key={h}
-              className="flex h-20 items-start justify-end pr-2 pt-0 text-xs text-muted-foreground"
+              className="flex h-20 items-start justify-end pt-0 pr-2 text-xs text-muted-foreground"
             >
               {String(h).padStart(2, "0")}:00
             </div>
@@ -341,10 +342,7 @@ function TimeGrid({
             >
               {/* Hour grid lines */}
               {HOURS.map((h) => (
-                <div
-                  key={h}
-                  className="h-20 border-b border-border/50"
-                />
+                <div key={h} className="h-20 border-b border-border/50" />
               ))}
               {/* Appointments */}
               {dayApps.map((apt) => {
@@ -356,18 +354,19 @@ function TimeGrid({
                     key={apt.id}
                     title={`${apt.customerName} · ${apt.serviceName} · ${timeLabel}`}
                     className={cn(
-                      "absolute left-0.5 right-0.5 z-10 flex flex-col gap-0.5 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-xs leading-tight",
+                      "absolute right-0.5 left-0.5 z-10 flex flex-col gap-0.5 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-xs leading-tight",
                       statusBarColor(apt.status),
                     )}
                     style={{ top: `${top}px`, height: `${height}px` }}
                   >
                     <div className="flex items-start justify-between gap-1">
-                      <span className="truncate font-medium">
-                        {apt.customerName}
-                      </span>
+                      <span className="truncate font-medium">{apt.customerName}</span>
                       <div className="-mt-0.5 -mr-1 flex shrink-0 items-center gap-0.5">
                         {apt.created_by === "ai" && (
-                          <Badge variant="outline" className="h-4 px-1 text-[0.625rem] leading-none">
+                          <Badge
+                            variant="outline"
+                            className="h-4 px-1 text-[0.625rem] leading-none"
+                          >
                             IA
                           </Badge>
                         )}
@@ -426,7 +425,7 @@ function MonthGrid({
           <div
             key={idx}
             className={cn(
-              "min-h-24 border-b border-r border-border px-1.5 py-1",
+              "min-h-24 border-r border-b border-border px-1.5 py-1",
               !inMonth && "bg-muted/20",
               isToday(day) && "bg-primary/3",
             )}
@@ -451,9 +450,7 @@ function MonthGrid({
                         statusBarColor(apt.status),
                       )}
                     >
-                      <span className="truncate font-medium">
-                        {apt.customerName}
-                      </span>
+                      <span className="truncate font-medium">{apt.customerName}</span>
                       {apt.created_by === "ai" && (
                         <span className="shrink-0 rounded border border-border px-0.5 text-[0.5rem] text-muted-foreground">
                           IA

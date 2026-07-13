@@ -1,7 +1,13 @@
 import type { ActorType } from "./common";
 
 /** Type of a dynamic record field. */
-export type RecordFieldType = "text" | "number" | "select" | "date" | "boolean";
+export type RecordFieldType =
+  | "text"
+  | "number"
+  | "select"
+  | "date"
+  | "datetime"
+  | "boolean";
 
 /** Possible value of a record field. */
 export type RecordValue = string | number | boolean | null;
@@ -13,8 +19,8 @@ export interface RecordField {
   label: string;
   type: RecordFieldType;
   required: boolean;
-  /** Whether the AI agent can read this field. */
-  ai_visible: boolean;
+  /** Whether the AI agent can read this field. Absent means true (backend default). */
+  ai_visible?: boolean;
   /** Whether the AI agent can modify this field. */
   ai_editable: boolean;
   /** Available options when `type === "select"`. */

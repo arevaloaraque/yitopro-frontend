@@ -33,12 +33,7 @@ import {
   updateService as apiUpdateService,
   type CreateServiceInput,
 } from "@/lib/api";
-import type {
-  AgentAutonomy,
-  AgentType,
-  ScheduleWindow,
-  Service,
-} from "@/lib/types";
+import type { AgentAutonomy, AgentType, ScheduleWindow, Service } from "@/lib/types";
 
 import {
   createEmptyOnboardingData,
@@ -79,10 +74,7 @@ interface OnboardingContextValue {
 
   // Step 3 — Schedules
   saveWeeklySchedule: (windows: ScheduleWindow[]) => Promise<void>;
-  saveProfessionalSchedule: (
-    id: string,
-    windows: ScheduleWindow[],
-  ) => Promise<void>;
+  saveProfessionalSchedule: (id: string, windows: ScheduleWindow[]) => Promise<void>;
 
   // Step 4 — Services
   addService: (input: CreateServiceInput) => Promise<void>;
@@ -93,14 +85,15 @@ interface OnboardingContextValue {
   removeService: (id: string) => Promise<void>;
 
   // Step 5 — Users
-  inviteUser: (input: {
-    email: string;
-    role: "owner" | "staff";
-  }) => Promise<void>;
+  inviteUser: (input: { email: string; role: "owner" | "staff" }) => Promise<void>;
   removeUser: (id: string) => Promise<void>;
 
   // Step 6 — WhatsApp (Embedded Signup real; network call lives in the step)
-  setWhatsappConnected: (phoneNumberId: string, wabaId: string, displayPhoneNumber: string | null) => void;
+  setWhatsappConnected: (
+    phoneNumberId: string,
+    wabaId: string,
+    displayPhoneNumber: string | null,
+  ) => void;
 
   // Step 7 — Agents
   toggleAgent: (type: AgentType, isActive: boolean) => Promise<void>;
@@ -115,11 +108,7 @@ interface OnboardingContextValue {
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 
-export function OnboardingProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [data, setData] = useState<OnboardingData>(createEmptyOnboardingData);
   const [loading, setLoading] = useState(true);
@@ -140,16 +129,18 @@ export function OnboardingProvider({
   // persists to sessionStorage for tab-local convenience.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const t = setTimeout(() => {
+      void run();
+    }, 0);
+    async function run() {
       try {
-        const [professionals, services, users, agents, business] =
-          await Promise.all([
-            listProfessionals(),
-            listServices(),
-            listUsers(),
-            listAgents(),
-            getBusiness(),
-          ]);
+        const [professionals, services, users, agents, business] = await Promise.all([
+          listProfessionals(),
+          listServices(),
+          listUsers(),
+          listAgents(),
+          getBusiness(),
+        ]);
         if (cancelled) return;
         let weeklySchedule: ScheduleWindow[] = [];
         try {
@@ -161,8 +152,8 @@ export function OnboardingProvider({
         try {
           const onboardingStatus = await getOnboardingStatus();
           whatsappConnected =
-            onboardingStatus.steps.find((s) => s.key === "whatsapp")
-              ?.completed ?? false;
+            onboardingStatus.steps.find((s) => s.key === "whatsapp")?.completed ??
+            false;
         } catch {
           // non-fatal — leave false; user will reconnect if needed
         }
@@ -189,9 +180,10 @@ export function OnboardingProvider({
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
+    }
     return () => {
       cancelled = true;
+      clearTimeout(t);
     };
   }, []);
 
@@ -254,9 +246,7 @@ export function OnboardingProvider({
       const professional = await apiUpdateProfessional(id, patch);
       setData((prev) => ({
         ...prev,
-        professionals: prev.professionals.map((p) =>
-          p.id === id ? professional : p,
-        ),
+        professionals: prev.professionals.map((p) => (p.id === id ? professional : p)),
       }));
     },
     [],
@@ -265,8 +255,7 @@ export function OnboardingProvider({
   const removeProfessional = useCallback(async (id: string) => {
     await deleteProfessional(id);
     setData((prev) => {
-      const { [id]: _removed, ...professionalSchedules } =
-        prev.professionalSchedules;
+      const { [id]: _removed, ...professionalSchedules } = prev.professionalSchedules;
       return {
         ...prev,
         professionals: prev.professionals.filter((p) => p.id !== id),
@@ -277,7 +266,13 @@ export function OnboardingProvider({
 
   // ── Step 3 — Schedules ────────────────────────────────────────────────────
   const saveWeeklySchedule = useCallback(async (windows: ScheduleWindow[]) => {
-    await putBusinessSchedule(windows);
+    const { professionals_updated } = await putBusinessSchedule(windows);
+    if (professionals_updated === 0) {
+      // No active professionals to apply the schedule to — the backend saved
+      // nothing (200 with professionals_updated: 0). Surface it as an error
+      // so the step's existing catch block shows it instead of a false "saved".
+      throw new Error("Agrega al menos un profesional antes de guardar el horario.");
+    }
     setData((prev) => ({ ...prev, weeklySchedule: windows }));
   }, []);
 
@@ -352,16 +347,13 @@ export function OnboardingProvider({
 
   // ── Step 7 — Agents ───────────────────────────────────────────────────────
   // Agents are addressed by their `type` (the backend route key).
-  const toggleAgent = useCallback(
-    async (type: AgentType, isActive: boolean) => {
-      const agent = await apiUpdateAgent(type, { is_active: isActive });
-      setData((prev) => ({
-        ...prev,
-        agents: prev.agents.map((a) => (a.type === type ? agent : a)),
-      }));
-    },
-    [],
-  );
+  const toggleAgent = useCallback(async (type: AgentType, isActive: boolean) => {
+    const agent = await apiUpdateAgent(type, { is_active: isActive });
+    setData((prev) => ({
+      ...prev,
+      agents: prev.agents.map((a) => (a.type === type ? agent : a)),
+    }));
+  }, []);
 
   const setAgentAutonomy = useCallback(
     async (type: AgentType, autonomy: AgentAutonomy) => {
@@ -387,9 +379,7 @@ export function OnboardingProvider({
       return;
     }
     setMissingSteps(result.missing_steps ?? []);
-    setCompleteError(
-      "Faltan pasos por completar antes de finalizar el onboarding.",
-    );
+    setCompleteError("Faltan pasos por completar antes de finalizar el onboarding.");
   }, [router]);
 
   const value = useMemo<OnboardingContextValue>(
@@ -448,9 +438,7 @@ export function OnboardingProvider({
   );
 
   return (
-    <OnboardingContext.Provider value={value}>
-      {children}
-    </OnboardingContext.Provider>
+    <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>
   );
 }
 

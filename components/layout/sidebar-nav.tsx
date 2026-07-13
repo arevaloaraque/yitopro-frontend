@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePendingOrders } from "@/lib/orders";
 import { cn } from "@/lib/utils";
 
 import { NAV_ITEMS } from "./nav-items";
@@ -20,19 +22,22 @@ function isActive(pathname: string, href: string): boolean {
 
 export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
   const pathname = usePathname();
+  const { pendingCount } = usePendingOrders();
 
   return (
     <nav className="flex flex-1 flex-col gap-1 px-3 py-5">
       {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
+        // Only "Pedidos" carries a badge: the number of drafts awaiting action.
+        const badgeCount = item.href === "/orders" ? pendingCount : 0;
 
         const linkClass = cn(
           "group relative flex cursor-pointer items-center text-[0.8rem] font-medium transition-all duration-200 ease-out",
           collapsed ? "h-9 w-9 justify-center" : "gap-3 px-3 py-2.5",
           active
             ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-            : "text-sidebar-foreground/55 rounded-lg hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
+            : "rounded-lg text-sidebar-foreground/55 hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
         );
 
         if (collapsed) {
@@ -42,16 +47,28 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
                 render={
                   <Link
                     href={item.href}
-                    aria-label={item.label}
+                    aria-label={
+                      badgeCount > 0
+                        ? `${item.label}, ${badgeCount} pendientes`
+                        : item.label
+                    }
                     aria-current={active ? "page" : undefined}
                     onClick={onNavigate}
                     className={cn(linkClass, "rounded-lg")}
                   >
                     <Icon className="size-4 shrink-0" aria-hidden="true" />
+                    {badgeCount > 0 && (
+                      <span
+                        className="absolute top-1 right-1 size-2 rounded-full bg-warning"
+                        aria-hidden="true"
+                      />
+                    )}
                   </Link>
                 }
               />
-              <TooltipContent side="right">{item.label}</TooltipContent>
+              <TooltipContent side="right">
+                {badgeCount > 0 ? `${item.label} (${badgeCount})` : item.label}
+              </TooltipContent>
             </Tooltip>
           );
         }
@@ -60,12 +77,23 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
           <Link
             key={item.href}
             href={item.href}
+            aria-label={
+              badgeCount > 0 ? `${item.label}, ${badgeCount} pendientes` : undefined
+            }
             aria-current={active ? "page" : undefined}
             onClick={onNavigate}
             className={cn(linkClass, "rounded-lg")}
           >
             <Icon className="size-4 shrink-0" aria-hidden="true" />
             <span className="truncate">{item.label}</span>
+            {badgeCount > 0 && (
+              <Badge
+                variant="warning"
+                className="ml-auto h-5 min-w-5 justify-center px-1.5 tabular-nums"
+              >
+                {badgeCount}
+              </Badge>
+            )}
             {active ? (
               <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-accent-foreground" />
             ) : null}

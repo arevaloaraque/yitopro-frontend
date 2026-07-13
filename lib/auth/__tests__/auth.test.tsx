@@ -40,7 +40,11 @@ describe("AuthContext", () => {
     server.use(
       http.post(`${BASE}/auth/login/`, async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json({ access_token: "jwe", expires_in: 3600, token_type: "Bearer" });
+        return HttpResponse.json({
+          access_token: "jwe",
+          expires_in: 3600,
+          token_type: "Bearer",
+        });
       }),
       http.get(`${BASE}/auth/me/`, () =>
         HttpResponse.json({ id: "u1", email: "a@b.com", name: "Demo User" }),
@@ -77,7 +81,11 @@ describe("AuthContext", () => {
     let loggedOut = false;
     server.use(
       http.post(`${BASE}/auth/login/`, () =>
-        HttpResponse.json({ access_token: "jwe", expires_in: 3600, token_type: "Bearer" }),
+        HttpResponse.json({
+          access_token: "jwe",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
       ),
       http.get(`${BASE}/auth/me/`, () =>
         HttpResponse.json({ id: "u1", email: "a@b.com", name: "Demo User" }),
@@ -102,7 +110,11 @@ describe("AuthContext", () => {
   it("restaura la sesión en el arranque vía refresh + /me (persistencia al recargar)", async () => {
     server.use(
       http.post(`${BASE}/auth/refresh/`, () =>
-        HttpResponse.json({ access_token: "jwe2", expires_in: 3600, token_type: "Bearer" }),
+        HttpResponse.json({
+          access_token: "jwe2",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
       ),
       http.get(`${BASE}/auth/me/`, () =>
         HttpResponse.json({ id: "u9", email: "boot@b.com", name: "Boot User" }),
@@ -138,13 +150,9 @@ describe("AuthContext", () => {
         <Probe />
       </AuthProvider>,
     );
-    await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("out"),
-    );
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("out"));
     await userEvent.click(screen.getByText("accept-invite"));
-    await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("in"),
-    );
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("in"));
     expect(screen.getByTestId("email").textContent).toBe("invited@b.com");
   });
 });

@@ -73,14 +73,17 @@ export default function ForgotPasswordPage() {
                 </div>
                 <CardTitle>Revisa tu correo</CardTitle>
                 <CardDescription>
-                  Si el correo está registrado, te enviamos un enlace para restablecer tu
-                  contraseña. El enlace caduca en unos minutos.
+                  Si el correo está registrado, te enviamos un enlace para restablecer
+                  tu contraseña. El enlace caduca en unos minutos.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Link
                   href="/login"
-                  className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full")}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "lg" }),
+                    "w-full",
+                  )}
                 >
                   Volver a iniciar sesión
                 </Link>
@@ -91,11 +94,16 @@ export default function ForgotPasswordPage() {
               <CardHeader className="text-center">
                 <CardTitle>Recupera tu contraseña</CardTitle>
                 <CardDescription>
-                  Ingresa tu email y te enviaremos un enlace para crear una nueva contraseña.
+                  Ingresa tu email y te enviaremos un enlace para crear una nueva
+                  contraseña.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+                <form
+                  onSubmit={handleSubmit(onSubmit)}
+                  className="space-y-4"
+                  noValidate
+                >
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -108,7 +116,9 @@ export default function ForgotPasswordPage() {
                       {...register("email")}
                     />
                     {errors.email ? (
-                      <p className="text-[0.8rem] text-destructive">{errors.email.message}</p>
+                      <p className="text-[0.8rem] text-destructive">
+                        {errors.email.message}
+                      </p>
                     ) : null}
                   </div>
 
@@ -118,7 +128,12 @@ export default function ForgotPasswordPage() {
                     </p>
                   ) : null}
 
-                  <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={isSubmitting}
+                  >
                     {isSubmitting ? (
                       <>
                         <Loader2 className="animate-spin" />

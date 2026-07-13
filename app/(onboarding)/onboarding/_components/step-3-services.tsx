@@ -23,18 +23,12 @@ interface EditableServiceRowProps {
     id: string,
     patch: Partial<Omit<Service, "id" | "business_id">>,
   ) => Promise<void>;
-  onRemove: (id: string) => void;
+  onRemove: (id: string) => Promise<void>;
 }
 
-function EditableServiceRow({
-  svc,
-  onUpdate,
-  onRemove,
-}: EditableServiceRowProps) {
+function EditableServiceRow({ svc, onUpdate, onRemove }: EditableServiceRowProps) {
   const [draftName, setDraftName] = useState(svc.name);
-  const [draftDuration, setDraftDuration] = useState(
-    String(svc.duration_minutes),
-  );
+  const [draftDuration, setDraftDuration] = useState(String(svc.duration_minutes));
   const [draftPrice, setDraftPrice] = useState(String(svc.price));
 
   function commitName() {
@@ -157,11 +151,20 @@ export function Step3Services() {
       setDuration(30);
       setPrice(0);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "No se pudo agregar el servicio.",
-      );
+      setError(err instanceof Error ? err.message : "No se pudo agregar el servicio.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRemove(id: string) {
+    setError(null);
+    try {
+      await removeService(id);
+    } catch (err) {
+      // 409 (service has associated appointments) comes with an
+      // already-Spanish `detail` — show it instead of swallowing it.
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el servicio.");
     }
   }
 
@@ -177,7 +180,7 @@ export function Step3Services() {
             key={svc.id}
             svc={svc}
             onUpdate={updateService}
-            onRemove={removeService}
+            onRemove={handleRemove}
           />
         ))
       )}

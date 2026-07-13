@@ -47,9 +47,7 @@ export function MessageInput({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={
-            disabled ? "Respuesta deshabilitada" : "Escribe un mensaje…"
-          }
+          placeholder={disabled ? "Respuesta deshabilitada" : "Escribe un mensaje…"}
           disabled={disabled || sending}
           className="min-h-10 resize-none rounded-xl"
           rows={1}

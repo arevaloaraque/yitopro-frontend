@@ -18,3 +18,26 @@ export function submitEmbeddedSignupCode(code: string): Promise<EmbeddedSignupRe
     code,
   });
 }
+
+/** A WhatsApp message template as known by the backend (mirrors Meta's approval status). */
+export interface WhatsAppTemplate {
+  name: string;
+  language: string;
+  category: string;
+  status: "approved" | "pending" | "rejected";
+  catalog_key: string;
+}
+
+/**
+ * Lists the business's WhatsApp templates. `synced` is `false` when the
+ * best-effort refresh against Meta failed (or there's no channel yet); the
+ * local rows are returned either way.
+ */
+export function listTemplates(): Promise<{
+  items: WhatsAppTemplate[];
+  synced: boolean;
+}> {
+  return api.get<{ items: WhatsAppTemplate[]; synced: boolean }>(
+    "/whatsapp/templates/",
+  );
+}

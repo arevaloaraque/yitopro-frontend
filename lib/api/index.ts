@@ -1,4 +1,4 @@
-export { ApiError, API_BASE_URL, api, apiFetch, configureApiAuth } from "./client";
+export { ApiError, API_BASE_URL, api, configureApiAuth } from "./client";
 export type { RequestOptions } from "./client";
 
 export {

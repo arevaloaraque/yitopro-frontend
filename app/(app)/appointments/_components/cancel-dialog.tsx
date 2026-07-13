@@ -64,8 +64,7 @@ export function CancelDialog({
         <DialogHeader>
           <DialogTitle>Cancelar cita</DialogTitle>
           <DialogDescription>
-            ¿Estás seguro de cancelar esta cita? Esta acción no se puede
-            deshacer.
+            ¿Estás seguro de cancelar esta cita? Esta acción no se puede deshacer.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -81,11 +80,7 @@ export function CancelDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter showCloseButton>
-          <Button
-            variant="destructive"
-            onClick={handleCancel}
-            disabled={saving}
-          >
+          <Button variant="destructive" onClick={handleCancel} disabled={saving}>
             <Ban className="size-4" />
             {saving ? "Cancelando…" : "Cancelar cita"}
           </Button>

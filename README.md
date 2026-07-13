@@ -5,8 +5,9 @@ Panel de administración SaaS de Yitopro (Next.js App Router). Backend Django se
 
 ## Requisitos
 
-- Node **≥ 24** (ver `.nvmrc`). El CLI de MSW necesita Node 22+.
-- Para usar auth, el backend Django corriendo (por defecto en `http://localhost:8050`).
+- Node **≥ 24** (ver `.nvmrc`).
+- El backend Django corriendo (por defecto en `http://localhost:8050`) — el frontend siempre habla
+  con él (no hay mocks en runtime).
 
 ## Puesta en marcha
 
@@ -14,7 +15,6 @@ Panel de administración SaaS de Yitopro (Next.js App Router). Backend Django se
 nvm use                              # Node 24
 npm install --legacy-peer-deps       # ver nota abajo
 cp .env.example .env.local           # ajusta si tu backend no está en :8050
-npx msw init public                  # genera public/mockServiceWorker.js (gitignored, requerido)
 npm run dev                          # http://localhost:3000
 ```
 
@@ -22,20 +22,22 @@ npm run dev                          # http://localhost:3000
 > estricto que el 19 del proyecto. La resolución real es correcta; el flag solo evita el
 > error de peers de npm. Vercel y CI usan el mismo flag (ver `vercel.json` / `.github`).
 
-> `public/mockServiceWorker.js` está en `.gitignore` y **no** se versiona: cada clon debe
-> generarlo con `npx msw init public`. Sin él, MSW no arranca y las rutas mockeadas fallan.
+> MSW ya **no** se usa en runtime; solo intercepta la red en los tests (vía `setupServer` de Node,
+> `mocks/server.ts`). No hace falta `npx msw init public` ni el worker de browser.
 
 ## Variables de entorno
 
-| Variable | Por defecto | Descripción |
-|----------|-------------|-------------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8050` | Origen del backend Django. El navegador llama directo aquí. |
-| `NEXT_PUBLIC_API_MOCKING` | `enabled` | `enabled`: MSW intercepta solo los dominios aún mockeados (businesses, records, agents). `disabled`: toda la red va al backend real. (SSE y auth son siempre reales.) |
-| `NEXT_PUBLIC_META_APP_ID` / `NEXT_PUBLIC_META_CONFIG_ID` | — | WhatsApp Embedded Signup (F4-C). Vacíos ⇒ el paso 7 muestra aviso de configuración. |
+| Variable                                                 | Por defecto             | Descripción                                                                                 |
+| -------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`                                    | `http://localhost:8050` | Origen del backend Django. El navegador llama directo aquí.                                 |
+| `NEXT_PUBLIC_META_APP_ID` / `NEXT_PUBLIC_META_CONFIG_ID` | —                       | WhatsApp Embedded Signup. Vacíos ⇒ el paso 7 del onboarding muestra aviso de configuración. |
 
-## Autenticación (conectada — F4-A)
+> No existe `NEXT_PUBLIC_API_MOCKING`: se eliminó. MSW ya no corre en runtime (solo en tests), así
+> que toda la red va siempre al backend real de `NEXT_PUBLIC_API_URL`.
 
-El login es **real** contra el backend; el resto de dominios sigue mockeado por MSW.
+## Autenticación
+
+Todo el frontend habla con el backend real; MSW solo interviene en los tests.
 
 - **`POST /api/auth/login/`** (`{ email, password }`) → `{ access_token, expires_in, token_type }`.
   - El **access token (JWE opaco)** vive **solo en memoria** (estado de `AuthContext`). Nunca en
@@ -49,20 +51,20 @@ El login es **real** contra el backend; el resto de dominios sigue mockeado por 
   para no recursar.
 - **Logout:** `POST /api/auth/logout/` (revoca la cookie en el backend, best-effort) + limpia el
   estado local.
-- **Identidad visible:** el backend no devuelve perfil en el login, así que el nombre/email del
-  topbar se arman con el email del formulario. No se llama a `/api/auth/me/`.
+- **Identidad visible:** tras el login (y en el boot) se llama a `GET /api/auth/me/` para poblar el
+  nombre/email del topbar.
 
 ### Comportamiento al recargar la página
 
-**Recargar fuerza re-login.** El access token solo vive en memoria, así que un refresh de página
-lo pierde y `RequireAuth` redirige a `/login`. No se recupera la sesión automáticamente vía la
-cookie de refresh: es la opción más simple y segura, y el backend no expone el email para
-reconstruir la identidad tras un boot en frío. El refresh silencioso sí opera **durante** una
-sesión activa (cuando el access token expira a mitad de uso).
+**La sesión sobrevive al recargar.** El access token solo vive en memoria, pero en el **boot**
+`AuthContext` intenta un refresh silencioso con la cookie httpOnly de refresh: si hay sesión válida
+la restaura (y recarga la identidad vía `GET /api/auth/me/`); si no, `RequireAuth` redirige a
+`/login`. El mismo refresh silencioso opera también **durante** la sesión, cuando el access token
+expira a mitad de uso.
 
 ## CORS y cookies (backend)
 
-El frontend (`:3000`) y el backend (`:8050`) comparten *site* (`localhost`) pero distinto *origin*
+El frontend (`:3000`) y el backend (`:8050`) comparten _site_ (`localhost`) pero distinto _origin_
 (puerto), así que el navegador exige CORS para `fetch`. El backend debe permitir el origen del
 frontend **con credenciales**. En `yitopro-backend` esto ya está configurado con
 `django-cors-headers`:
@@ -80,34 +82,34 @@ CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
 
 - Con `CORS_ALLOW_CREDENTIALS=True`, `django-cors-headers` responde con el **origen exacto** (no
   `*`), requisito del navegador para enviar/recibir cookies cross-origin.
-- La cookie de refresh es `SameSite=Lax`; como `:3000`↔`:8050` son *same-site* (el puerto no cuenta
+- La cookie de refresh es `SameSite=Lax`; como `:3000`↔`:8050` son _same-site_ (el puerto no cuenta
   para el "site"), el navegador la envía en el `fetch` a `/api/auth/*`.
 - En producción frontend y backend son **same-origin** (`app.yitopro.com`), así que `CORS_ALLOWED_ORIGINS`
   queda vacío allí.
 
-## Conexión al backend por dominio (F4-B/F4-C)
+## Conexión al backend por dominio
 
-Los dominios conectados van al backend real (sus handlers MSW fueron eliminados). En
-`mocks/handlers/index.ts` solo quedan los handlers de los dominios aún mockeados
-(businesses/settings, records, agents); el resto pasa a la red real (`onUnhandledRequest:
-"bypass"`). Solo se tocó la capa `lib/api`/tipos para mapear desajustes de shape —
-**ningún componente cambió**. Cuando el backend exponga un dominio mockeado, se borra su handler.
+**Todos los dominios van al backend real.** No queda ningún handler MSW en runtime (`mocks/` solo
+tiene `server.ts` para tests). Los desajustes de shape se resuelven **solo** en la capa
+`lib/api/<dominio>.ts` (y tipos), **nunca** en componentes.
 
-| Dominio | Estado | Notas |
-|---------|--------|-------|
-| auth | **real** | F4-A |
-| services | **real** | mapeo: `active`→`is_active`, `price` Decimal-string→number, `id` int→string, sin envelope de paginación (lista cruda) |
-| products | **real** | mapeo: `whatsapp_enabled`→`sellable_via_whatsapp`, `active`→`is_active`, `price`/`id` |
-| customers | **real** | mapeo: `display_name`→`name`; `create` envía `{phone, display_name}` |
-| appointments | **real** | mapeo: `start`/`end`→`start_datetime`; reagendar usa `new_start_datetime` (el backend recalcula el fin); cancelar/reagendar son `PATCH`; `origin`→`created_by`; filtro por `date` (no `from`/`to`) |
-| **tiempo real (SSE)** | **real** (F4-C) | `lib/sse` lee `GET /api/events/stream/` por `fetch` (ver abajo) |
-| **WhatsApp Embedded Signup** | **real** (F4-C) | `POST /api/whatsapp/embedded-signup/callback/`; requiere `NEXT_PUBLIC_META_*` (ver abajo) |
-| **conversations** | **real** (F4-C) | inbox + acciones reales. Mapeo: `id` int→string, `customer` anidado→`customer_id`, status `assigned_to_human`→`human_handoff` / `open`/`waiting_*`→`ai_active`, `direction` `in`/`out`→`inbound`/`outbound`; `responder` envía `{content}`. El backend no expone `detected_intent`/`unread` (→ `null`/`0`, el SSE incrementa `unread` en vivo) ni `sender` por mensaje (salientes se asumen `ai` al listar; `human` al responder). **Responder** exige tomar la conversación primero (403 si no) y entrega de verdad por WhatsApp (409 si el contacto no es una cuenta WhatsApp real). |
-| **businesses / settings** | mock | el backend no expone `assistant_config.display_name` ni `autonomous` (solo `tone`/`welcome_message`/`language` en `BusinessConfig`, y `tone` usa `friendly` no `neutral`), ni `GET /business/onboarding`. |
-| **records (fichas)** | mock | `RecordOut` no incluye `schema` (definición de campos) ni `audit`; el formulario dinámico los necesita. |
-| **agents** | mock | el backend no tiene endpoint de agentes (`apps/agents` es un esqueleto vacío). |
+| Dominio                  | Notas de mapeo                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| auth                     | login/refresh/logout + `GET /api/auth/me/`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| businesses / settings    | perfil + `BusinessConfig` (`tone`/`welcome_message`/`language`) vía `BusinessProvider`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| agents                   | agentes de IA vía `AgentsProvider`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| services                 | `active`→`is_active`, `price` Decimal-string→number, `id` int→string, lista cruda (sin envelope)                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| products                 | `whatsapp_enabled`→`sellable_via_whatsapp`, `active`→`is_active`, `price`/`id`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| orders (Pedidos)         | `listOrders(status)` + `confirmOrder`/`cancelOrder`; `getPendingOrdersCount` alimenta el badge del nav (`OrdersProvider`)                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| customers                | `display_name`→`name`; `create` envía `{phone, display_name}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| records (fichas) + notas | dentro del **drawer de cliente** (ya no hay ruta `/records`): `getRecord`/`updateRecordValues` + `getCustomerNotes`/`addCustomerNote` (`/customers/{id}/notes/`)                                                                                                                                                                                                                                                                                                                                                                                                |
+| appointments             | `start`/`end`→`start_datetime`; reagendar usa `new_start_datetime` (el backend recalcula el fin); cancelar/reagendar son `PATCH`; `origin`→`created_by`; filtro por `date` (no `from`/`to`)                                                                                                                                                                                                                                                                                                                                                                     |
+| conversations            | inbox + acciones. `id` int→string, `customer` anidado→`customer_id`, status `assigned_to_human`→`human_handoff` / `open`/`waiting_*`→`ai_active`, `direction` `in`/`out`→`inbound`/`outbound`; `responder` envía `{content}`. Backend sin `detected_intent`/`unread` (→ `null`/`0`, el SSE incrementa `unread` en vivo) ni `sender` por mensaje (salientes se asumen `ai` al listar; `human` al responder). **Responder** exige tomar la conversación primero (403 si no) y entrega de verdad por WhatsApp (409 si el contacto no es una cuenta WhatsApp real). |
+| tiempo real (SSE)        | `lib/sse` lee `GET /api/events/stream/` por `fetch` (ver abajo)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| WhatsApp Embedded Signup | `POST /api/whatsapp/embedded-signup/callback/`; requiere `NEXT_PUBLIC_META_*` (ver abajo)                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 **Gaps de mapeo con caveat conocido:**
+
 - `getAppointmentHistory` devuelve `[]`: el backend aún no tiene endpoint/modelo de auditoría de citas.
 - El estado de cita `no_show` del backend no tiene equivalente en la UI (no hay badge); `rescheduled`
   no existe en el backend (reagendar mantiene `scheduled`).
@@ -115,6 +117,16 @@ Los dominios conectados van al backend real (sus handlers MSW fueron eliminados)
 El backend corre en Docker (`http://localhost:8050`); las listas devuelven arrays crudos (sin
 `{items,count}`), los IDs son enteros y los precios `Decimal` serializados como string — todo eso
 se normaliza en `lib/api/<dominio>.ts`.
+
+## Pantallas nuevas
+
+- **Pedidos** (`/orders`, `components/orders`): lista de pedidos con confirmar/cancelar; el conteo de
+  pendientes se muestra como badge en el nav (`lib/orders` `OrdersProvider`/`usePendingOrders`).
+- **Drawer de cliente** (`components/customers/customer-drawer.tsx`): reemplaza la vieja ruta
+  `/records`. Abre como side sheet sobre la lista y muestra datos core (nombre/email; teléfono
+  inmutable), la **ficha dinámica**, las conversaciones y el **log de notas** del staff.
+- **Editor semanal de horarios** (`components/schedule`, `lib/schedule/windows.ts`): grilla semanal
+  ↔ ventanas del backend, reutilizada por **Configuración** y por el paso **"horarios"** del onboarding.
 
 ## Tiempo real — SSE (F4-C)
 
@@ -133,6 +145,15 @@ suscriptores: dashboard, agenda, conversaciones, notificaciones). La implementac
   string y `start_datetime`→`start` / `slot`→`new_start`.
 - El emisor de eventos **simulados** (mock) quedó **apagado**.
 
+**Eventos de datos (data-sync, sin toast):** `cliente_creado`, `cliente_actualizado`,
+`ficha_actualizada`, `nota_creada`, `servicio_creado`, `servicio_actualizado`, `servicio_eliminado`.
+Disparan refetch dirigido en las pantallas de clientes/servicios y en el drawer abierto, con
+**guarda anti-clobber** (no pisan ediciones sin guardar). No generan notificación (son eco de la
+propia acción del operador o de la IA). El stream emite más eventos que refrescan estado en vivo
+(p. ej. `agente_actualizado` → badge/página de agentes, `negocio_actualizado`, `pedido_creado`); la
+lista completa vive en `lib/types/events.ts`. Diseño de estos 7:
+`docs/superpowers/specs/2026-07-11-sse-customers-services-design.md`.
+
 ## WhatsApp Embedded Signup (F4-C)
 
 Paso 7 del onboarding (`step-7-whatsapp.tsx`): carga el JS SDK de Meta, hace `FB.init` con
@@ -146,15 +167,13 @@ Validado con credenciales reales: `FB.init` + `FB.login(config_id)` abren el pop
 Embedded Signup de Meta (sin error de dominio), y el callback responde correcto ante un `code`
 inválido. Completar el flujo (login de Meta + selección de WABA → `code` real → registro del
 `ChannelAccount`) es un paso humano. Nota de flujo: el paso 7 vive tras `RequireAuth` y solo se
-alcanza vía el onboarding (al recargar se pierde el token en memoria, por diseño F4-A).
+alcanza vía el onboarding.
 
-## MSW en producción
+## MSW (solo en tests)
 
-MSW solo arranca si `NEXT_PUBLIC_API_MOCKING=enabled` (ver `app/providers.tsx`); en producción
-(`disabled`) no se carga y toda la red va al backend real. Con MSW apagado funcionan los dominios
-ya conectados (auth, services, products, customers, appointments, conversations, SSE, Embedded
-Signup). Los que siguen en mock (businesses/settings, records, agents) requieren que el backend
-exponga sus shapes/endpoints antes de poder operar 100% sin mock.
+MSW ya no se carga en runtime (ni dev ni producción): `app/providers.tsx` no monta ningún worker y
+toda la red va al backend real. MSW solo vive en los tests, como `setupServer` de Node
+(`mocks/server.ts`), inyectando handlers por caso con `server.use(...)`.
 
 ## Comandos
 
@@ -214,30 +233,29 @@ build**. Cualquier paso que falle hace fallar el workflow. Node 24, `npm ci --le
 ## Deploy (F5)
 
 - `vercel.json`: framework Next.js, `installCommand` con `--legacy-peer-deps`.
-- Variables de producción en `.env.production.example`. En producción
-  **`NEXT_PUBLIC_API_MOCKING=disabled`** ⇒ MSW **no se carga** (lo gatea `app/providers.tsx`) y toda
-  la red va al backend real.
+- Variables de producción en `.env.production.example`. MSW no se carga en runtime, así que toda
+  la red va siempre al backend real.
 - `NEXT_PUBLIC_API_URL` apunta al backend real; `NEXT_PUBLIC_META_*` para el Embedded Signup.
 
 ## Auditoría de seguridad frontend (F5)
 
-| Ítem | Estado | Evidencia |
-|------|--------|-----------|
-| Access token | ✅ solo en memoria (estado React `AuthContext`), nunca en storage | `lib/auth/AuthContext.tsx` |
-| Refresh token | ✅ cookie httpOnly `yitopro_refresh` (scope `/api/auth/`), `credentials:"include"` | `lib/api/client.ts`, `lib/sse` |
-| Token no se decodifica | ✅ JWE opaco; el cliente nunca lo parsea | — |
-| localStorage para auth | ✅ no se usa | grep |
-| sessionStorage | ✅ solo datos de formulario del onboarding (no auth) | `lib/onboarding/onboarding-context.tsx` |
-| Secretos en bundle | ✅ solo `NEXT_PUBLIC_*`; `META_APP_SECRET` solo en backend | `.env.example` |
-| Sanitización | ✅ contenido de WhatsApp se renderiza con `stripTags`; sin `dangerouslySetInnerHTML` | `message-bubble.tsx` |
-| Errores técnicos | ✅ nunca se muestran stack traces; mensajes por código vía `lib/errors` | `app/error.tsx` |
-| Autorización | ✅ el frontend solo gatea login (`RequireAuth`); el backend autoriza y aísla por tenant | `lib/auth/auth-guard.tsx` |
-| Multi-tenant | ✅ el cliente nunca envía `business_id`; el backend filtra por token | mappers en `lib/api/*` |
+| Ítem                   | Estado                                                                                  | Evidencia                               |
+| ---------------------- | --------------------------------------------------------------------------------------- | --------------------------------------- |
+| Access token           | ✅ solo en memoria (estado React `AuthContext`), nunca en storage                       | `lib/auth/AuthContext.tsx`              |
+| Refresh token          | ✅ cookie httpOnly `yitopro_refresh` (scope `/api/auth/`), `credentials:"include"`      | `lib/api/client.ts`, `lib/sse`          |
+| Token no se decodifica | ✅ JWE opaco; el cliente nunca lo parsea                                                | —                                       |
+| localStorage para auth | ✅ no se usa                                                                            | grep                                    |
+| sessionStorage         | ✅ solo datos de formulario del onboarding (no auth)                                    | `lib/onboarding/onboarding-context.tsx` |
+| Secretos en bundle     | ✅ solo `NEXT_PUBLIC_*`; `META_APP_SECRET` solo en backend                              | `.env.example`                          |
+| Sanitización           | ✅ contenido de WhatsApp se renderiza con `stripTags`; sin `dangerouslySetInnerHTML`    | `message-bubble.tsx`                    |
+| Errores técnicos       | ✅ nunca se muestran stack traces; mensajes por código vía `lib/errors`                 | `app/error.tsx`                         |
+| Autorización           | ✅ el frontend solo gatea login (`RequireAuth`); el backend autoriza y aísla por tenant | `lib/auth/auth-guard.tsx`               |
+| Multi-tenant           | ✅ el cliente nunca envía `business_id`; el backend filtra por token                    | mappers en `lib/api/*`                  |
 
 ## Troubleshooting
 
 - **`npm install` falla por peers** → usa `npm install --legacy-peer-deps`.
-- **MSW no intercepta / rutas mockeadas dan 404** → corre `npx msw init public` (worker gitignored).
+- **Un test "toca red" o da 404** → agrega su handler con `server.use(...)` (MSW está en `onUnhandledRequest: "error"`).
 - **SSE no llega en dev** → el backend debe estar arriba; `uvicorn --reload` puede quedar colgado al
   editar código si hay una conexión SSE abierta (reinicia el contenedor `api`). En prod (gunicorn) no aplica.
 - **Modo oscuro no cambia** → confirma que `ThemeProvider` está montado (`app/providers.tsx`).
@@ -247,7 +265,3 @@ build**. Cualquier paso que falle hace fallar el workflow. Node 24, `npm ci --le
 
 - **Migración a RHF+Zod**: hecha en login; el resto de formularios usa validación manual funcional
   (mismos campos/reglas) — migrar siguiendo `lib/validation/schemas.ts`.
-- **Dominios aún en MSW** (el backend no expone el shape/endpoint completo): **businesses/settings**
-  (sin `assistant_config.display_name`/`autonomous` ni `/business/onboarding`), **records** (sin
-  `schema`/`audit` en `RecordOut`), **agents** (sin endpoint). Son los únicos handlers en
-  `mocks/handlers/index.ts`; el seed (`mocks/data/seed.ts`) solo conserva su data.

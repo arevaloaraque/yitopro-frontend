@@ -104,7 +104,9 @@ export default function LoginPage() {
                   {...register("email")}
                 />
                 {errors.email ? (
-                  <p className="text-[0.8rem] text-destructive">{errors.email.message}</p>
+                  <p className="text-[0.8rem] text-destructive">
+                    {errors.email.message}
+                  </p>
                 ) : null}
               </div>
               <div className="space-y-2">
@@ -119,7 +121,9 @@ export default function LoginPage() {
                   {...register("password")}
                 />
                 {errors.password ? (
-                  <p className="text-[0.8rem] text-destructive">{errors.password.message}</p>
+                  <p className="text-[0.8rem] text-destructive">
+                    {errors.password.message}
+                  </p>
                 ) : null}
                 <div className="text-right">
                   <Link
@@ -137,7 +141,12 @@ export default function LoginPage() {
                 </p>
               ) : null}
 
-              <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={isSubmitting}
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="animate-spin" />

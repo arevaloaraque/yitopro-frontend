@@ -7,10 +7,12 @@ import { api } from "./client";
  * here; components consume `Conversation`/`Message` unchanged.
  *
  * Key differences:
- * - integer ids (UI uses string); `customer` comes nested (UI uses `customer_id`).
+ * - integer ids (UI uses string); `customer` comes nested (UI uses `customer_id`,
+ *   plus `customer_name`/`customer_phone` for display).
  * - backend status: open|waiting_customer|waiting_business|assigned_to_human|closed.
- * - `MessageOut` carries neither `sender` nor `status`; `direction` is `in`/`out`.
- * - the backend exposes neither `detected_intent` nor an `unread` counter.
+ * - `MessageOut` carries `sender_kind` ("ai"|"operator"|"system" for outbound, ""
+ *   for inbound) instead of `sender`; `direction` is `in`/`out`.
+ * - the backend does not expose an `unread` counter.
  */
 interface BackendConversation {
   id: number;
@@ -27,6 +29,7 @@ interface BackendConversation {
 interface BackendMessage {
   id: number;
   direction: string; // "in" | "out"
+  sender_kind: string; // "ai" | "operator" | "system" for outbound; "" for inbound
   content: string;
   created_at: string;
 }
@@ -42,9 +45,11 @@ function convFromBackend(c: BackendConversation): Conversation {
   return {
     id: String(c.id),
     customer_id: String(c.customer.id),
+    customer_name: c.customer.display_name,
+    customer_phone: c.customer.phone,
     status: mapStatus(c.status),
     active_agent: c.active_agent || null,
-    detected_intent: null, // not exposed by the backend
+    assignee_id: c.assignee_id === null ? null : String(c.assignee_id),
     last_message_at: c.last_message_at ?? c.created_at,
     unread: 0, // not exposed; the SSE `mensaje_recibido` increments it live
   };
@@ -60,12 +65,19 @@ function msgFromBackend(
     id: String(m.id),
     conversation_id: conversationId,
     direction: inbound ? "inbound" : "outbound",
-    // The backend does not distinguish ai/human in outbound; when listing we assume "ai".
-    // When replying manually (sendMessage) we know it is "human".
-    sender: sender ?? (inbound ? "customer" : "ai"),
+    // sendMessage already knows the sender ("human"); otherwise derive it from
+    // sender_kind: "operator" -> human, "system" -> system, else ("ai") -> ai.
+    sender:
+      sender ??
+      (inbound
+        ? "customer"
+        : m.sender_kind === "operator"
+          ? "human"
+          : m.sender_kind === "system"
+            ? "system"
+            : "ai"),
     text: m.content,
     created_at: m.created_at,
-    status: "sent", // the backend does not expose delivery status
   };
 }
 

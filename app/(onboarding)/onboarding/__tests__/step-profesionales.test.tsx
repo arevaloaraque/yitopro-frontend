@@ -40,16 +40,10 @@ describe("StepProfesionales", () => {
 
     const input = await screen.findByLabelText("Nuevo profesional");
     await userEvent.type(input, "María Pérez");
-    await userEvent.click(
-      screen.getByRole("button", { name: /agregar profesional/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /agregar profesional/i }));
 
-    await waitFor(() =>
-      expect(posted).toEqual({ name: "María Pérez", active: true }),
-    );
-    expect(
-      await screen.findByDisplayValue("María Pérez"),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(posted).toEqual({ name: "María Pérez", active: true }));
+    expect(await screen.findByDisplayValue("María Pérez")).toBeInTheDocument();
   });
 
   it("inline-edits a professional name only on blur, not per keystroke", async () => {

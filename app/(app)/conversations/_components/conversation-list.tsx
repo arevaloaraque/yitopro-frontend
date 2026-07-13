@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, User } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/states/empty-state";
 import { ErrorState } from "@/components/states/error-state";
 import { Loading } from "@/components/states/loading";
 import type { Conversation, ConversationStatus } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -19,7 +19,6 @@ interface ConversationListProps {
   loading: boolean;
   error: Error | null;
   onRetry: () => void;
-  customerNames: Map<string, string>;
   agentNames: Map<string, string>;
 }
 
@@ -53,9 +52,7 @@ function statusLabel(status: ConversationStatus): string {
   }
 }
 
-function statusVariant(
-  status: ConversationStatus,
-): "info" | "warning" | "outline" {
+function statusVariant(status: ConversationStatus): "info" | "warning" | "outline" {
   switch (status) {
     case "ai_active":
       return "info";
@@ -75,7 +72,6 @@ export function ConversationList({
   loading,
   error,
   onRetry,
-  customerNames,
   agentNames,
 }: ConversationListProps) {
   if (loading) return <Loading rows={6} className="p-4" />;
@@ -116,24 +112,19 @@ export function ConversationList({
                 selectedId === conv.id && "bg-muted/60",
               )}
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-semibold text-primary ring-1 ring-primary/20">
-                {customerNames.get(conv.customer_id)?.charAt(0) ?? "?"}
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+                <User className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-[0.8rem] font-medium">
-                    {customerNames.get(conv.customer_id) ?? conv.customer_id}
+                    {conv.customer_name.trim() || formatNumber(conv.customer_phone)}
                   </span>
                   <span className="shrink-0 text-[0.7rem] text-muted-foreground">
                     {formatTime(conv.last_message_at)}
                   </span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  {conv.detected_intent ? (
-                    <Badge variant="outline" className="h-4 px-1 text-[10px] leading-none">
-                      {conv.detected_intent.replace(/_/g, " ")}
-                    </Badge>
-                  ) : null}
                   {conv.active_agent ? (
                     <span className="truncate text-[0.7rem] text-muted-foreground">
                       {agentNames.get(conv.active_agent) ?? conv.active_agent}

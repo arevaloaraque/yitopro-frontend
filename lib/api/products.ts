@@ -35,15 +35,6 @@ function fromBackend(p: BackendProduct): Product {
   };
 }
 
-/**
- * All products (for consumers that expect the full list).
- * ponytail: cap of 1000; the Products table uses paginated `searchProducts`.
- */
-export async function listProducts(): Promise<Product[]> {
-  const res = await api.get<Page>("/products/", { query: { limit: 1000 } });
-  return res.items.map(fromBackend);
-}
-
 export interface ProductSearchParams {
   search?: string;
   limit?: number;

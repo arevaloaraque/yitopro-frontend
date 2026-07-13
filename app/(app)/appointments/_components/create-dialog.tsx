@@ -22,11 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CustomerCombobox } from "@/components/customers/customer-combobox";
-import type { Service } from "@/lib/types";
+import type { Professional, Service } from "@/lib/types";
 
 interface FormData {
   customer_id: string;
   service_id: string;
+  professional_id: string;
   date: string;
   time: string;
   duration_minutes: number;
@@ -35,6 +36,7 @@ interface FormData {
 const emptyForm: FormData = {
   customer_id: "",
   service_id: "",
+  professional_id: "any",
   date: "",
   time: "",
   duration_minutes: 0,
@@ -44,11 +46,13 @@ interface CreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   services: Service[];
+  professionals: Professional[];
   onCreate: (input: {
     service_id: string;
     customer_id: string;
     start: string;
     end: string;
+    professional_id?: string;
     notes?: string;
   }) => Promise<void>;
 }
@@ -62,12 +66,12 @@ export function CreateDialog({
   open,
   onOpenChange,
   services,
+  professionals,
   onCreate,
 }: CreateDialogProps) {
+  const activeProfessionals = professionals.filter((p) => p.is_active);
   const [form, setForm] = useState<FormData>(emptyForm);
-  const [customer, setCustomer] = useState<{ id: string; name: string } | null>(
-    null,
-  );
+  const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -111,6 +115,10 @@ export function CreateDialog({
         customer_id: form.customer_id,
         start: start.toISOString(),
         end: end.toISOString(),
+        professional_id:
+          form.professional_id && form.professional_id !== "any"
+            ? form.professional_id
+            : undefined,
       });
       onOpenChange(false);
     } catch (err) {
@@ -182,6 +190,29 @@ export function CreateDialog({
               <p className="text-xs text-destructive">{errors.service_id}</p>
             )}
           </div>
+          {activeProfessionals.length > 1 && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="create-professional">Profesional</Label>
+              <Select
+                value={form.professional_id}
+                onValueChange={(v) =>
+                  setForm((prev) => ({ ...prev, professional_id: v ?? "any" }))
+                }
+              >
+                <SelectTrigger id="create-professional" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Cualquiera (automático)</SelectItem>
+                  {activeProfessionals.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="create-date">Fecha</Label>
@@ -190,13 +221,9 @@ export function CreateDialog({
                 type="date"
                 min={todayStr()}
                 value={form.date}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, date: e.target.value }))
-                }
+                onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
               />
-              {errors.date && (
-                <p className="text-xs text-destructive">{errors.date}</p>
-              )}
+              {errors.date && <p className="text-xs text-destructive">{errors.date}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="create-time">Hora</Label>
@@ -204,13 +231,9 @@ export function CreateDialog({
                 id="create-time"
                 type="time"
                 value={form.time}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, time: e.target.value }))
-                }
+                onChange={(e) => setForm((prev) => ({ ...prev, time: e.target.value }))}
               />
-              {errors.time && (
-                <p className="text-xs text-destructive">{errors.time}</p>
-              )}
+              {errors.time && <p className="text-xs text-destructive">{errors.time}</p>}
             </div>
           </div>
           {form.duration_minutes > 0 && (
@@ -218,9 +241,7 @@ export function CreateDialog({
               Duración estimada: {form.duration_minutes} min
             </p>
           )}
-          {errors._form && (
-            <p className="text-sm text-destructive">{errors._form}</p>
-          )}
+          {errors._form && <p className="text-sm text-destructive">{errors._form}</p>}
         </div>
         <DialogFooter showCloseButton>
           <Button onClick={handleSave} disabled={saving}>

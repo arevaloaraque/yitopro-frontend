@@ -25,11 +25,7 @@ function StepIcon({
   return <span className="text-xs font-semibold tabular-nums">{step}</span>;
 }
 
-export function Stepper({
-  currentStep,
-  completedSteps,
-  onStepClick,
-}: StepperProps) {
+export function Stepper({ currentStep, completedSteps, onStepClick }: StepperProps) {
   return (
     <nav aria-label="Progreso del onboarding" className="mb-10">
       <ol className="flex items-center gap-0">
@@ -46,9 +42,7 @@ export function Stepper({
                 <div
                   className={cn(
                     "h-px flex-1 transition-colors duration-200",
-                    isCompleted || step <= currentStep
-                      ? "bg-primary"
-                      : "bg-border",
+                    isCompleted || step <= currentStep ? "bg-primary" : "bg-border",
                   )}
                 />
               )}
@@ -66,22 +60,16 @@ export function Stepper({
                 <span
                   className={cn(
                     "flex size-7 items-center justify-center rounded-full border-2 text-sm transition-all duration-200",
-                    isCompleted &&
-                      "border-primary bg-primary text-primary-foreground",
+                    isCompleted && "border-primary bg-primary text-primary-foreground",
                     isCurrent && !isCompleted && "border-primary text-primary",
-                    !isCompleted &&
-                      !isCurrent &&
-                      "border-border text-muted-foreground",
+                    !isCompleted && !isCurrent && "border-border text-muted-foreground",
                   )}
                 >
-                  <StepIcon
-                    step={step}
-                    isCompleted={isCompleted}
-                  />
+                  <StepIcon step={step} isCompleted={isCompleted} />
                 </span>
                 <span
                   className={cn(
-                    "text-[0.65rem] font-medium leading-tight transition-colors duration-200",
+                    "text-[0.65rem] leading-tight font-medium transition-colors duration-200",
                     isCurrent
                       ? "text-foreground"
                       : isCompleted

@@ -72,14 +72,10 @@
   /* Elevación: escala suave navy-tinted (nivel 1→5). Contacto fino + ambiente
      difuso. Suaves pero presentes — comunican profundidad sin llamar la atención. */
   --shadow-xs: 0 1px 2px 0 rgb(7 26 58 / 0.05);
-  --shadow-sm:
-    0 1px 2px -1px rgb(7 26 58 / 0.06), 0 2px 4px -1px rgb(7 26 58 / 0.06);
-  --shadow-md:
-    0 2px 4px -2px rgb(7 26 58 / 0.06), 0 6px 14px -3px rgb(7 26 58 / 0.09);
-  --shadow-lg:
-    0 4px 8px -3px rgb(7 26 58 / 0.07), 0 14px 28px -6px rgb(7 26 58 / 0.11);
-  --shadow-xl:
-    0 8px 16px -6px rgb(7 26 58 / 0.10), 0 28px 56px -12px rgb(7 26 58 / 0.20);
+  --shadow-sm: 0 1px 2px -1px rgb(7 26 58 / 0.06), 0 2px 4px -1px rgb(7 26 58 / 0.06);
+  --shadow-md: 0 2px 4px -2px rgb(7 26 58 / 0.06), 0 6px 14px -3px rgb(7 26 58 / 0.09);
+  --shadow-lg: 0 4px 8px -3px rgb(7 26 58 / 0.07), 0 14px 28px -6px rgb(7 26 58 / 0.11);
+  --shadow-xl: 0 8px 16px -6px rgb(7 26 58 / 0.1), 0 28px 56px -12px rgb(7 26 58 / 0.2);
 
   /* Sombras "clay" — offset duro sin blur, color de línea de marca (navy).
      Lenguaje visual de la referencia (claymorphism / soft-neobrutalism). */

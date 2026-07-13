@@ -10,12 +10,10 @@ export interface AssistantConfig {
   display_name: string;
   /** Tone of the responses. */
   tone: AssistantTone;
-  /** Primary language of the responses (BCP-47, e.g. "es"). */
-  language: string;
+  // The assistant's response language is inherited from the business language
+  // (`Business.language`); it is not configured separately.
   /** Welcome message the assistant sends when starting a conversation. */
   welcome_message: string;
-  /** Whether the assistant can operate autonomously without human supervision. */
-  autonomous: boolean;
 }
 
 /** Business (tenant). Mirror of the backend's `Business` schema. */
@@ -31,6 +29,12 @@ export interface Business {
   /** IANA time zone (e.g. "America/Santiago"). */
   timezone: string;
   is_active: boolean;
+  /** Whether the assistant is live and answering customers (active AND status==="active"). */
+  is_operative: boolean;
+  /** Whether a WhatsApp Business channel is connected. */
+  whatsapp_connected: boolean;
+  /** Display phone number of the connected channel ("" when not connected). */
+  whatsapp_number: string;
   onboarding_status: OnboardingStatus;
   assistant_config: AssistantConfig;
 }

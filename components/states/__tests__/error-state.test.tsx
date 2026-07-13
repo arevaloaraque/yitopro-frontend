@@ -18,6 +18,8 @@ describe("ErrorState", () => {
 
   it("hides the retry button when onRetry is not provided", () => {
     render(<ErrorState title="solo" />);
-    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /reintentar/i }),
+    ).not.toBeInTheDocument();
   });
 });

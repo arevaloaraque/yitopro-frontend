@@ -1,4 +1,9 @@
-import type { Business, OnboardingState, ScheduleWindow } from "@/lib/types";
+import type {
+  Business,
+  OnboardingState,
+  ScheduleBlock,
+  ScheduleWindow,
+} from "@/lib/types";
 
 import { api, ApiError } from "./client";
 
@@ -15,6 +20,9 @@ interface BackendBusiness {
   language: string;
   timezone: string;
   active: boolean;
+  is_operative: boolean;
+  whatsapp_connected: boolean;
+  whatsapp_number: string;
   onboarding_status: Business["onboarding_status"];
   assistant_config: Business["assistant_config"];
 }
@@ -28,6 +36,9 @@ function toBusiness(b: BackendBusiness): Business {
     language: b.language,
     timezone: b.timezone,
     is_active: b.active,
+    is_operative: b.is_operative,
+    whatsapp_connected: b.whatsapp_connected,
+    whatsapp_number: b.whatsapp_number,
     onboarding_status: b.onboarding_status,
     assistant_config: b.assistant_config,
   };
@@ -38,13 +49,15 @@ export async function getBusiness(): Promise<Business> {
   return toBusiness(await api.get<BackendBusiness>("/businesses/me/"));
 }
 
-/** Updates business fields (including the nested `assistant_config`). */
+/**
+ * Updates business fields (including the nested `assistant_config`).
+ * `is_active` is not accepted by `BusinessUpdateIn` on the backend — passing
+ * it here is a silent no-op (ninja ignores unknown fields).
+ */
 export async function updateBusiness(
   patch: Partial<Omit<Business, "id">>,
 ): Promise<Business> {
-  const { is_active, ...rest } = patch;
-  const body = is_active === undefined ? rest : { ...rest, active: is_active };
-  return toBusiness(await api.patch<BackendBusiness>("/businesses/me/", body));
+  return toBusiness(await api.patch<BackendBusiness>("/businesses/me/", patch));
 }
 
 /** Detailed onboarding status (the backend already returns the exact shape). */
@@ -66,8 +79,88 @@ export function putBusinessSchedule(
 }
 
 /** Fetches the current business-wide default schedule. */
-export function getBusinessSchedule(): Promise<ScheduleWindow[]> {
-  return api.get<ScheduleWindow[]>("/businesses/me/schedule/");
+export async function getBusinessSchedule(): Promise<ScheduleWindow[]> {
+  return toHmWindows(await api.get<ScheduleWindow[]>("/businesses/me/schedule/"));
+}
+
+/** Normalizes backend "HH:MM:SS" times to the "HH:MM" the time inputs use. */
+export function toHmWindows(windows: ScheduleWindow[]): ScheduleWindow[] {
+  return windows.map((w) => ({
+    day_of_week: w.day_of_week,
+    start_time: w.start_time.slice(0, 5),
+    end_time: w.end_time.slice(0, 5),
+  }));
+}
+
+/**
+ * Business opening hours (drives the AI out-of-hours gate and bounds the
+ * agenda). Empty = unset → always open / no clipping. Separate from the
+ * per-professional schedule (`getBusinessSchedule`/`putBusinessSchedule`).
+ */
+export async function getBusinessHours(): Promise<ScheduleWindow[]> {
+  return toHmWindows(await api.get<ScheduleWindow[]>("/businesses/me/business-hours/"));
+}
+
+/** Replaces the business opening hours; returns the saved windows. */
+export async function putBusinessHours(
+  windows: ScheduleWindow[],
+): Promise<ScheduleWindow[]> {
+  return toHmWindows(
+    await api.put<ScheduleWindow[]>("/businesses/me/business-hours/", windows),
+  );
+}
+
+interface BackendScheduleBlock {
+  id: number;
+  professional_id: number | null;
+  professional_name: string;
+  start_datetime: string;
+  end_datetime: string;
+  reason: string;
+}
+
+function blockFromBackend(b: BackendScheduleBlock): ScheduleBlock {
+  return {
+    id: String(b.id),
+    professional_id: b.professional_id === null ? null : String(b.professional_id),
+    professional_name: b.professional_name,
+    start_datetime: b.start_datetime,
+    end_datetime: b.end_datetime,
+    reason: b.reason,
+  };
+}
+
+/**
+ * Manual time blocks that remove availability (vacations, closures). A block
+ * with `professional_id: null` closes the whole business. Ordered soonest first.
+ */
+export async function getScheduleBlocks(): Promise<ScheduleBlock[]> {
+  const res = await api.get<BackendScheduleBlock[]>("/businesses/me/schedule-blocks/");
+  return res.map(blockFromBackend);
+}
+
+/** Creates a block; `professional_id: null` = whole business. Datetimes are ISO 8601. */
+export async function createScheduleBlock(input: {
+  professional_id: string | null;
+  start_datetime: string;
+  end_datetime: string;
+  reason?: string;
+}): Promise<ScheduleBlock> {
+  const body = {
+    professional_id:
+      input.professional_id === null ? null : Number(input.professional_id),
+    start_datetime: input.start_datetime,
+    end_datetime: input.end_datetime,
+    reason: input.reason ?? "",
+  };
+  return blockFromBackend(
+    await api.post<BackendScheduleBlock>("/businesses/me/schedule-blocks/", body),
+  );
+}
+
+/** Removes a block. */
+export function deleteScheduleBlock(id: string): Promise<void> {
+  return api.delete<void>(`/businesses/me/schedule-blocks/${id}/`);
 }
 
 /**

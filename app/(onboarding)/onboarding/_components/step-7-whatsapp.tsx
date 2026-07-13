@@ -82,7 +82,8 @@ export function Step7WhatsApp() {
     function onMessage(event: MessageEvent) {
       if (!/\.facebook\.com$/.test(new URL(event.origin).hostname)) return;
       try {
-        const info = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        const info =
+          typeof event.data === "string" ? JSON.parse(event.data) : event.data;
         if (info?.type === "WA_EMBEDDED_SIGNUP" && info?.data?.phone_number_id) {
           displayPhoneRef.current = info.data.phone_number_id;
         }
@@ -114,7 +115,11 @@ export function Step7WhatsApp() {
         }
         submitEmbeddedSignupCode(code)
           .then((result) => {
-            setWhatsappConnected(result.phone_number_id, result.waba_id, result.display_phone_number);
+            setWhatsappConnected(
+              result.phone_number_id,
+              result.waba_id,
+              result.display_phone_number,
+            );
             setState("connected");
           })
           .catch((err: unknown) => {
@@ -171,8 +176,10 @@ export function Step7WhatsApp() {
             {data.whatsappNumber ? (
               <>
                 WhatsApp Business vinculado:{" "}
-                <span className="font-medium text-foreground">{data.whatsappNumber}</span>.{" "}
-                Tu asistente atiende 24/7 y deriva a tu equipo cuando hace falta.
+                <span className="font-medium text-foreground">
+                  {data.whatsappNumber}
+                </span>
+                . Tu asistente atiende 24/7 y deriva a tu equipo cuando hace falta.
                 Recomendación: usa este número como tu canal de atención principal.
               </>
             ) : (

@@ -78,9 +78,7 @@ export function HistoryDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Historial de cambios</DialogTitle>
-          <DialogDescription>
-            Cronología de eventos de esta cita.
-          </DialogDescription>
+          <DialogDescription>Cronología de eventos de esta cita.</DialogDescription>
         </DialogHeader>
         <div className="max-h-80 overflow-y-auto">
           {loading ? (
@@ -90,9 +88,7 @@ export function HistoryDialog({
           ) : entries.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <History className="size-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Sin historial disponible.
-              </p>
+              <p className="text-sm text-muted-foreground">Sin historial disponible.</p>
             </div>
           ) : (
             <div className="relative ml-3 border-l border-border py-2 pl-6">

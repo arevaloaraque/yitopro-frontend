@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Pencil, Plus, Scissors } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Pencil, Plus, Search, Sparkles } from "lucide-react";
 import type { Service } from "@/lib/types";
-import { listServices, createService, updateService } from "@/lib/api";
+import { searchServices, createService, updateService } from "@/lib/api";
+import { subscribeToEvents } from "@/lib/sse";
 import { formatPrice } from "@/lib/utils";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ interface FormData {
 }
 
 const emptyForm: FormData = { name: "", duration_minutes: "", price: "" };
+const PAGE_SIZE = 20;
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -53,7 +55,10 @@ function serviceToForm(s: Service): FormData {
 
 export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
+  const [count, setCount] = useState(0);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<Service | null>(null);
@@ -63,37 +68,77 @@ export default function ServicesPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Services list: search + server-side pagination ("load more").
+  const loadServices = useCallback(
+    async (opts: {
+      search: string;
+      offset: number;
+      append: boolean;
+      limit?: number;
+    }) => {
+      setListLoading(true);
       setError(null);
       try {
-        const data = await listServices();
-        if (!cancelled) setServices(data);
+        const res = await searchServices({
+          search: opts.search || undefined,
+          limit: opts.limit ?? PAGE_SIZE,
+          offset: opts.offset,
+        });
+        setServices((prev) => (opts.append ? [...prev, ...res.items] : res.items));
+        setCount(res.count);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Error al cargar servicios");
+        setError(e instanceof Error ? e.message : "Error al cargar servicios");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
+        setListLoading(false);
       }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, []);
+    },
+    [],
+  );
+
+  // Search debounce; also performs the initial load (offset 0, replace).
+  useEffect(() => {
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(
+      () => loadServices({ search, offset: 0, append: false }),
+      250,
+    );
+    return () => clearTimeout(searchTimer.current);
+  }, [search, loadServices]);
+
+  // Live refresh: another operator or the onboarding wizard changed the catalog.
+  // Subscribe once; read the live search term via a ref to avoid re-subscribing.
+  const searchRef = useRef(search);
+  useEffect(() => {
+    searchRef.current = search;
+  });
+  useEffect(() => {
+    return subscribeToEvents((event) => {
+      if (
+        event.type === "servicio_creado" ||
+        event.type === "servicio_actualizado" ||
+        event.type === "servicio_eliminado"
+      ) {
+        loadServices({ search: searchRef.current, offset: 0, append: false });
+      }
+    });
+  }, [loadServices]);
 
   function refetch() {
     setLoading(true);
-    setError(null);
-    listServices()
-      .then(setServices)
-      .catch((e) => setError(e instanceof Error ? e.message : "Error al cargar servicios"))
-      .finally(() => setLoading(false));
+    loadServices({ search, offset: 0, append: false });
   }
 
   function validate(f: FormData): Record<string, string> {
     const errs: Record<string, string> = {};
     if (!f.name.trim()) errs.name = "Requerido";
-    if (!f.duration_minutes.trim() || isNaN(Number(f.duration_minutes)) || Number(f.duration_minutes) <= 0) {
+    if (
+      !f.duration_minutes.trim() ||
+      isNaN(Number(f.duration_minutes)) ||
+      Number(f.duration_minutes) <= 0
+    ) {
       errs.duration_minutes = "Duración inválida";
     }
     if (!f.price.trim() || isNaN(Number(f.price)) || Number(f.price) <= 0) {
@@ -124,6 +169,7 @@ export default function ServicesPage() {
           is_active: true,
         });
         setServices((prev) => [...prev, created]);
+        setCount((c) => c + 1);
       }
       closeDialog();
     } catch (e) {
@@ -136,9 +182,7 @@ export default function ServicesPage() {
   async function toggleActive(service: Service) {
     setActionError(null);
     setServices((prev) =>
-      prev.map((s) =>
-        s.id === service.id ? { ...s, is_active: !s.is_active } : s,
-      ),
+      prev.map((s) => (s.id === service.id ? { ...s, is_active: !s.is_active } : s)),
     );
     try {
       await updateService(service.id, { is_active: !service.is_active });
@@ -182,8 +226,12 @@ export default function ServicesPage() {
     return (
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Servicios</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Los servicios que ofrece tu negocio.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Servicios
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Los servicios que ofrece tu negocio.
+          </p>
         </div>
         <ErrorState description={error} onRetry={refetch} />
       </div>
@@ -194,8 +242,12 @@ export default function ServicesPage() {
     <div className="mx-auto w-full max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Servicios</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Los servicios que ofrece tu negocio.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Servicios
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Los servicios que ofrece tu negocio.
+          </p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="size-4" />
@@ -203,22 +255,39 @@ export default function ServicesPage() {
         </Button>
       </div>
 
-      {actionError && (
-        <p className="text-sm text-destructive">{actionError}</p>
-      )}
+      {actionError && <p className="text-sm text-destructive">{actionError}</p>}
+
+      <div className="relative max-w-xs">
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar servicio…"
+          aria-label="Buscar servicios"
+          className="pl-8"
+        />
+      </div>
 
       {services.length === 0 ? (
-        <EmptyState
-          icon={Scissors}
-          title="Sin servicios"
-          description="Crea tu primer servicio para empezar a agendar."
-          action={
-            <Button onClick={openCreate}>
-              <Plus className="size-4" />
-              Nuevo servicio
-            </Button>
-          }
-        />
+        search ? (
+          <EmptyState
+            icon={Search}
+            title="Sin resultados"
+            description={`No hay servicios que coincidan con "${search}".`}
+          />
+        ) : (
+          <EmptyState
+            icon={Sparkles}
+            title="Sin servicios"
+            description="Crea tu primer servicio para empezar a agendar."
+            action={
+              <Button onClick={openCreate}>
+                <Plus className="size-4" />
+                Nuevo servicio
+              </Button>
+            }
+          />
+        )
       ) : (
         <div className="rounded-xl border border-border">
           <Table>
@@ -246,9 +315,14 @@ export default function ServicesPage() {
                       <Switch
                         checked={s.is_active}
                         onChange={() => toggleActive(s)}
-                        aria-label={s.is_active ? "Desactivar servicio" : "Activar servicio"}
+                        aria-label={
+                          s.is_active ? "Desactivar servicio" : "Activar servicio"
+                        }
                       />
-                      <Badge variant={s.is_active ? "success" : "secondary"} className="text-xs tabular-nums">
+                      <Badge
+                        variant={s.is_active ? "success" : "secondary"}
+                        className="text-xs tabular-nums"
+                      >
                         {s.is_active ? "Activo" : "Inactivo"}
                       </Badge>
                     </div>
@@ -267,6 +341,26 @@ export default function ServicesPage() {
               ))}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {services.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Mostrando {services.length} de {count}
+          </span>
+          {services.length < count && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={listLoading}
+              onClick={() =>
+                loadServices({ search, offset: services.length, append: true })
+              }
+            >
+              {listLoading ? "Cargando…" : "Cargar más"}
+            </Button>
+          )}
         </div>
       )}
 
@@ -289,7 +383,9 @@ export default function ServicesPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Ej. Consulta inicial"
               />
-              {formErrors.name && <p className="text-xs text-destructive">{formErrors.name}</p>}
+              {formErrors.name && (
+                <p className="text-xs text-destructive">{formErrors.name}</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
@@ -299,11 +395,15 @@ export default function ServicesPage() {
                   type="number"
                   min={1}
                   value={form.duration_minutes}
-                  onChange={(e) => setForm((prev) => ({ ...prev, duration_minutes: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, duration_minutes: e.target.value }))
+                  }
                   placeholder="45"
                 />
                 {formErrors.duration_minutes && (
-                  <p className="text-xs text-destructive">{formErrors.duration_minutes}</p>
+                  <p className="text-xs text-destructive">
+                    {formErrors.duration_minutes}
+                  </p>
                 )}
               </div>
               <div className="flex flex-col gap-1.5">
@@ -314,10 +414,14 @@ export default function ServicesPage() {
                   min={1}
                   step="0.01"
                   value={form.price}
-                  onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, price: e.target.value }))
+                  }
                   placeholder="12000"
                 />
-                {formErrors.price && <p className="text-xs text-destructive">{formErrors.price}</p>}
+                {formErrors.price && (
+                  <p className="text-xs text-destructive">{formErrors.price}</p>
+                )}
               </div>
             </div>
             {formErrors._form && (

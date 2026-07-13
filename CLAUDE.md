@@ -12,7 +12,7 @@ real es la única fuente de datos.** No hay mocks en runtime: la UI siempre habl
 - Next.js App Router (v16, Turbopack) + TypeScript + React 19
 - Tailwind CSS **v4** (tokens CSS-first vía `@theme` en `globals.css`, sin `tailwind.config`) + shadcn/ui (base: Base UI)
 - MSW (Mock Service Worker) **solo en tests** (Node); no se carga en runtime
-- `EventSource` nativo para SSE
+- SSE por `fetch`+Bearer (no `EventSource`: el token de acceso va por header)
 - Fuente Inter
 - Tests: Vitest/Jest + React Testing Library (desde F5)
 
@@ -72,9 +72,10 @@ Después de cualquier cambio, antes de dar una tarea por terminada: `npm run lin
   usan `credentials: 'include'`.
 - **No decodificar el access token** en el cliente: es opaco por diseño.
 - Ante `401`, intentar refresh una vez y reintentar; si falla, limpiar sesión y redirigir a `/login`.
-  **Implementado (F4-A):** login/refresh/logout reales (`lib/api/auth.ts`), interceptor single-flight
-  en `lib/api/client.ts`. **Recargar la página fuerza re-login** (token solo en memoria; no se
-  recupera vía cookie en boot frío). El backend debe permitir CORS con credenciales (ver README).
+  **Implementado:** login/refresh/logout reales (`lib/api/auth.ts`), interceptor single-flight
+  en `lib/api/client.ts`. En el **boot** `AuthContext` intenta un refresh silencioso con la cookie
+  httpOnly; si hay sesión válida se restaura al recargar (si no → `/login`). El backend debe
+  permitir CORS con credenciales (ver README).
 - **Sanitizar** todo contenido externo que se renderice (mensajes de WhatsApp de clientes).
 - Solo `NEXT_PUBLIC_*` son públicos; **ningún secreto en el bundle**. `META_APP_SECRET` jamás
   llega al cliente; en Embedded Signup solo el `code` corto viaja al backend.
@@ -83,14 +84,25 @@ Después de cualquier cambio, antes de dar una tarea por terminada: `npm run lin
 ## Estructura del proyecto
 
 ```
-app/                  # rutas (App Router): login, (app)/dashboard, conversations, appointments,
-                      #   services, products, customers, records, agents, settings, onboarding, _design
-components/           # UI: ui/ (shadcn), states/ (loading/empty/error), y componentes compartidos
+app/                  # rutas (App Router): login, activar (set-password de invitación),
+                      #   (onboarding)/onboarding (wizard de 8 pasos), (app)/dashboard, conversations,
+                      #   appointments, services, products, orders, customers (drawer de ficha/notas),
+                      #   agents, settings, _design   (la ficha ya no es una ruta: vive en el drawer)
+components/           # UI: ui/ (shadcn), states/ (loading/empty/error), schedule/ (editor semanal
+                      #   de horarios), orders/, customers/ y componentes compartidos
 lib/
   types/              # tipos de dominio (reflejo del backend)
   api/                # client.ts + servicios tipados por dominio (única capa de red)
   sse/                # abstracción de eventos en tiempo real (interfaz estable)
-  auth/               # AuthContext, useAuth, login/refresh/logout
+  auth/               # AuthContext (login/refresh/logout + acceptInvite), useAuth
+  business/           # BusinessProvider/useBusiness (perfil + config del negocio)
+  agents/             # AgentsProvider/useAgents (agentes de IA)
+  orders/             # OrdersProvider/usePendingOrders (pedidos + badge de pendientes en el nav)
+  schedule/           # windows.ts (grilla semanal ↔ ventanas de horario del backend)
+  notifications/      # NotificationsProvider (toasts + campana alimentados por SSE)
+  consts/             # constantes de dominio compartidas
+  onboarding/         # OnboardingProvider (estado+persistencia del wizard), tipos,
+                      #   use-onboarding-redirect (ruteo por onboarding_status)
 mocks/
   server.ts           # setupServer() de MSW para tests (Node); sin handlers por defecto
 ```
@@ -113,13 +125,45 @@ NEXT_PUBLIC_META_CONFIG_ID=                  # configuration_id de Embedded Sign
 > El backend escucha en **8050** (no 8000). Si el front recibe `ERR_CONNECTION_REFUSED`, casi
 > siempre es `NEXT_PUBLIC_API_URL` apuntando al puerto equivocado o el backend caído.
 
-**Dominios contra el backend real:** auth, services, products, customers, appointments,
-conversations (inbox + tomar/cerrar/reactivar/responder), **SSE** (`lib/sse` lee
-`GET /api/events/stream/` por `fetch`+Bearer, no `EventSource`, porque el token va por header) y
-**WhatsApp Embedded Signup** (`POST /api/whatsapp/embedded-signup/callback/`, solo viaja el `code`).
-Los desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componentes. Ver README.
+**Todos los dominios van al backend real** (ya no queda ningún handler MSW en runtime): auth,
+businesses/settings, agents, services, products, **orders** (listar + confirmar/cancelar +
+badge de pendientes), customers + **records/fichas y notas** (ambos dentro del drawer de cliente),
+appointments, conversations (inbox + tomar/cerrar/reactivar/responder), **onboarding**
+(professionals, horarios, users/invitaciones, `businesses/me/onboarding/{,/complete}`), **SSE**
+(`lib/sse` lee `GET /api/events/stream/` por `fetch`+Bearer, no `EventSource`, porque el token va
+por header) y **WhatsApp Embedded Signup** (`POST /api/whatsapp/embedded-signup/callback/`, solo
+viaja el `code`). Los desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en
+componentes. Ver README.
+
+**Eventos SSE de datos (silenciosos, sin toast):** `cliente_creado`, `cliente_actualizado`,
+`ficha_actualizada`, `nota_creada`, `servicio_creado`, `servicio_actualizado`, `servicio_eliminado`.
+Disparan refetch dirigido en clientes/servicios y en el drawer abierto, con **guarda anti-clobber**
+(no pisan ediciones sin guardar). No generan notificación (son eco de la propia acción del operador
+o de la IA). El stream emite otros eventos que refrescan estado en vivo (p. ej. `agente_actualizado`,
+`negocio_actualizado`, `pedido_creado`); la lista completa está en `lib/types/events.ts`. Diseño de
+estos 7: `docs/superpowers/specs/2026-07-11-sse-customers-services-design.md`.
+
+## Onboarding (wizard)
+
+Flujo invitado por el operador (el backend manda; ver su `CLAUDE.md`):
+
+- El cliente entra por **`/activar?token=…`** (set-password) → `useAuth().acceptInvite`
+  → auto-login → `/onboarding`. El ruteo por `onboarding_status` (login/root/layout vía
+  `lib/onboarding/use-onboarding-redirect`) lleva a un tenant pendiente al wizard y a uno
+  completo a `/dashboard`.
+- **8 pasos**: negocio · profesionales · horarios · servicios · usuarios · whatsapp ·
+  agentes · confirmar. El estado vive en `OnboardingProvider`, que **rehidrata del backend
+  al montar** (no de `sessionStorage`) y **persiste cada paso** de inmediato (cada mutación
+  llama a su `lib/api/*`). `complete()` pega a `POST /businesses/me/onboarding/complete/`
+  (gate server-side) y redirige a `/dashboard`.
+- **Resume**: al recargar marca lo completado, salta al primer paso pendiente y deja
+  navegar a pasos anteriores; horarios y WhatsApp se rehidratan del servidor.
+- Reglas UX: horarios = grilla semanal con "Aplicar a todos" (+ override por profesional,
+  que muestra el **nombre** del profesional); usuarios invita **solo staff** (un único dueño);
+  el estado "WhatsApp conectado" muestra el número real + recomendación, no un id interno.
 
 **Endurecimiento (F5):**
+
 - **Errores**: `lib/errors.ts` (mensajes seguros por código HTTP, sin stack traces) + boundaries
   `app/error.tsx` / `global-error.tsx` / `not-found.tsx`, todos reusando `ErrorState`.
 - **Dark mode**: `next-themes` en `app/providers.tsx` (`attribute="class"`), toggle en el topbar;
@@ -128,7 +172,7 @@ Los desajustes de shape se mapean en `lib/api/<dominio>.ts`, nunca en componente
   (`mocks/server.ts`). **Forms**: RHF + Zod con esquemas en `lib/validation/schemas.ts` (login
   convertido; resto pendiente de migrar — ver README).
 - **CI**: `.github/workflows/ci.yml` (install→lint→typecheck→test→build). **Deploy**: `vercel.json`
-  + `.env.production.example`; en prod `NEXT_PUBLIC_API_URL` apunta al backend desplegado.
+  - `.env.production.example`; en prod `NEXT_PUBLIC_API_URL` apunta al backend desplegado.
 - Antes de cerrar cualquier tarea: `npm run lint`, `npm run typecheck`, `npm run test` y
   `npm run build` deben pasar limpios.
 

@@ -46,17 +46,12 @@ describe("Step3Services (adapted)", () => {
 
     renderStep(<Step3Services />);
 
-    await userEvent.type(
-      await screen.findByLabelText("Nuevo servicio"),
-      "Baño",
-    );
+    await userEvent.type(await screen.findByLabelText("Nuevo servicio"), "Baño");
     await userEvent.clear(screen.getByLabelText("Duración (min)"));
     await userEvent.type(screen.getByLabelText("Duración (min)"), "45");
     await userEvent.clear(screen.getByLabelText("Precio"));
     await userEvent.type(screen.getByLabelText("Precio"), "12000");
-    await userEvent.click(
-      screen.getByRole("button", { name: /agregar servicio/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /agregar servicio/i }));
 
     await waitFor(() =>
       expect(posted).toEqual({
@@ -152,7 +147,6 @@ describe("Step6Agents (adapted)", () => {
             autonomy: "supervised",
             skills: ["agendar"],
             tools: [],
-            escalation_rules: [],
           },
         ],
         count: 1,
@@ -174,7 +168,6 @@ describe("Step6Agents (adapted)", () => {
           autonomy: "supervised",
           skills: ["agendar"],
           tools: [],
-          escalation_rules: [],
         });
       }),
     );

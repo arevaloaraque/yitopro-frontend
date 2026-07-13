@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/lib/auth";
 import { useOnboarding } from "@/lib/onboarding";
 
 type Role = "owner" | "staff";
@@ -24,6 +25,8 @@ function roleLabel(role: Role): string {
  */
 export function StepUsuarios() {
   const { data, inviteUser, removeUser } = useOnboarding();
+  const { user } = useAuth();
+  const isOwner = user?.role === "owner";
 
   const [email, setEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -41,9 +44,7 @@ export function StepUsuarios() {
       await inviteUser({ email: trimmed, role: "staff" });
       setEmail("");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "No se pudo invitar al usuario.",
-      );
+      setError(err instanceof Error ? err.message : "No se pudo invitar al usuario.");
     } finally {
       setInviting(false);
     }
@@ -54,9 +55,7 @@ export function StepUsuarios() {
     try {
       await removeUser(id);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "No se pudo eliminar el usuario.",
-      );
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el usuario.");
     }
   }
 
@@ -69,15 +68,13 @@ export function StepUsuarios() {
             className="flex items-center justify-between gap-3 rounded-xl border border-border/40 p-3"
           >
             <div className="min-w-0">
-              <p className="truncate text-[0.85rem] text-foreground">
-                {user.email}
-              </p>
+              <p className="truncate text-[0.85rem] text-foreground">{user.email}</p>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-[0.65rem]">
                 {roleLabel(user.role)}
               </Badge>
-              {user.role === "owner" ? null : (
+              {user.role === "owner" || !isOwner ? null : (
                 <Button
                   variant="ghost"
                   size="icon-sm"
@@ -93,42 +90,42 @@ export function StepUsuarios() {
         ))}
       </ul>
 
-      {/* Invite form */}
-      <div className="space-y-3 rounded-xl border border-dashed border-border/60 p-3">
-        <p className="text-[0.8rem] font-medium text-foreground">
-          Invitar usuario
-        </p>
-        <div className="space-y-1.5">
-          <Label className="text-xs" htmlFor="invite-email">
-            Correo
-          </Label>
-          <Input
-            id="invite-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="persona@ejemplo.com"
-          />
+      {/* Invite form: only the owner can invite staff */}
+      {isOwner ? (
+        <div className="space-y-3 rounded-xl border border-dashed border-border/60 p-3">
+          <p className="text-[0.8rem] font-medium text-foreground">Invitar usuario</p>
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="invite-email">
+              Correo
+            </Label>
+            <Input
+              id="invite-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="persona@ejemplo.com"
+            />
+          </div>
+          {error ? (
+            <p role="alert" className="text-[0.8rem] text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleInvite}
+            disabled={inviting}
+          >
+            {inviting ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <UserPlus className="size-3.5" />
+            )}
+            Invitar usuario
+          </Button>
         </div>
-        {error ? (
-          <p role="alert" className="text-[0.8rem] text-destructive">
-            {error}
-          </p>
-        ) : null}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleInvite}
-          disabled={inviting}
-        >
-          {inviting ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <UserPlus className="size-3.5" />
-          )}
-          Invitar usuario
-        </Button>
-      </div>
+      ) : null}
 
       <p className="text-[0.7rem] text-muted-foreground">
         Este paso es opcional: puedes continuar solo con tu cuenta de dueño.

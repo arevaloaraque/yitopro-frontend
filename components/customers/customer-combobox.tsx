@@ -59,9 +59,12 @@ export function CustomerCombobox({
         if (!cancelled) setLoading(false);
       }
     }
-    loadInitial();
+    const t = setTimeout(() => {
+      void loadInitial();
+    }, 0);
     return () => {
       cancelled = true;
+      clearTimeout(t);
       clearTimeout(timer.current);
     };
   }, []);

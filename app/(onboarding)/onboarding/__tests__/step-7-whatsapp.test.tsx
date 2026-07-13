@@ -21,7 +21,9 @@ import { useOnboarding } from "@/lib/onboarding";
 
 const mockUseOnboarding = vi.mocked(useOnboarding);
 
-function baseData(overrides: Partial<Parameters<typeof mockUseOnboarding>[0] extends never ? never : ReturnType<typeof mockUseOnboarding>["data"]> = {}) {
+function baseData(
+  overrides: Partial<ReturnType<typeof mockUseOnboarding>["data"]> = {},
+) {
   return {
     businessName: "PET Spa",
     country: "CL",

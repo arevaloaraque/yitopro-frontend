@@ -2,10 +2,7 @@
 export type MessageDirection = "inbound" | "outbound";
 
 /** Who sent the message. */
-export type MessageSender = "customer" | "ai" | "human";
-
-/** Message delivery status. */
-export type MessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
+export type MessageSender = "customer" | "ai" | "human" | "system";
 
 /** Message within a conversation. Mirror of the `Message` schema. */
 export interface Message {
@@ -16,5 +13,4 @@ export interface Message {
   text: string;
   /** ISO 8601. */
   created_at: string;
-  status: MessageStatus;
 }

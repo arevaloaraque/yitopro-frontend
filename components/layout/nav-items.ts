@@ -1,12 +1,12 @@
 import {
   Bot,
   Calendar,
-  ClipboardList,
   LayoutDashboard,
   MessageSquare,
-  Scissors,
+  Receipt,
   Settings,
   ShoppingBag,
+  Sparkles,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -22,10 +22,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Conversaciones", href: "/conversations", icon: MessageSquare },
   { label: "Agenda", href: "/appointments", icon: Calendar },
-  { label: "Servicios", href: "/services", icon: Scissors },
+  { label: "Servicios", href: "/services", icon: Sparkles },
   { label: "Productos", href: "/products", icon: ShoppingBag },
+  { label: "Pedidos", href: "/orders", icon: Receipt },
   { label: "Clientes", href: "/customers", icon: Users },
-  { label: "Fichas", href: "/records", icon: ClipboardList },
   { label: "Agentes", href: "/agents", icon: Bot },
-  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Configuración", href: "/settings", icon: Settings },
 ];

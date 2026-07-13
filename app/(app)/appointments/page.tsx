@@ -7,18 +7,20 @@ import {
   cancelAppointment,
   createAppointment,
   listAppointments,
-  listCustomers,
+  listProfessionals,
   listServices,
   rescheduleAppointment,
 } from "@/lib/api";
 import { subscribeToEvents } from "@/lib/sse";
-import type {
-  Appointment,
-  Customer,
-  Service,
-  SSEEvent,
-} from "@/lib/types";
+import type { Appointment, Professional, Service, SSEEvent } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { EmptyState, ErrorState, Loading } from "@/components/states";
 import { cn } from "@/lib/utils";
 
@@ -35,12 +37,16 @@ type PageState = "loading" | "error" | "ready" | "empty";
 
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [pageState, setPageState] = useState<PageState>("loading");
 
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // Smart filters: "all" or a specific id. Their selectors only render when
+  // there is more than one option to choose from.
+  const [professionalFilter, setProfessionalFilter] = useState<string>("all");
+  const [serviceFilter, setServiceFilter] = useState<string>("all");
 
   const [creating, setCreating] = useState(false);
   const [cancelling, setCancelling] = useState<Appointment | null>(null);
@@ -55,12 +61,12 @@ export default function AppointmentsPage() {
   });
 
   const load = useCallback(async () => {
-    const [appts, custs, svcs] = await Promise.all([
+    const [appts, svcs, pros] = await Promise.all([
       listAppointments(),
-      listCustomers(),
       listServices(),
+      listProfessionals(),
     ]);
-    return { appointments: appts, customers: custs, services: svcs };
+    return { appointments: appts, services: svcs, professionals: pros };
   }, []);
 
   const refetch = useCallback(async () => {
@@ -68,8 +74,8 @@ export default function AppointmentsPage() {
     try {
       const data = await load();
       setAppointments(data.appointments);
-      setCustomers(data.customers);
       setServices(data.services);
+      setProfessionals(data.professionals);
       setPageState(data.appointments.length === 0 ? "empty" : "ready");
     } catch {
       setPageState("error");
@@ -78,19 +84,22 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    load()
-      .then((data) => {
-        if (cancelled) return;
-        setAppointments(data.appointments);
-        setCustomers(data.customers);
-        setServices(data.services);
-        setPageState(data.appointments.length === 0 ? "empty" : "ready");
-      })
-      .catch(() => {
-        if (!cancelled) setPageState("error");
-      });
+    const t = setTimeout(() => {
+      load()
+        .then((data) => {
+          if (cancelled) return;
+          setAppointments(data.appointments);
+          setServices(data.services);
+          setProfessionals(data.professionals);
+          setPageState(data.appointments.length === 0 ? "empty" : "ready");
+        })
+        .catch(() => {
+          if (!cancelled) setPageState("error");
+        });
+    }, 0);
     return () => {
       cancelled = true;
+      clearTimeout(t);
     };
   }, [load]);
 
@@ -125,6 +134,7 @@ export default function AppointmentsPage() {
       customer_id: string;
       start: string;
       end: string;
+      professional_id?: string;
     }) => {
       const created = await createAppointment(input);
       setAppointments((prev) => [...prev, created]);
@@ -133,36 +143,39 @@ export default function AppointmentsPage() {
     [pageState],
   );
 
-  const handleCancel = useCallback(
-    async (id: string, reason?: string) => {
-      const updated = await cancelAppointment(id, reason);
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === id ? updated : a)),
-      );
-      setCancelling(null);
-    },
-    [],
-  );
+  const handleCancel = useCallback(async (id: string, reason?: string) => {
+    const updated = await cancelAppointment(id, reason);
+    setAppointments((prev) => prev.map((a) => (a.id === id ? updated : a)));
+    setCancelling(null);
+  }, []);
 
   const handleReschedule = useCallback(
     async (id: string, next: { start: string; end: string }) => {
       const updated = await rescheduleAppointment(id, next);
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === id ? updated : a)),
-      );
+      setAppointments((prev) => prev.map((a) => (a.id === id ? updated : a)));
       setRescheduling(null);
     },
     [],
   );
 
-  const customerMap = new Map(customers.map((c) => [c.id, c]));
   const serviceMap = new Map(services.map((s) => [s.id, s]));
+  const professionalMap = new Map(professionals.map((p) => [p.id, p]));
+  // Only active professionals are selectable as a filter (they're the ones who
+  // can hold appointments); matches the create dialog's option list.
+  const activeProfessionals = professionals.filter((p) => p.is_active);
 
-  const enrichedAppointments = appointments.map((a) => ({
-    ...a,
-    customerName: customerMap.get(a.customer_id)?.name ?? "Desconocido",
-    serviceName: serviceMap.get(a.service_id)?.name ?? "Servicio",
-  }));
+  const enrichedAppointments = appointments
+    .filter(
+      (a) =>
+        (professionalFilter === "all" || a.professional_id === professionalFilter) &&
+        (serviceFilter === "all" || a.service_id === serviceFilter),
+    )
+    .map((a) => ({
+      ...a,
+      customerName: a.customer_name,
+      serviceName: serviceMap.get(a.service_id)?.name ?? "Servicio",
+      professionalName: professionalMap.get(a.professional_id)?.name ?? "Sin asignar",
+    }));
 
   if (pageState === "loading") {
     return <Loading rows={5} label="Cargando agenda…" />;
@@ -172,10 +185,17 @@ export default function AppointmentsPage() {
     return (
       <div className="mx-auto w-full max-w-6xl space-y-10">
         <div>
-          <h1 className="text-[1.65rem] font-bold tracking-tight text-foreground">Agenda</h1>
-          <p className="mt-1.5 text-[0.8rem] text-muted-foreground">Tus citas y reservas.</p>
+          <h1 className="text-[1.65rem] font-bold tracking-tight text-foreground">
+            Agenda
+          </h1>
+          <p className="mt-1.5 text-[0.8rem] text-muted-foreground">
+            Tus citas y reservas.
+          </p>
         </div>
-        <ErrorState description="Ocurrió un error al cargar la agenda." onRetry={refetch} />
+        <ErrorState
+          description="Ocurrió un error al cargar la agenda."
+          onRetry={refetch}
+        />
       </div>
     );
   }
@@ -185,8 +205,12 @@ export default function AppointmentsPage() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[1.65rem] font-bold tracking-tight text-foreground">Agenda</h1>
-          <p className="mt-1.5 text-[0.8rem] text-muted-foreground">Tus citas y reservas.</p>
+          <h1 className="text-[1.65rem] font-bold tracking-tight text-foreground">
+            Agenda
+          </h1>
+          <p className="mt-1.5 text-[0.8rem] text-muted-foreground">
+            Tus citas y reservas.
+          </p>
         </div>
         <Button onClick={() => setCreating(true)}>
           <Plus className="size-4" />
@@ -194,9 +218,55 @@ export default function AppointmentsPage() {
         </Button>
       </div>
 
-      {/* Toolbar: tabs + view toggle */}
+      {/* Toolbar: tabs + smart filters + view toggle */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <StatusTabs value={statusFilter} onChange={setStatusFilter} />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusTabs value={statusFilter} onChange={setStatusFilter} />
+          {activeProfessionals.length > 1 && (
+            <Select
+              value={professionalFilter}
+              onValueChange={(v) => setProfessionalFilter(v ?? "all")}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-48"
+                aria-label="Filtrar por profesional"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los profesionales</SelectItem>
+                {activeProfessionals.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {services.length > 1 && (
+            <Select
+              value={serviceFilter}
+              onValueChange={(v) => setServiceFilter(v ?? "all")}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-48"
+                aria-label="Filtrar por servicio"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los servicios</SelectItem>
+                {services.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
           <button
             type="button"
@@ -267,6 +337,7 @@ export default function AppointmentsPage() {
         open={creating}
         onOpenChange={setCreating}
         services={services}
+        professionals={professionals}
         onCreate={handleCreate}
       />
 

@@ -39,12 +39,14 @@
 ### Task F1: Types + `lib/api/professionals.ts` (CRUD + schedule)
 
 **Files:**
+
 - Modify: `lib/types/` (add `Professional`, `ScheduleWindow`; export from the types barrel)
 - Create: `lib/api/professionals.ts`
 - Modify: `lib/api/index.ts` (re-export)
 - Test: `lib/api/__tests__/professionals.test.ts`
 
 **Interfaces:**
+
 - Produces: `Professional {id:string; name:string; is_active:boolean}`, `ScheduleWindow {day_of_week:number; start_time:string; end_time:string}`
 - Produces: `listProfessionals()`, `createProfessional({name})`, `updateProfessional(id,{name?,is_active?})`, `deleteProfessional(id)`, `putProfessionalSchedule(id, windows: ScheduleWindow[])`.
 
@@ -55,33 +57,53 @@
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { server } from "@/mocks/server";
-import { createProfessional, listProfessionals, putProfessionalSchedule } from "@/lib/api/professionals";
+import {
+  createProfessional,
+  listProfessionals,
+  putProfessionalSchedule,
+} from "@/lib/api/professionals";
 
 const API = "http://localhost:8050/api";
 
 describe("professionals api", () => {
   it("maps backend active->is_active on list", async () => {
-    server.use(http.get(`${API}/professionals/`, () =>
-      HttpResponse.json([{ id: 1, name: "Ana", active: true }]),
-    ));
+    server.use(
+      http.get(`${API}/professionals/`, () =>
+        HttpResponse.json([{ id: 1, name: "Ana", active: true }]),
+      ),
+    );
     const pros = await listProfessionals();
     expect(pros).toEqual([{ id: "1", name: "Ana", is_active: true }]);
   });
 
   it("sends name on create and maps the result", async () => {
-    server.use(http.post(`${API}/professionals/`, async ({ request }) => {
-      expect(await request.json()).toEqual({ name: "Ana", active: true });
-      return HttpResponse.json({ id: 7, name: "Ana", active: true }, { status: 201 });
-    }));
-    expect(await createProfessional({ name: "Ana" })).toEqual({ id: "7", name: "Ana", is_active: true });
+    server.use(
+      http.post(`${API}/professionals/`, async ({ request }) => {
+        expect(await request.json()).toEqual({ name: "Ana", active: true });
+        return HttpResponse.json({ id: 7, name: "Ana", active: true }, { status: 201 });
+      }),
+    );
+    expect(await createProfessional({ name: "Ana" })).toEqual({
+      id: "7",
+      name: "Ana",
+      is_active: true,
+    });
   });
 
   it("PUTs schedule windows as a list", async () => {
-    server.use(http.put(`${API}/professionals/7/schedule/`, async ({ request }) => {
-      expect(await request.json()).toEqual([{ day_of_week: 0, start_time: "09:00", end_time: "18:00" }]);
-      return HttpResponse.json([{ day_of_week: 0, start_time: "09:00", end_time: "18:00" }]);
-    }));
-    const out = await putProfessionalSchedule("7", [{ day_of_week: 0, start_time: "09:00", end_time: "18:00" }]);
+    server.use(
+      http.put(`${API}/professionals/7/schedule/`, async ({ request }) => {
+        expect(await request.json()).toEqual([
+          { day_of_week: 0, start_time: "09:00", end_time: "18:00" },
+        ]);
+        return HttpResponse.json([
+          { day_of_week: 0, start_time: "09:00", end_time: "18:00" },
+        ]);
+      }),
+    );
+    const out = await putProfessionalSchedule("7", [
+      { day_of_week: 0, start_time: "09:00", end_time: "18:00" },
+    ]);
     expect(out).toHaveLength(1);
   });
 });
@@ -101,8 +123,8 @@ export interface Professional {
 
 export interface ScheduleWindow {
   day_of_week: number; // 0=Mon … 6=Sun
-  start_time: string;  // "HH:MM"
-  end_time: string;    // "HH:MM"
+  start_time: string; // "HH:MM"
+  end_time: string; // "HH:MM"
 }
 ```
 
@@ -112,25 +134,49 @@ export interface ScheduleWindow {
 import type { Professional, ScheduleWindow } from "@/lib/types";
 import { api } from "./client";
 
-interface BackendProfessional { id: number; name: string; active: boolean }
-const fromBackend = (p: BackendProfessional): Professional => ({ id: String(p.id), name: p.name, is_active: p.active });
+interface BackendProfessional {
+  id: number;
+  name: string;
+  active: boolean;
+}
+const fromBackend = (p: BackendProfessional): Professional => ({
+  id: String(p.id),
+  name: p.name,
+  is_active: p.active,
+});
 
 export async function listProfessionals(): Promise<Professional[]> {
   return (await api.get<BackendProfessional[]>("/professionals/")).map(fromBackend);
 }
-export async function createProfessional(input: { name: string; is_active?: boolean }): Promise<Professional> {
-  return fromBackend(await api.post<BackendProfessional>("/professionals/", { name: input.name, active: input.is_active ?? true }));
+export async function createProfessional(input: {
+  name: string;
+  is_active?: boolean;
+}): Promise<Professional> {
+  return fromBackend(
+    await api.post<BackendProfessional>("/professionals/", {
+      name: input.name,
+      active: input.is_active ?? true,
+    }),
+  );
 }
-export async function updateProfessional(id: string, patch: { name?: string; is_active?: boolean }): Promise<Professional> {
+export async function updateProfessional(
+  id: string,
+  patch: { name?: string; is_active?: boolean },
+): Promise<Professional> {
   const body: Record<string, unknown> = {};
   if (patch.name !== undefined) body.name = patch.name;
   if (patch.is_active !== undefined) body.active = patch.is_active;
-  return fromBackend(await api.patch<BackendProfessional>(`/professionals/${id}/`, body));
+  return fromBackend(
+    await api.patch<BackendProfessional>(`/professionals/${id}/`, body),
+  );
 }
 export function deleteProfessional(id: string): Promise<void> {
   return api.delete<void>(`/professionals/${id}/`);
 }
-export function putProfessionalSchedule(id: string, windows: ScheduleWindow[]): Promise<ScheduleWindow[]> {
+export function putProfessionalSchedule(
+  id: string,
+  windows: ScheduleWindow[],
+): Promise<ScheduleWindow[]> {
   return api.put<ScheduleWindow[]>(`/professionals/${id}/schedule/`, windows);
 }
 ```
@@ -144,10 +190,12 @@ export function putProfessionalSchedule(id: string, windows: ScheduleWindow[]): 
 ### Task F2: `lib/api/users.ts` (system users) + `lib/api/businesses.ts` additions
 
 **Files:**
+
 - Create: `lib/api/users.ts`; Modify: `lib/types/` (add `SystemUser`), `lib/api/index.ts`, `lib/api/businesses.ts`
 - Test: `lib/api/__tests__/users.test.ts`, extend `lib/api/__tests__/businesses.test.ts` (or create)
 
 **Interfaces:**
+
 - Produces: `SystemUser {id:string; email:string; role:"owner"|"staff"; is_active:boolean}`; `listUsers()`, `inviteUser({email, role})`, `deleteUser(id)`.
 - Produces (businesses): `putBusinessSchedule(windows: ScheduleWindow[])`, `completeOnboarding(): Promise<{missing_steps?: string[]; ok: boolean}>`.
 
@@ -162,15 +210,25 @@ import { inviteUser, listUsers } from "@/lib/api/users";
 const API = "http://localhost:8050/api";
 
 it("lists users mapping role/active", async () => {
-  server.use(http.get(`${API}/users/`, () =>
-    HttpResponse.json([{ id: 3, email: "a@b.cl", role: "staff", is_active: true }])));
-  expect(await listUsers()).toEqual([{ id: "3", email: "a@b.cl", role: "staff", is_active: true }]);
+  server.use(
+    http.get(`${API}/users/`, () =>
+      HttpResponse.json([{ id: 3, email: "a@b.cl", role: "staff", is_active: true }]),
+    ),
+  );
+  expect(await listUsers()).toEqual([
+    { id: "3", email: "a@b.cl", role: "staff", is_active: true },
+  ]);
 });
 it("invites a user (POST email+role)", async () => {
-  server.use(http.post(`${API}/users/`, async ({ request }) => {
-    expect(await request.json()).toEqual({ email: "x@y.cl", role: "staff" });
-    return HttpResponse.json({ id: 9, email: "x@y.cl", role: "staff", is_active: true }, { status: 201 });
-  }));
+  server.use(
+    http.post(`${API}/users/`, async ({ request }) => {
+      expect(await request.json()).toEqual({ email: "x@y.cl", role: "staff" });
+      return HttpResponse.json(
+        { id: 9, email: "x@y.cl", role: "staff", is_active: true },
+        { status: 201 },
+      );
+    }),
+  );
   expect((await inviteUser({ email: "x@y.cl", role: "staff" })).id).toBe("9");
 });
 ```
@@ -178,14 +236,33 @@ it("invites a user (POST email+role)", async () => {
 ```ts
 // add to lib/api/__tests__/businesses.test.ts
 it("completeOnboarding returns ok on 200", async () => {
-  server.use(http.post(`${API}/businesses/me/onboarding/complete/`, () =>
-    HttpResponse.json({ id: 1, name: "Acme", country:"CL", currency:"CLP", language:"es", timezone:"America/Santiago", active:true, onboarding_status:"completed", assistant_config:{} })));
+  server.use(
+    http.post(`${API}/businesses/me/onboarding/complete/`, () =>
+      HttpResponse.json({
+        id: 1,
+        name: "Acme",
+        country: "CL",
+        currency: "CLP",
+        language: "es",
+        timezone: "America/Santiago",
+        active: true,
+        onboarding_status: "completed",
+        assistant_config: {},
+      }),
+    ),
+  );
   expect(await completeOnboarding()).toEqual({ ok: true });
 });
 it("completeOnboarding returns missing_steps on 400", async () => {
-  server.use(http.post(`${API}/businesses/me/onboarding/complete/`, () =>
-    HttpResponse.json({ missing_steps: ["whatsapp"] }, { status: 400 })));
-  expect(await completeOnboarding()).toEqual({ ok: false, missing_steps: ["whatsapp"] });
+  server.use(
+    http.post(`${API}/businesses/me/onboarding/complete/`, () =>
+      HttpResponse.json({ missing_steps: ["whatsapp"] }, { status: 400 }),
+    ),
+  );
+  expect(await completeOnboarding()).toEqual({
+    ok: false,
+    missing_steps: ["whatsapp"],
+  });
 });
 ```
 
@@ -196,13 +273,28 @@ it("completeOnboarding returns missing_steps on 400", async () => {
 ```ts
 import type { SystemUser } from "@/lib/types";
 import { api } from "./client";
-interface BackendUser { id: number; email: string; role: "owner" | "staff"; is_active: boolean }
-const fromBackend = (u: BackendUser): SystemUser => ({ id: String(u.id), email: u.email, role: u.role, is_active: u.is_active });
+interface BackendUser {
+  id: number;
+  email: string;
+  role: "owner" | "staff";
+  is_active: boolean;
+}
+const fromBackend = (u: BackendUser): SystemUser => ({
+  id: String(u.id),
+  email: u.email,
+  role: u.role,
+  is_active: u.is_active,
+});
 export async function listUsers(): Promise<SystemUser[]> {
   return (await api.get<BackendUser[]>("/users/")).map(fromBackend);
 }
-export async function inviteUser(input: { email: string; role: "owner" | "staff" }): Promise<SystemUser> {
-  return fromBackend(await api.post<BackendUser>("/users/", { email: input.email, role: input.role }));
+export async function inviteUser(input: {
+  email: string;
+  role: "owner" | "staff";
+}): Promise<SystemUser> {
+  return fromBackend(
+    await api.post<BackendUser>("/users/", { email: input.email, role: input.role }),
+  );
 }
 export function deleteUser(id: string): Promise<void> {
   return api.delete<void>(`/users/${id}/`);
@@ -215,11 +307,19 @@ export function deleteUser(id: string): Promise<void> {
 import { ApiError } from "./client";
 import type { ScheduleWindow } from "@/lib/types";
 
-export function putBusinessSchedule(windows: ScheduleWindow[]): Promise<{ professionals_updated: number }> {
-  return api.put<{ professionals_updated: number }>("/businesses/me/schedule/", windows);
+export function putBusinessSchedule(
+  windows: ScheduleWindow[],
+): Promise<{ professionals_updated: number }> {
+  return api.put<{ professionals_updated: number }>(
+    "/businesses/me/schedule/",
+    windows,
+  );
 }
 
-export async function completeOnboarding(): Promise<{ ok: boolean; missing_steps?: string[] }> {
+export async function completeOnboarding(): Promise<{
+  ok: boolean;
+  missing_steps?: string[];
+}> {
   try {
     await api.post("/businesses/me/onboarding/complete/");
     return { ok: true };
@@ -240,10 +340,12 @@ export async function completeOnboarding(): Promise<{ ok: boolean; missing_steps
 ### Task F3: `lib/api/invite.ts` + AuthContext `acceptInvite`
 
 **Files:**
+
 - Create: `lib/api/invite.ts`; Modify: `lib/api/index.ts`, `lib/auth/AuthContext.tsx`, `lib/auth/useAuth.ts` (if it re-exports the type)
 - Test: `lib/api/__tests__/invite.test.ts`, extend `lib/auth/__tests__/auth.test.tsx`
 
 **Interfaces:**
+
 - Produces (`lib/api/invite.ts`): `validateInvite(token): Promise<boolean>`; `acceptInvite(token, password): Promise<{access_token:string}>`.
 - Produces (AuthContext): `acceptInvite(token: string, password: string): Promise<void>` on `AuthContextValue` — sets the in-memory token + loads the user (mirrors `login`).
 
@@ -257,14 +359,22 @@ import { server } from "@/mocks/server";
 import { acceptInvite, validateInvite } from "@/lib/api/invite";
 const API = "http://localhost:8050/api";
 it("validateInvite returns the boolean", async () => {
-  server.use(http.get(`${API}/auth/invite/validate/`, () => HttpResponse.json({ valid: true })));
+  server.use(
+    http.get(`${API}/auth/invite/validate/`, () => HttpResponse.json({ valid: true })),
+  );
   expect(await validateInvite("tok")).toBe(true);
 });
 it("acceptInvite posts token+password and returns access_token", async () => {
-  server.use(http.post(`${API}/auth/invite/accept/`, async ({ request }) => {
-    expect(await request.json()).toEqual({ token: "tok", password: "S3cret!!" });
-    return HttpResponse.json({ access_token: "AAA", expires_in: 3600, token_type: "Bearer" });
-  }));
+  server.use(
+    http.post(`${API}/auth/invite/accept/`, async ({ request }) => {
+      expect(await request.json()).toEqual({ token: "tok", password: "S3cret!!" });
+      return HttpResponse.json({
+        access_token: "AAA",
+        expires_in: 3600,
+        token_type: "Bearer",
+      });
+    }),
+  );
   expect((await acceptInvite("tok", "S3cret!!")).access_token).toBe("AAA");
 });
 ```
@@ -275,9 +385,14 @@ it("acceptInvite posts token+password and returns access_token", async () => {
 ```ts
 import { api } from "./client";
 export async function validateInvite(token: string): Promise<boolean> {
-  return (await api.get<{ valid: boolean }>("/auth/invite/validate/", { query: { token } })).valid;
+  return (
+    await api.get<{ valid: boolean }>("/auth/invite/validate/", { query: { token } })
+  ).valid;
 }
-export function acceptInvite(token: string, password: string): Promise<{ access_token: string; expires_in: number; token_type: string }> {
+export function acceptInvite(
+  token: string,
+  password: string,
+): Promise<{ access_token: string; expires_in: number; token_type: string }> {
   // skipRefresh: a 400 here is "bad token/weak password", not an expired session.
   return api.post("/auth/invite/accept/", { token, password }, { skipRefresh: true });
 }
@@ -312,10 +427,12 @@ const acceptInvite = useCallback(async (token: string, password: string) => {
 ### Task F4: `/activar` set-password page
 
 **Files:**
+
 - Create: `app/activar/page.tsx`
 - Test: `app/activar/__tests__/page.test.tsx` (or co-located per repo convention)
 
 **Interfaces:**
+
 - Consumes: `validateInvite` (api), `useAuth().acceptInvite`, `loginSchema`-style Zod (reuse a password schema), `next/navigation` router.
 
 - [ ] **Step 1: Failing test** — render `/activar?token=tok`; MSW `validate` → true; fill password; submit; MSW `accept` → token; assert it navigates to `/onboarding`. And: `validate` → false renders an "invalid/expired link" message (no form). Use the login page test as the pattern; read `app/login/__tests__` for how `useAuth`/router are provided.
@@ -336,11 +453,13 @@ const acceptInvite = useCallback(async (token: string, password: string) => {
 ### Task F5: Onboarding-aware routing (fix the orphaned wizard)
 
 **Files:**
+
 - Create: `lib/onboarding/use-onboarding-redirect.ts` (a small hook) OR a guard component `components/onboarding/onboarding-gate.tsx`
 - Modify: `app/login/page.tsx` (post-login redirect), `app/page.tsx` (root), the authenticated `(app)` layout and the `(onboarding)` layout
 - Test: `lib/onboarding/__tests__/use-onboarding-redirect.test.tsx`
 
 **Interfaces:**
+
 - Produces: a hook `useOnboardingRedirect()` that, for an authenticated user, calls `getOnboardingStatus()` once and returns `{ status: "loading" | "ready", target: "/onboarding" | "/dashboard" | null }`; `target` is `/onboarding` when `onboarding_status !== "completed"`, else null (stay).
 
 - [ ] **Step 1: Failing test** — mock `getOnboardingStatus` (MSW) returning `status: "not_started"` → hook yields `target: "/onboarding"`; returning `"completed"` → `target: null`.
@@ -362,11 +481,13 @@ const acceptInvite = useCallback(async (token: string, password: string) => {
 ### Task F6: Wizard data model (`types.ts`) — 8 steps, server-shaped
 
 **Files:**
+
 - Modify: `lib/onboarding/types.ts`
 - Remove: `lib/onboarding/templates.ts` (and any import of it)
 - Test: `lib/onboarding/__tests__/types.test.ts` (light)
 
 **Interfaces:**
+
 - Produces: `OnboardingStep = 1..8`; `TOTAL_STEPS = 8`; `STEP_LABELS = {1:"Negocio",2:"Profesionales",3:"Horarios",4:"Servicios",5:"Usuarios",6:"WhatsApp",7:"Agentes",8:"Confirmar"}`. `OnboardingData` reshaped to: `businessName,country,currency,language,timezone`; `professionals: Professional[]`; `weeklySchedule: ScheduleWindow[]` (the business-level template) + optional per-pro overrides map; `services: Service[]`; `users: SystemUser[]`; `agents: Agent[]` (only available ones, hydrated from `GET /agents/`); `whatsappConnected/phoneNumberId/wabaId`. Drop `selectedTemplate`, `products`, `recordFields`, `activated`.
 
 - [ ] **Step 1–4:** Rewrite the `OnboardingStep`/`TOTAL_STEPS`/`STEP_LABELS`/`OnboardingData`/`createEmptyOnboardingData` per the interface above; delete `templates.ts`; fix the now-broken imports (the context + step-2 will be rewritten in later tasks — it is fine for those to be temporarily red until their task runs, but DO keep `types.ts` itself compiling). A light test asserts `TOTAL_STEPS===8` and the labels. **Checkpoint:** `npm run typecheck` will surface every consumer that must change — note them for Tasks F7–F9 (expected).
@@ -378,10 +499,12 @@ const acceptInvite = useCallback(async (token: string, password: string) => {
 ### Task F7: Onboarding context rewrite (server persistence + rehydration)
 
 **Files:**
+
 - Modify: `lib/onboarding/onboarding-context.tsx`
 - Test: `lib/onboarding/__tests__/onboarding-context.test.tsx`
 
 **Interfaces:**
+
 - Produces a context that: on mount **rehydrates** from the server (`listProfessionals`, `listServices`, `listUsers`, `getAgents`, `getBusiness`) into `data` (loading state while fetching); exposes per-step mutators that **persist immediately** to the backend and update local state from the response; and `complete()` that calls `completeOnboarding()` and routes (`/dashboard` on ok; sets `completeError`/missing steps on 400).
 - Mutators: `updateBusinessInfo` (→ `updateBusiness`), professionals add/update/remove (→ professionals api), `saveWeeklySchedule(windows)` (→ `putBusinessSchedule`), per-pro `saveProfessionalSchedule(id, windows)`, services add/update/remove (→ services api incl. new `deleteService`), users invite/remove (→ users api), agent toggle/autonomy (→ `updateAgent`), `setWhatsappConnected`. Remove all template/products/records logic and `sessionStorage`.
 
@@ -410,10 +533,12 @@ const acceptInvite = useCallback(async (token: string, password: string) => {
 ### Task F8: Wizard shell — `page.tsx` + `stepper.tsx` (8 steps)
 
 **Files:**
+
 - Modify: `app/(onboarding)/onboarding/page.tsx`, `app/(onboarding)/onboarding/_components/stepper.tsx`
 - Test: extend/replace `app/(onboarding)/onboarding/__tests__` if present
 
 **Interfaces:**
+
 - Consumes: the F7 context. Renders `Stepper` (8) + the current step component (switch 1..8) + Anterior/Siguiente nav with per-step validation; step 8 has no "Siguiente" (terminal — its own activate button). Shows a `loading` state while the context rehydrates.
 
 - [ ] **Steps:** Update `TOTAL_STEPS` usage, the `switch` to map 1..8 to the new step components (Task F9), per-step `validateStep` (negocio: required fields; profesionales: ≥1; horarios: ≥1 day open; servicios: ≥1 valid; usuarios: none/optional; whatsapp: connected; agentes: none required; confirmar: none). Stepper renders 8 circles with `STEP_LABELS`. Render `<Loading>` while `loading`. Mirror the existing page/stepper structure. **Checkpoint** after F9 (page references the new step components).
@@ -423,6 +548,7 @@ const acceptInvite = useCallback(async (token: string, password: string) => {
 ### Task F9: Step components (build new, adapt kept, delete removed)
 
 **Files:**
+
 - Create: `_components/step-profesionales.tsx`, `_components/step-horarios.tsx`, `_components/step-usuarios.tsx`, `_components/step-confirmar.tsx`
 - Modify/rename: `step-1-business-info.tsx` (keep), `step-3-services.tsx` → services step (keep/adapt to context API), `step-7-whatsapp.tsx` (keep), `step-6-agents.tsx` → agents step (adapt to available agents + `toggleAgent`/autonomy)
 - Delete: `step-2-template.tsx`, `step-4-products.tsx`, `step-5-records.tsx`, `step-8-test.tsx`, `step-9-activation.tsx` (replaced by `step-confirmar.tsx`)
@@ -453,6 +579,7 @@ const acceptInvite = useCallback(async (token: string, password: string) => {
 ---
 
 ## Self-review notes
+
 - **Spec §3 coverage:** /activar (F4), routing/guards (F5), wizard refactor + rehydration + per-step persistence (F6–F9), schedules UX "aplicar a todos" (F9 step-horarios), removed template/products/records/test (F6, F9), stop sending active/onboarding_status (F7 uses `completeOnboarding`, not a status PATCH). API client functions (F1–F3).
 - **Ordering risk:** F6 intentionally breaks consumers until F9; execute F6–F9 as a contiguous block and only judge the suite green at F9. Tasks F1–F5 are independently green.
 - **Type consistency:** `Professional/ScheduleWindow/SystemUser` defined in F1/F2 and consumed by F7/F9; `completeOnboarding(): {ok, missing_steps?}` shape consistent F2↔F7↔F9; `acceptInvite` signature consistent F3 (api) ↔ F3 (AuthContext) ↔ F4 (page).

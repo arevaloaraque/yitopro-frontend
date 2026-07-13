@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
   },
+  // Orígenes permitidos para el dev server (cross-origin). Editable vía env:
+  // ALLOWED_DEV_ORIGINS="foo.local,192.168.1.5" (separados por coma).
+  allowedDevOrigins: process.env.ALLOWED_DEV_ORIGINS?.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
 };
 
 export default nextConfig;

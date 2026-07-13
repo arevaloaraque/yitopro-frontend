@@ -27,7 +27,12 @@ export function mockAuthenticatedSession() {
       }),
     ),
     http.get(`${BASE}/auth/me/`, () =>
-      HttpResponse.json({ id: "u1", email: "owner@petspa.cl", name: "Owner" }),
+      HttpResponse.json({
+        id: "u1",
+        email: "owner@petspa.cl",
+        name: "Owner",
+        role: "owner",
+      }),
     ),
   );
 }
@@ -45,9 +50,12 @@ export function mockRehydration(overrides: RehydrationOverrides = {}) {
     http.get(`${BASE}/professionals/`, () =>
       HttpResponse.json(overrides.professionals ?? []),
     ),
-    http.get(`${BASE}/services/`, () =>
-      HttpResponse.json(overrides.services ?? []),
-    ),
+    http.get(`${BASE}/services/`, () => {
+      // The services endpoint is paginated ({ items, count }); wrap the
+      // override (a bare array) into the envelope listServices expects.
+      const items = (overrides.services as unknown[]) ?? [];
+      return HttpResponse.json({ items, count: items.length });
+    }),
     http.get(`${BASE}/users/`, () =>
       HttpResponse.json(
         overrides.users ?? [

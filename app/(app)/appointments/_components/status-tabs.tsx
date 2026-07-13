@@ -8,9 +8,9 @@ export type StatusFilter = AppointmentStatus | "all";
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "scheduled", label: "Agendadas" },
-  { value: "rescheduled", label: "Reagendadas" },
   { value: "cancelled", label: "Canceladas" },
   { value: "completed", label: "Completadas" },
+  { value: "no_show", label: "No asistió" },
 ];
 
 interface StatusTabsProps {
@@ -20,7 +20,7 @@ interface StatusTabsProps {
 
 export function StatusTabs({ value, onChange }: StatusTabsProps) {
   return (
-    <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex max-w-full [scrollbar-width:none] items-center gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 [&::-webkit-scrollbar]:hidden">
       {STATUS_OPTIONS.map((opt) => (
         <button
           key={opt.value}

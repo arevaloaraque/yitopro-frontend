@@ -46,10 +46,10 @@ function statusBadge(status: Appointment["status"]) {
       return { label: "Agendada", variant: "info" as const };
     case "cancelled":
       return { label: "Cancelada", variant: "destructive" as const };
-    case "rescheduled":
-      return { label: "Reagendada", variant: "warning" as const };
     case "completed":
       return { label: "Completada", variant: "success" as const };
+    case "no_show":
+      return { label: "No asistió", variant: "secondary" as const };
   }
 }
 
@@ -71,6 +71,7 @@ export function AppointmentListView({
         <TableRow>
           <TableHead>Servicio</TableHead>
           <TableHead>Cliente</TableHead>
+          <TableHead>Profesional</TableHead>
           <TableHead>Fecha</TableHead>
           <TableHead>Hora</TableHead>
           <TableHead>Estado</TableHead>
@@ -81,7 +82,7 @@ export function AppointmentListView({
       <TableBody>
         {filtered.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+            <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
               Sin citas{statusFilter !== "all" ? ` en estado "${statusFilter}"` : ""}
             </TableCell>
           </TableRow>
@@ -92,6 +93,9 @@ export function AppointmentListView({
               <TableRow key={apt.id}>
                 <TableCell className="font-medium">{apt.serviceName}</TableCell>
                 <TableCell>{apt.customerName}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {apt.professionalName}
+                </TableCell>
                 <TableCell className="text-muted-foreground tabular-nums">
                   {formatDate(apt.start)}
                 </TableCell>
@@ -103,7 +107,10 @@ export function AppointmentListView({
                 </TableCell>
                 <TableCell>
                   {apt.created_by === "ai" ? (
-                    <Badge variant="outline" className="border-accent/30 bg-accent/10 text-accent">
+                    <Badge
+                      variant="outline"
+                      className="border-accent/30 bg-accent/10 text-accent"
+                    >
                       IA
                     </Badge>
                   ) : (

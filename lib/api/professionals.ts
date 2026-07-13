@@ -1,5 +1,6 @@
 import type { Professional, ScheduleWindow } from "@/lib/types";
 
+import { toHmWindows } from "./businesses";
 import { api } from "./client";
 
 /**
@@ -26,7 +27,10 @@ export async function listProfessionals(): Promise<Professional[]> {
   return res.map(fromBackend);
 }
 
-export function createProfessional(input: { name: string; is_active?: boolean }): Promise<Professional> {
+export function createProfessional(input: {
+  name: string;
+  is_active?: boolean;
+}): Promise<Professional> {
   return api
     .post<BackendProfessional>("/professionals/", {
       name: input.name,
@@ -42,21 +46,25 @@ export function updateProfessional(
   const body: Record<string, unknown> = {};
   if (patch.name !== undefined) body.name = patch.name;
   if (patch.is_active !== undefined) body.active = patch.is_active;
-  return api.patch<BackendProfessional>(`/professionals/${id}/`, body).then(fromBackend);
+  return api
+    .patch<BackendProfessional>(`/professionals/${id}/`, body)
+    .then(fromBackend);
 }
 
 export function deleteProfessional(id: string): Promise<void> {
   return api.delete<void>(`/professionals/${id}/`);
 }
 
-export function putProfessionalSchedule(
+export async function putProfessionalSchedule(
   id: string,
   windows: ScheduleWindow[],
 ): Promise<ScheduleWindow[]> {
-  return api.put<ScheduleWindow[]>(`/professionals/${id}/schedule/`, windows);
+  return toHmWindows(
+    await api.put<ScheduleWindow[]>(`/professionals/${id}/schedule/`, windows),
+  );
 }
 
 /** Fetches a single professional's schedule windows. */
-export function getProfessionalSchedule(id: string): Promise<ScheduleWindow[]> {
-  return api.get<ScheduleWindow[]>(`/professionals/${id}/schedule/`);
+export async function getProfessionalSchedule(id: string): Promise<ScheduleWindow[]> {
+  return toHmWindows(await api.get<ScheduleWindow[]>(`/professionals/${id}/schedule/`));
 }

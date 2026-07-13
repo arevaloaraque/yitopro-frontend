@@ -21,6 +21,12 @@ export default defineConfig({
       NEXT_PUBLIC_API_MOCKING: "disabled",
     },
     include: ["**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["node_modules", ".next", "e2e", "dist"],
+    exclude: [
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/.opencode/**",
+      "e2e/**",
+      "**/dist/**",
+    ],
   },
 });

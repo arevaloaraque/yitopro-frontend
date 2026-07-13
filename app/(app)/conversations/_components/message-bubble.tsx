@@ -26,6 +26,8 @@ function senderLabel(sender: Message["sender"]): string {
       return "IA";
     case "human":
       return "Operador";
+    case "system":
+      return "Sistema";
   }
 }
 
@@ -42,29 +44,26 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={cn(
           "max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-          message.sender === "customer" &&
-            "rounded-bl-md bg-muted text-foreground",
-          message.sender === "ai" && "rounded-br-md bg-primary/10 text-foreground",
+          message.sender === "customer" && "rounded-bl-md bg-muted text-foreground",
+          // "system" (automated messages) reuses the "ai" bubble style, just
+          // with a different label below — no separate visual treatment.
+          (message.sender === "ai" || message.sender === "system") &&
+            "rounded-br-md bg-primary/10 text-foreground",
           message.sender === "human" &&
             "rounded-br-md bg-primary text-primary-foreground shadow-sm",
         )}
       >
-        <span className="whitespace-pre-wrap break-words">
+        <span className="break-words whitespace-pre-wrap">
           {stripTags(message.text)}
         </span>
       </div>
       <div className="flex items-center gap-1.5 px-2">
-        <span className="select-none text-[10px] text-muted-foreground">
+        <span className="text-[10px] text-muted-foreground select-none">
           {senderLabel(message.sender)}
         </span>
-        <span className="select-none text-[10px] text-muted-foreground/50">
+        <span className="text-[10px] text-muted-foreground/50 select-none">
           {formatTime(message.created_at)}
         </span>
-        {message.status === "failed" ? (
-          <span className="select-none text-[10px] text-destructive">
-            Error
-          </span>
-        ) : null}
       </div>
     </div>
   );

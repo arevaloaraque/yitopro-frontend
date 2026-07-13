@@ -3,10 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { buildWindows } from "@/lib/schedule/windows";
 import type { ScheduleWindow } from "@/lib/types";
 import { server } from "@/mocks/server";
 
-import { StepHorarios, buildWindows } from "../_components/step-horarios";
+import { StepHorarios } from "../_components/step-horarios";
 import {
   BASE,
   mockAuthenticatedSession,
@@ -27,7 +28,13 @@ beforeEach(() => {
 describe("buildWindows", () => {
   it("emits one window per open day per valid range and drops invalid/closed days", () => {
     const windows = buildWindows([
-      { open: true, ranges: [{ start: "09:00", end: "13:00" }, { start: "15:00", end: "18:00" }] }, // Mon (0)
+      {
+        open: true,
+        ranges: [
+          { start: "09:00", end: "13:00" },
+          { start: "15:00", end: "18:00" },
+        ],
+      }, // Mon (0)
       { open: false, ranges: [{ start: "09:00", end: "18:00" }] }, // Tue closed
       { open: true, ranges: [{ start: "10:00", end: "10:00" }] }, // Wed invalid (start==end)
       { open: false, ranges: [] },
@@ -55,9 +62,7 @@ describe("StepHorarios", () => {
 
     // Wait for load; then Lunes switch should be checked
     await waitFor(() =>
-      expect(
-        screen.getByRole("switch", { name: /lunes abierto/i }),
-      ).toBeChecked(),
+      expect(screen.getByRole("switch", { name: /lunes abierto/i })).toBeChecked(),
     );
   });
 
@@ -97,9 +102,7 @@ describe("StepHorarios", () => {
     });
     // Return empty schedule so the override fetch succeeds
     server.use(
-      http.get(`${BASE}/professionals/pro-1/schedule/`, () =>
-        HttpResponse.json([]),
-      ),
+      http.get(`${BASE}/professionals/pro-1/schedule/`, () => HttpResponse.json([])),
     );
 
     renderStep(<StepHorarios />);

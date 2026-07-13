@@ -21,7 +21,7 @@ import type { Professional } from "@/lib/types";
 interface EditableProfessionalRowProps {
   pro: Professional;
   onUpdate: (id: string, patch: { name?: string }) => Promise<void>;
-  onRemove: (id: string) => void;
+  onRemove: (id: string) => Promise<void>;
 }
 
 function EditableProfessionalRow({
@@ -88,12 +88,23 @@ export function StepProfesionales() {
       setName("");
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo agregar el profesional.",
+        err instanceof Error ? err.message : "No se pudo agregar el profesional.",
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRemove(id: string) {
+    setError(null);
+    try {
+      await removeProfessional(id);
+    } catch (err) {
+      // 409 (professional has associated appointments) comes with an
+      // already-Spanish `detail` — show it instead of swallowing it.
+      setError(
+        err instanceof Error ? err.message : "No se pudo eliminar el profesional.",
+      );
     }
   }
 
@@ -110,7 +121,7 @@ export function StepProfesionales() {
               key={pro.id}
               pro={pro}
               onUpdate={updateProfessional}
-              onRemove={removeProfessional}
+              onRemove={handleRemove}
             />
           ))}
         </ul>
@@ -135,12 +146,7 @@ export function StepProfesionales() {
             placeholder="Ej: María Pérez"
             className="flex-1"
           />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleAdd}
-            disabled={saving}
-          >
+          <Button variant="outline" size="sm" onClick={handleAdd} disabled={saving}>
             {saving ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (

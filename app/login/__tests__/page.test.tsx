@@ -56,7 +56,11 @@ beforeEach(() => {
 function mockSuccessfulLogin() {
   server.use(
     http.post(`${BASE}/auth/login/`, () =>
-      HttpResponse.json({ access_token: "jwe", expires_in: 3600, token_type: "Bearer" }),
+      HttpResponse.json({
+        access_token: "jwe",
+        expires_in: 3600,
+        token_type: "Bearer",
+      }),
     ),
     http.get(`${BASE}/auth/me/`, () =>
       HttpResponse.json({ id: "u1", email: "owner@petsspa.cl", name: "PET Spa Owner" }),
@@ -97,9 +101,7 @@ describe("/login page", () => {
       await userEvent.type(screen.getByLabelText(/contraseña/i), "Segura1234!");
       await userEvent.click(screen.getByRole("button", { name: /entrar/i }));
 
-      await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/onboarding"),
-      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/onboarding"));
     });
 
     it('routes to /onboarding when onboarding status is "in_progress"', async () => {
@@ -123,9 +125,7 @@ describe("/login page", () => {
       await userEvent.type(screen.getByLabelText(/contraseña/i), "Segura1234!");
       await userEvent.click(screen.getByRole("button", { name: /entrar/i }));
 
-      await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/onboarding"),
-      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/onboarding"));
     });
 
     it('routes to /dashboard when onboarding status is "completed"', async () => {
@@ -146,9 +146,7 @@ describe("/login page", () => {
       await userEvent.type(screen.getByLabelText(/contraseña/i), "Segura1234!");
       await userEvent.click(screen.getByRole("button", { name: /entrar/i }));
 
-      await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/dashboard"),
-      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/dashboard"));
     });
 
     it("routes to /dashboard when onboarding status fetch fails (resilient)", async () => {
@@ -169,9 +167,7 @@ describe("/login page", () => {
       await userEvent.type(screen.getByLabelText(/contraseña/i), "Segura1234!");
       await userEvent.click(screen.getByRole("button", { name: /entrar/i }));
 
-      await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/dashboard"),
-      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/dashboard"));
     });
   });
 
@@ -180,10 +176,18 @@ describe("/login page", () => {
       // Override the boot refresh to succeed → starts authenticated.
       server.use(
         http.post(`${BASE}/auth/refresh/`, () =>
-          HttpResponse.json({ access_token: "jwe-boot", expires_in: 3600, token_type: "Bearer" }),
+          HttpResponse.json({
+            access_token: "jwe-boot",
+            expires_in: 3600,
+            token_type: "Bearer",
+          }),
         ),
         http.get(`${BASE}/auth/me/`, () =>
-          HttpResponse.json({ id: "u1", email: "owner@petsspa.cl", name: "PET Spa Owner" }),
+          HttpResponse.json({
+            id: "u1",
+            email: "owner@petsspa.cl",
+            name: "PET Spa Owner",
+          }),
         ),
         http.get(`${BASE}/businesses/me/onboarding/`, () =>
           HttpResponse.json({ status: "not_started", steps: [] }),
@@ -192,18 +196,24 @@ describe("/login page", () => {
 
       renderPage();
 
-      await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/onboarding"),
-      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/onboarding"));
     });
 
     it('routes to /dashboard when already authenticated and status is "completed"', async () => {
       server.use(
         http.post(`${BASE}/auth/refresh/`, () =>
-          HttpResponse.json({ access_token: "jwe-boot", expires_in: 3600, token_type: "Bearer" }),
+          HttpResponse.json({
+            access_token: "jwe-boot",
+            expires_in: 3600,
+            token_type: "Bearer",
+          }),
         ),
         http.get(`${BASE}/auth/me/`, () =>
-          HttpResponse.json({ id: "u1", email: "owner@petsspa.cl", name: "PET Spa Owner" }),
+          HttpResponse.json({
+            id: "u1",
+            email: "owner@petsspa.cl",
+            name: "PET Spa Owner",
+          }),
         ),
         http.get(`${BASE}/businesses/me/onboarding/`, () =>
           HttpResponse.json({ status: "completed", steps: [] }),
@@ -212,9 +222,7 @@ describe("/login page", () => {
 
       renderPage();
 
-      await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/dashboard"),
-      );
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/dashboard"));
     });
   });
 

@@ -14,7 +14,12 @@ import { useOnboarding } from "@/lib/onboarding";
 
 const COUNTRIES = [
   { code: "CL", label: "Chile", currency: "CLP", zone: "America/Santiago" },
-  { code: "AR", label: "Argentina", currency: "ARS", zone: "America/Argentina/Buenos_Aires" },
+  {
+    code: "AR",
+    label: "Argentina",
+    currency: "ARS",
+    zone: "America/Argentina/Buenos_Aires",
+  },
   { code: "MX", label: "Mexico", currency: "MXN", zone: "America/Mexico_City" },
   { code: "CO", label: "Colombia", currency: "COP", zone: "America/Bogota" },
   { code: "PE", label: "Peru", currency: "PEN", zone: "America/Lima" },

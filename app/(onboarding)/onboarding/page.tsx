@@ -38,8 +38,7 @@ function validateStep(
 
   switch (step) {
     case 1:
-      if (!data.businessName.trim())
-        return "El nombre del negocio es obligatorio.";
+      if (!data.businessName.trim()) return "El nombre del negocio es obligatorio.";
       if (!data.country) return "Selecciona un país.";
       if (!data.currency) return "Selecciona una moneda.";
       if (!data.language) return "Selecciona un idioma.";
@@ -111,12 +110,9 @@ function stepTitle(step: OnboardingStep): string {
 
 function OnboardingWizard() {
   const ctx = useOnboarding();
-  const { currentStep, setCurrentStep, goNext, goBack, loading, loadError } =
-    ctx;
+  const { currentStep, setCurrentStep, goNext, goBack, loading, loadError } = ctx;
 
-  const [completedSteps, setCompletedSteps] = useState<Set<OnboardingStep>>(
-    new Set(),
-  );
+  const [completedSteps, setCompletedSteps] = useState<Set<OnboardingStep>>(new Set());
   const [validationError, setValidationError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -125,9 +121,7 @@ function OnboardingWizard() {
   useEffect(() => {
     if (loading || initialized) return;
     const completed = new Set<OnboardingStep>();
-    (
-      [1, 2, 3, 4, 5, 6, 7] as OnboardingStep[]
-    ).forEach((s) => {
+    ([1, 2, 3, 4, 5, 6, 7] as OnboardingStep[]).forEach((s) => {
       if (validateStep(s, ctx) === null) completed.add(s);
     });
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading guard pattern

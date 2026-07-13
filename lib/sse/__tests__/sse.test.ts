@@ -6,7 +6,11 @@ describe("mapSseEnvelope", () => {
   it("renames event->type, synthesizes id/emitted_at, coerces *_id to string, start_datetime->start", () => {
     const e = mapSseEnvelope({
       event: "nueva_cita",
-      data: { appointment_id: 7, customer_id: 3, start_datetime: "2026-06-29T09:00:00Z" },
+      data: {
+        appointment_id: 7,
+        customer_id: 3,
+        start_datetime: "2026-06-29T09:00:00Z",
+      },
       correlation_id: "",
     });
     expect(e).toBeTruthy();
@@ -19,12 +23,12 @@ describe("mapSseEnvelope", () => {
     expect(data.start).toBe("2026-06-29T09:00:00Z");
   });
 
-  it("maps slot->new_start for cita_reagendada", () => {
+  it("normalizes start_datetime->start for cita_reagendada", () => {
     const e = mapSseEnvelope({
       event: "cita_reagendada",
-      data: { appointment_id: 1, slot: "2026-06-30T10:00:00Z" },
+      data: { appointment_id: 1, start_datetime: "2026-06-30T10:00:00Z" },
     });
-    expect((e!.data as Record<string, unknown>).new_start).toBe("2026-06-30T10:00:00Z");
+    expect((e!.data as Record<string, unknown>).start).toBe("2026-06-30T10:00:00Z");
   });
 
   it("returns null for malformed envelopes", () => {

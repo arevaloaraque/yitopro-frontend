@@ -8,6 +8,6 @@ export interface Professional {
 /** A single availability window for a professional's weekly schedule. */
 export interface ScheduleWindow {
   day_of_week: number; // 0=Mon … 6=Sun
-  start_time: string;  // "HH:MM"
-  end_time: string;    // "HH:MM"
+  start_time: string; // "HH:MM"
+  end_time: string; // "HH:MM"
 }

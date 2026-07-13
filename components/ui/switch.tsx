@@ -8,7 +8,13 @@ interface SwitchProps extends Omit<React.ComponentProps<"button">, "onChange"> {
   onChange?: (checked: boolean) => void;
 }
 
-function Switch({ className, checked = false, onChange, disabled, ...props }: SwitchProps) {
+function Switch({
+  className,
+  checked = false,
+  onChange,
+  disabled,
+  ...props
+}: SwitchProps) {
   return (
     <button
       type="button"

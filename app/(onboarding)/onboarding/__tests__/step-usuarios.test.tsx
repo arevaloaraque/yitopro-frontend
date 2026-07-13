@@ -41,13 +41,8 @@ describe("StepUsuarios", () => {
     // owner row from rehydration
     expect(await screen.findByText("owner@petspa.cl")).toBeInTheDocument();
 
-    await userEvent.type(
-      screen.getByLabelText("Correo"),
-      "staff@petspa.cl",
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /invitar usuario/i }),
-    );
+    await userEvent.type(screen.getByLabelText("Correo"), "staff@petspa.cl");
+    await userEvent.click(screen.getByRole("button", { name: /invitar usuario/i }));
 
     await waitFor(() =>
       expect(posted).toEqual({ email: "staff@petspa.cl", role: "staff" }),
@@ -59,15 +54,11 @@ describe("StepUsuarios", () => {
     renderStep(<StepUsuarios />);
 
     // No role selector should be present in the invite form
-    expect(
-      screen.queryByRole("combobox", { name: /rol/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /rol/i })).not.toBeInTheDocument();
     // The text "Dueño" must not appear as a form option (it may appear as a
     // badge for the existing owner row in the list, so we check for the
     // select/option context specifically by the absence of the selector)
-    expect(
-      screen.queryByRole("option", { name: /dueño/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /dueño/i })).not.toBeInTheDocument();
   });
 
   it("inviteUser is always called with role 'staff'", async () => {
@@ -86,17 +77,10 @@ describe("StepUsuarios", () => {
 
     await screen.findByText("owner@petspa.cl"); // wait for rehydration
 
-    await userEvent.type(
-      screen.getByLabelText("Correo"),
-      "newstaff@petspa.cl",
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /invitar usuario/i }),
-    );
+    await userEvent.type(screen.getByLabelText("Correo"), "newstaff@petspa.cl");
+    await userEvent.click(screen.getByRole("button", { name: /invitar usuario/i }));
 
-    await waitFor(() =>
-      expect(posted).toMatchObject({ role: "staff" }),
-    );
+    await waitFor(() => expect(posted).toMatchObject({ role: "staff" }));
     // Must NOT contain role: "owner"
     expect((posted as { role: string }).role).toBe("staff");
   });

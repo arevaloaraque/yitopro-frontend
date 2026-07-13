@@ -6,6 +6,7 @@ import { AlertCircle, ChevronLeft, MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/states/empty-state";
+import { ErrorState } from "@/components/states/error-state";
 import { Loading } from "@/components/states/loading";
 import type { Conversation, Message } from "@/lib/types";
 
@@ -14,6 +15,8 @@ import { MessageInput } from "./message-input";
 
 interface ConversationDetailProps {
   conversation: Conversation;
+  /** Current operator's id, to tell "taken by me" from "unclaimed / someone else". */
+  currentUserId: string | null;
   messages: Message[];
   customerName: string;
   agentName: string | null;
@@ -22,6 +25,10 @@ interface ConversationDetailProps {
   onClose: () => Promise<void>;
   onReactivate: () => Promise<void>;
   loadingMessages: boolean;
+  /** Set when the message thread failed to load; shows a retry state instead
+   *  of misreporting the thread as genuinely empty. */
+  messagesError: string | null;
+  onRetryMessages: () => void;
   sendingMessage: boolean;
   actionError: string | null;
   onDismissError: () => void;
@@ -40,9 +47,7 @@ function statusLabel(status: Conversation["status"]): string {
   }
 }
 
-function statusVariant(
-  status: Conversation["status"],
-): "info" | "warning" | "outline" {
+function statusVariant(status: Conversation["status"]): "info" | "warning" | "outline" {
   switch (status) {
     case "ai_active":
       return "info";
@@ -55,6 +60,7 @@ function statusVariant(
 
 export function ConversationDetail({
   conversation,
+  currentUserId,
   messages,
   customerName,
   agentName,
@@ -63,6 +69,8 @@ export function ConversationDetail({
   onClose,
   onReactivate,
   loadingMessages,
+  messagesError,
+  onRetryMessages,
   sendingMessage,
   actionError,
   onDismissError,
@@ -76,7 +84,10 @@ export function ConversationDetail({
 
   const isHandoff = conversation.status === "human_handoff";
   const isClosed = conversation.status === "closed";
-  const isAiActive = conversation.status === "ai_active";
+  // "Mine" = handed off and assigned to me. Only then can I reply (backend 403s
+  // otherwise); taking is what claims it, so the button hides once it's mine.
+  const isMine =
+    conversation.assignee_id !== null && conversation.assignee_id === currentUserId;
 
   return (
     <div className="flex h-full flex-col">
@@ -95,28 +106,26 @@ export function ConversationDetail({
             </Button>
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold">{customerName}</h2>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <Badge
-                variant={statusVariant(conversation.status)}
-                className="h-5 text-[11px]"
-              >
-                {statusLabel(conversation.status)}
-              </Badge>
-              {conversation.detected_intent ? (
-                <Badge variant="outline" className="h-5 text-[11px]">
-                  {conversation.detected_intent.replace(/_/g, " ")}
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <Badge
+                  variant={statusVariant(conversation.status)}
+                  className="h-5 text-[11px]"
+                >
+                  {statusLabel(conversation.status)}
                 </Badge>
-              ) : null}
-              {agentName ? (
-                <span className="text-[0.7rem] text-muted-foreground">
-                  {agentName}
-                </span>
-              ) : null}
-            </div>
+                {agentName ? (
+                  <span className="text-[0.7rem] text-muted-foreground">
+                    {agentName}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
           <div className="flex shrink-0 gap-1.5">
-            {isAiActive ? (
+            {/* Claimable until it's mine: shown while the AI owns it and while
+                handed off to no-one / another operator, hidden once I've taken
+                it (backend only lets the assignee reply). */}
+            {!isClosed && !isMine ? (
               <Button variant="secondary" size="xs" onClick={onTake}>
                 Tomar conversación
               </Button>
@@ -156,6 +165,13 @@ export function ConversationDetail({
       <div className="flex-1 overflow-y-auto py-3">
         {loadingMessages ? (
           <Loading rows={5} className="px-4" />
+        ) : messagesError ? (
+          <ErrorState
+            title="No se pudieron cargar los mensajes"
+            description={messagesError}
+            onRetry={onRetryMessages}
+            className="m-4 border-none bg-transparent"
+          />
         ) : messages.length === 0 ? (
           <EmptyState
             title="Sin mensajes"
@@ -175,11 +191,11 @@ export function ConversationDetail({
 
       {/* Input */}
       <MessageInput
-        disabled={!isHandoff}
+        disabled={!isMine}
         disabledMessage={
           isClosed
             ? "Esta conversación está cerrada."
-            : "La IA está atendiendo. Toma la conversación para responder."
+            : "Toma la conversación para responder."
         }
         sending={sendingMessage}
         onSubmit={onSendMessage}

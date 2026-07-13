@@ -126,7 +126,9 @@ function ActivarInner() {
       <Card elevated>
         <CardHeader className="text-center">
           <CardTitle>Crea tu contraseña</CardTitle>
-          <CardDescription>Elige una contraseña segura para activar tu cuenta.</CardDescription>
+          <CardDescription>
+            Elige una contraseña segura para activar tu cuenta.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
@@ -142,7 +144,9 @@ function ActivarInner() {
                 {...register("password")}
               />
               {errors.password ? (
-                <p className="text-[0.8rem] text-destructive">{errors.password.message}</p>
+                <p className="text-[0.8rem] text-destructive">
+                  {errors.password.message}
+                </p>
               ) : null}
             </div>
 
@@ -158,7 +162,9 @@ function ActivarInner() {
                 {...register("confirm")}
               />
               {errors.confirm ? (
-                <p className="text-[0.8rem] text-destructive">{errors.confirm.message}</p>
+                <p className="text-[0.8rem] text-destructive">
+                  {errors.confirm.message}
+                </p>
               ) : null}
             </div>
 

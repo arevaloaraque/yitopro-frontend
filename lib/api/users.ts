@@ -20,9 +20,11 @@ const fromBackend = (u: BackendUser): SystemUser => ({
   is_active: u.is_active,
 });
 
-/** Lists all system users for the current business. */
+/** Lists all active system users for the current business (soft-deleted users are hidden). */
 export async function listUsers(): Promise<SystemUser[]> {
-  return (await api.get<BackendUser[]>("/users/")).map(fromBackend);
+  return (await api.get<BackendUser[]>("/users/"))
+    .filter((u) => u.is_active)
+    .map(fromBackend);
 }
 
 /** Invites a new user by email, assigning the given role. */

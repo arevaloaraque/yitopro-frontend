@@ -47,13 +47,10 @@ export function BrandMark({
 export function BrandLogo({ className }: { className?: string }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-[0.32em] text-foreground",
-        className,
-      )}
+      className={cn("inline-flex items-center gap-[0.32em] text-foreground", className)}
     >
       <BrandMark className="h-[1.15em] w-[1.15em] shrink-0" decorative />
-      <span className="font-heading font-semibold leading-none tracking-[-0.02em]">
+      <span className="font-heading leading-none font-semibold tracking-[-0.02em]">
         Yitopro
       </span>
     </span>

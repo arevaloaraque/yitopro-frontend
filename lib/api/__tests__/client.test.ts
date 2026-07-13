@@ -44,7 +44,9 @@ describe("apiFetch (lib/api/client)", () => {
 
   it("throws ApiError with status on non-2xx", async () => {
     server.use(
-      http.get(`${BASE}/boom`, () => HttpResponse.json({ detail: "Nope" }, { status: 400 })),
+      http.get(`${BASE}/boom`, () =>
+        HttpResponse.json({ detail: "Nope" }, { status: 400 }),
+      ),
     );
     await expect(api.get("/boom")).rejects.toBeInstanceOf(ApiError);
     await expect(api.get("/boom")).rejects.toMatchObject({ status: 400 });
@@ -78,7 +80,9 @@ describe("apiFetch (lib/api/client)", () => {
       refreshSession: async () => false,
       onSessionExpired: onExpired,
     });
-    server.use(http.get(`${BASE}/secure2`, () => new HttpResponse(null, { status: 401 })));
+    server.use(
+      http.get(`${BASE}/secure2`, () => new HttpResponse(null, { status: 401 })),
+    );
     await expect(api.get("/secure2")).rejects.toMatchObject({ status: 401 });
     expect(onExpired).toHaveBeenCalledOnce();
   });

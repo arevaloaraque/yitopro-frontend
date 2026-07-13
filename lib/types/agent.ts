@@ -1,16 +1,8 @@
 /** Type / specialty of an agent (mirrors the backend routes). */
-export type AgentType = "scheduling" | "sales" | "records" | "human";
+export type AgentType = "scheduling" | "sales";
 
 /** Agent autonomy level. */
 export type AgentAutonomy = "full" | "supervised" | "manual";
-
-/** Rule for escalating to a human. */
-export interface EscalationRule {
-  /** Condition that triggers the escalation (e.g. "cliente_molesto"). */
-  condition: string;
-  /** Action to take (e.g. "handoff_humano"). */
-  action: string;
-}
 
 /** Configurable AI agent. Mirror of the `Agent` schema. */
 export interface Agent {
@@ -24,5 +16,4 @@ export interface Agent {
   skills: string[];
   /** Tools / integrations available to the agent. */
   tools: string[];
-  escalation_rules: EscalationRule[];
 }

@@ -14,13 +14,13 @@ const buttonVariants = cva(
         default:
           "border-clay-line bg-primary text-primary-foreground shadow-clay hover:translate-x-px hover:translate-y-px hover:shadow-clay-xs active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
         outline:
-          "border-clay-line bg-card text-foreground shadow-clay hover:bg-surface hover:translate-x-px hover:translate-y-px hover:shadow-clay-xs active:translate-x-0.5 active:translate-y-0.5 active:shadow-none aria-expanded:bg-surface",
+          "border-clay-line bg-card text-foreground shadow-clay hover:translate-x-px hover:translate-y-px hover:bg-surface hover:shadow-clay-xs active:translate-x-0.5 active:translate-y-0.5 active:shadow-none aria-expanded:bg-surface",
         secondary:
           "border-clay-line bg-secondary text-secondary-foreground shadow-clay-xs hover:translate-x-px hover:translate-y-px hover:shadow-none active:translate-x-px active:translate-y-px active:shadow-none aria-expanded:bg-secondary",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
-          "border-clay-line bg-destructive/10 text-destructive shadow-clay-xs hover:bg-destructive/20 hover:translate-x-px hover:translate-y-px hover:shadow-none focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+          "border-clay-line bg-destructive/10 text-destructive shadow-clay-xs hover:translate-x-px hover:translate-y-px hover:bg-destructive/20 hover:shadow-none focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

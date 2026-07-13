@@ -8,10 +8,9 @@ import {
   listAppointments,
   rescheduleAppointment,
 } from "@/lib/api/appointments";
-import { listConversations, sendMessage } from "@/lib/api/conversations";
-import { createCustomer, listCustomers } from "@/lib/api/customers";
-import { listProducts } from "@/lib/api/products";
-import { createService, listServices } from "@/lib/api/services";
+import { listConversations, listMessages, sendMessage } from "@/lib/api/conversations";
+import { createCustomer, updateCustomer } from "@/lib/api/customers";
+import { createService, listServices, searchServices } from "@/lib/api/services";
 import { server } from "@/mocks/server";
 
 const BASE = "http://localhost:8050/api";
@@ -19,17 +18,53 @@ const BASE = "http://localhost:8050/api";
 beforeEach(() => configureApiAuth({ getAccessToken: () => "tok" }));
 
 describe("services mapper", () => {
-  it("maps active->is_active, decimal-string price->number, id->string from a bare array", async () => {
+  it("maps active->is_active, decimal-string price->number, id->string from the paginated envelope", async () => {
     server.use(
       http.get(`${BASE}/services/`, () =>
-        HttpResponse.json([
-          { id: 1, name: "Baño", description: "", duration_minutes: 30, price: "20.00", active: true },
-        ]),
+        HttpResponse.json({
+          items: [
+            {
+              id: 1,
+              name: "Baño",
+              description: "",
+              duration_minutes: 30,
+              price: "20.00",
+              active: true,
+            },
+          ],
+          count: 1,
+        }),
       ),
     );
     expect(await listServices()).toEqual([
       { id: "1", name: "Baño", duration_minutes: 30, price: 20, is_active: true },
     ]);
+  });
+
+  it("searchServices returns the paginated envelope with mapped items", async () => {
+    server.use(
+      http.get(`${BASE}/services/`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 2,
+              name: "Corte",
+              description: "",
+              duration_minutes: 45,
+              price: "15000.00",
+              active: true,
+            },
+          ],
+          count: 7,
+        }),
+      ),
+    );
+    expect(await searchServices({ limit: 1, offset: 0 })).toEqual({
+      items: [
+        { id: "2", name: "Corte", duration_minutes: 45, price: 15000, is_active: true },
+      ],
+      count: 7,
+    });
   });
 
   it("create posts active + numeric price", async () => {
@@ -38,66 +73,74 @@ describe("services mapper", () => {
       http.post(`${BASE}/services/`, async ({ request }) => {
         body = await request.json();
         return HttpResponse.json(
-          { id: 9, name: "X", description: "", duration_minutes: 10, price: "5.00", active: true },
+          {
+            id: 9,
+            name: "X",
+            description: "",
+            duration_minutes: 10,
+            price: "5.00",
+            active: true,
+          },
           { status: 201 },
         );
       }),
     );
     await createService({ name: "X", duration_minutes: 10, price: 5, is_active: true });
-    expect(body).toMatchObject({ name: "X", duration_minutes: 10, price: 5, active: true });
-  });
-});
-
-describe("products mapper", () => {
-  it("maps whatsapp_enabled->sellable_via_whatsapp and active->is_active", async () => {
-    server.use(
-      http.get(`${BASE}/products/`, () =>
-        HttpResponse.json({
-          items: [
-            { id: 2, name: "Croqueta", description: "", price: "14.00", stock: 20, active: true, whatsapp_enabled: false, category_id: 1 },
-          ],
-          count: 1,
-        }),
-      ),
-    );
-    expect((await listProducts())[0]).toEqual({
-      id: "2",
-      name: "Croqueta",
-      price: 14,
-      stock: 20,
-      sellable_via_whatsapp: false,
-      is_active: true,
+    expect(body).toMatchObject({
+      name: "X",
+      duration_minutes: 10,
+      price: 5,
+      active: true,
     });
   });
 });
 
 describe("customers mapper", () => {
   it("maps display_name->name and create posts {phone, display_name}", async () => {
-    server.use(
-      http.get(`${BASE}/customers/`, () =>
-        HttpResponse.json({
-          items: [
-            { id: 3, phone: "569", display_name: "Ana", email: "", created_at: "2026-06-01T00:00:00Z" },
-          ],
-          count: 1,
-        }),
-      ),
-    );
-    expect((await listCustomers())[0]).toMatchObject({ id: "3", name: "Ana", phone: "569" });
-
     let body: unknown;
     server.use(
       http.post(`${BASE}/customers/`, async ({ request }) => {
         body = await request.json();
         return HttpResponse.json(
-          { id: 4, phone: "569", display_name: "Bob", email: "", created_at: "2026-06-01T00:00:00Z" },
+          {
+            id: 4,
+            phone: "569",
+            display_name: "Bob",
+            email: "",
+            created_at: "2026-06-01T00:00:00Z",
+          },
           { status: 201 },
         );
       }),
     );
-    const created = await createCustomer({ name: "Bob", phone: "569" });
+    const result = await createCustomer({ name: "Bob", phone: "569" });
     expect(body).toEqual({ phone: "569", display_name: "Bob" });
-    expect(created).toMatchObject({ name: "Bob" });
+    expect(result.created).toBe(true);
+    expect(result.customer).toMatchObject({ name: "Bob" });
+  });
+
+  it("updateCustomer PATCHes display_name/email and maps the response (incl. email)", async () => {
+    let body: unknown;
+    server.use(
+      http.patch(`${BASE}/customers/9/`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({
+          id: 9,
+          phone: "569",
+          display_name: "Ana B",
+          email: "ana@x.cl",
+          created_at: "2026-06-01T00:00:00Z",
+        });
+      }),
+    );
+    const out = await updateCustomer("9", { name: "Ana B", email: "ana@x.cl" });
+    expect(body).toEqual({ display_name: "Ana B", email: "ana@x.cl" });
+    expect(out).toMatchObject({
+      id: "9",
+      name: "Ana B",
+      phone: "569",
+      email: "ana@x.cl",
+    });
   });
 });
 
@@ -123,8 +166,11 @@ describe("conversations mapper", () => {
     expect((await listConversations())[0]).toMatchObject({
       id: "1",
       customer_id: "7",
+      customer_name: "Ana",
+      customer_phone: "569",
       status: "human_handoff",
       active_agent: null,
+      assignee_id: "2",
       unread: 0,
     });
 
@@ -133,7 +179,12 @@ describe("conversations mapper", () => {
       http.post(`${BASE}/conversations/1/messages/`, async ({ request }) => {
         body = await request.json();
         return HttpResponse.json(
-          { id: 50, direction: "out", content: "Hola", created_at: "2026-06-01T00:00:00Z" },
+          {
+            id: 50,
+            direction: "out",
+            content: "Hola",
+            created_at: "2026-06-01T00:00:00Z",
+          },
           { status: 201 },
         );
       }),
@@ -141,6 +192,50 @@ describe("conversations mapper", () => {
     const msg = await sendMessage("1", "Hola");
     expect(body).toEqual({ content: "Hola" });
     expect(msg).toMatchObject({ direction: "outbound", sender: "human", text: "Hola" });
+  });
+
+  it("listMessages derives sender from sender_kind: operator->human, system->system, ai/''->ai/customer", async () => {
+    server.use(
+      http.get(`${BASE}/conversations/1/messages/`, () =>
+        HttpResponse.json([
+          {
+            id: 1,
+            direction: "in",
+            sender_kind: "",
+            content: "hola",
+            created_at: "2026-06-01T00:00:00Z",
+          },
+          {
+            id: 2,
+            direction: "out",
+            sender_kind: "operator",
+            content: "hola humano",
+            created_at: "2026-06-01T00:00:00Z",
+          },
+          {
+            id: 3,
+            direction: "out",
+            sender_kind: "system",
+            content: "recordatorio",
+            created_at: "2026-06-01T00:00:00Z",
+          },
+          {
+            id: 4,
+            direction: "out",
+            sender_kind: "ai",
+            content: "hola IA",
+            created_at: "2026-06-01T00:00:00Z",
+          },
+        ]),
+      ),
+    );
+    const messages = await listMessages("1");
+    expect(messages.map((m) => m.sender)).toEqual([
+      "customer",
+      "human",
+      "system",
+      "ai",
+    ]);
   });
 });
 
@@ -150,6 +245,7 @@ describe("appointments mapper", () => {
     service_id: 2,
     professional_id: 3,
     customer_id: 4,
+    customer_name: "Ana",
     start_datetime: "2026-06-29T09:00:00Z",
     end_datetime: "2026-06-29T09:30:00Z",
     status: "scheduled",
@@ -166,16 +262,34 @@ describe("appointments mapper", () => {
         return HttpResponse.json([appt]);
       }),
     );
-    const list = await listAppointments({ from: "2026-06-29T00:00:00.000Z", to: "2026-06-29T23:59:59Z" });
+    const list = await listAppointments({
+      from: "2026-06-29T00:00:00.000Z",
+      to: "2026-06-29T23:59:59Z",
+    });
     expect(url).toContain("date=2026-06-29");
     expect(list[0]).toMatchObject({
       id: "1",
       service_id: "2",
+      professional_id: "3",
       customer_id: "4",
+      customer_name: "Ana",
       start: "2026-06-29T09:00:00Z",
       created_by: "human",
       status: "scheduled",
     });
+  });
+
+  it("list forwards professional_id and service_id as query params", async () => {
+    let url = "";
+    server.use(
+      http.get(`${BASE}/appointments/`, ({ request }) => {
+        url = request.url;
+        return HttpResponse.json([appt]);
+      }),
+    );
+    await listAppointments({ professional_id: "3", service_id: "2" });
+    expect(url).toContain("professional_id=3");
+    expect(url).toContain("service_id=2");
   });
 
   it("create posts start_datetime (no end); reschedule posts new_start_datetime; cancel posts reason", async () => {
@@ -202,10 +316,17 @@ describe("appointments mapper", () => {
       start: "2026-06-29T09:00:00Z",
       end: "2026-06-29T09:30:00Z",
     });
-    expect(createBody).toMatchObject({ service_id: 2, customer_id: 4, start_datetime: "2026-06-29T09:00:00Z" });
+    expect(createBody).toMatchObject({
+      service_id: 2,
+      customer_id: 4,
+      start_datetime: "2026-06-29T09:00:00Z",
+    });
     expect(createBody).not.toHaveProperty("end");
 
-    await rescheduleAppointment("1", { start: "2026-06-30T10:00:00Z", end: "2026-06-30T10:30:00Z" });
+    await rescheduleAppointment("1", {
+      start: "2026-06-30T10:00:00Z",
+      end: "2026-06-30T10:30:00Z",
+    });
     expect(reBody).toEqual({ new_start_datetime: "2026-06-30T10:00:00Z" });
 
     const cancelled = await cancelAppointment("1", "no show");

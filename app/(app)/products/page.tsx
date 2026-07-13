@@ -1,16 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Receipt, Search, ShoppingBag } from "lucide-react";
+import { Pencil, Plus, Search, ShoppingBag } from "lucide-react";
 import type { Product, SSEEvent } from "@/lib/types";
-import {
-  searchProducts,
-  createProduct,
-  updateProduct,
-  listOrders,
-  type Order,
-  type OrderStatus,
-} from "@/lib/api";
+import { searchProducts, createProduct, updateProduct } from "@/lib/api";
 import { subscribeToEvents } from "@/lib/sse";
 import { formatPrice } from "@/lib/utils";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
@@ -19,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -44,7 +36,12 @@ interface FormData {
   sellable_via_whatsapp: boolean;
 }
 
-const emptyForm: FormData = { name: "", price: "", stock: "0", sellable_via_whatsapp: true };
+const emptyForm: FormData = {
+  name: "",
+  price: "",
+  stock: "0",
+  sellable_via_whatsapp: true,
+};
 
 function productToForm(p: Product): FormData {
   return {
@@ -53,22 +50,6 @@ function productToForm(p: Product): FormData {
     stock: String(p.stock),
     sellable_via_whatsapp: p.sellable_via_whatsapp,
   };
-}
-
-const statusLabels: Record<OrderStatus, string> = {
-  draft: "Borrador",
-  confirmed: "Confirmado",
-  cancelled: "Cancelado",
-};
-
-const statusVariants: Record<OrderStatus, "warning" | "success" | "secondary"> = {
-  draft: "warning",
-  confirmed: "success",
-  cancelled: "secondary",
-};
-
-function orderItemsLabel(items: Order["items"]): string {
-  return items.map((i) => `${i.product_name} ×${i.quantity}`).join(", ");
 }
 
 const PAGE_SIZE = 20;
@@ -88,14 +69,16 @@ export default function ProductsPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(true);
-
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Product list: search + server-side pagination ("load more").
   const loadProducts = useCallback(
-    async (opts: { search: string; offset: number; append: boolean; limit?: number }) => {
+    async (opts: {
+      search: string;
+      offset: number;
+      append: boolean;
+      limit?: number;
+    }) => {
       setListLoading(true);
       setError(null);
       try {
@@ -104,9 +87,7 @@ export default function ProductsPage() {
           limit: opts.limit ?? PAGE_SIZE,
           offset: opts.offset,
         });
-        setProducts((prev) =>
-          opts.append ? [...prev, ...res.items] : res.items,
-        );
+        setProducts((prev) => (opts.append ? [...prev, ...res.items] : res.items));
         setCount(res.count);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Error al cargar productos");
@@ -133,25 +114,6 @@ export default function ProductsPage() {
     loadProducts({ search, offset: 0, append: false });
   }
 
-  // Orders (created by the sales agent or the panel). Secondary: a failure
-  // does not block the products page.
-  useEffect(() => {
-    let cancelled = false;
-    listOrders()
-      .then((data) => {
-        if (!cancelled) setOrders(data);
-      })
-      .catch(() => {
-        /* noop: orders are secondary to the products page */
-      })
-      .finally(() => {
-        if (!cancelled) setOrdersLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Latest search + visible count, read by the SSE handler (registered once).
   // Synced in an effect (not during render) to keep render pure and match the
   // appointments/conversations idiom.
@@ -162,16 +124,13 @@ export default function ProductsPage() {
     shownRef.current = products.length;
   });
 
-  // Real-time: when the sales agent confirms an order (`pedido_creado`), refresh
-  // the Pedidos tab and the products list (stock is decremented on confirmation).
+  // Real-time: confirming an order (`pedido_creado`) decrements stock, so refresh
+  // the products list to reflect it. Orders themselves live on the Pedidos page.
   // The SSE stream is multiplexed; NotificationsProvider owns the toasts, this
-  // screen owns the data refresh (same pattern as appointments/conversations).
+  // screen owns its own data refresh (same pattern as appointments/conversations).
   useEffect(() => {
     const unsub = subscribeToEvents((event: SSEEvent) => {
       if (event.type === "pedido_creado") {
-        listOrders()
-          .then(setOrders)
-          .catch((err) => console.error("Error al refrescar pedidos vía SSE:", err));
         loadProducts({
           search: searchRef.current,
           offset: 0,
@@ -186,7 +145,13 @@ export default function ProductsPage() {
   function validate(f: FormData): Record<string, string> {
     const errs: Record<string, string> = {};
     if (!f.name.trim()) errs.name = "Requerido";
-    if (!f.price.trim() || isNaN(Number(f.price)) || Number(f.price) < 0) {
+    const price = f.price.trim();
+    if (
+      !price ||
+      isNaN(Number(price)) ||
+      Number(price) < 0 ||
+      !/^\d+(\.\d{1,2})?$/.test(price)
+    ) {
       errs.price = "Precio inválido";
     }
     if (!f.stock.trim() || isNaN(Number(f.stock)) || Number(f.stock) < 0) {
@@ -232,9 +197,7 @@ export default function ProductsPage() {
   async function toggleActive(product: Product) {
     setActionError(null);
     setProducts((prev) =>
-      prev.map((p) =>
-        p.id === product.id ? { ...p, is_active: !p.is_active } : p,
-      ),
+      prev.map((p) => (p.id === product.id ? { ...p, is_active: !p.is_active } : p)),
     );
     try {
       await updateProduct(product.id, { is_active: !product.is_active });
@@ -303,8 +266,12 @@ export default function ProductsPage() {
     return (
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Productos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Catálogo de productos de tu negocio.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Productos
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Catálogo de productos de tu negocio.
+          </p>
         </div>
         <ErrorState description={error} onRetry={refetch} />
       </div>
@@ -315,8 +282,12 @@ export default function ProductsPage() {
     <div className="mx-auto w-full max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Productos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Catálogo de productos de tu negocio.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Productos
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Catálogo de productos de tu negocio.
+          </p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="size-4" />
@@ -324,174 +295,139 @@ export default function ProductsPage() {
         </Button>
       </div>
 
-      {actionError && (
-        <p className="text-sm text-destructive">{actionError}</p>
-      )}
+      {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
-      <Tabs defaultValue="products">
-        <TabsList>
-          <TabsTrigger value="products">Productos</TabsTrigger>
-          <TabsTrigger value="orders">Pedidos / Borradores</TabsTrigger>
-        </TabsList>
+      <div className="space-y-4">
+        <div className="relative max-w-xs">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar producto…"
+            aria-label="Buscar productos"
+            className="pl-8"
+          />
+        </div>
 
-        <TabsContent value="products" className="mt-4 space-y-4">
-          <div className="relative max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto…"
-              className="pl-8"
-            />
-          </div>
-
-          {products.length === 0 ? (
-            search ? (
-              <EmptyState
-                icon={Search}
-                title="Sin resultados"
-                description={`No hay productos que coincidan con "${search}".`}
-              />
-            ) : (
-              <EmptyState
-                icon={ShoppingBag}
-                title="Sin productos"
-                description="Agrega tu primer producto al catálogo."
-                action={
-                  <Button onClick={openCreate}>
-                    <Plus className="size-4" />
-                    Nuevo producto
-                  </Button>
-                }
-              />
-            )
-          ) : (
-            <div className="rounded-xl border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead className="w-28 text-right">Precio</TableHead>
-                    <TableHead className="w-20 text-right">Stock</TableHead>
-                    <TableHead className="w-28">WhatsApp</TableHead>
-                    <TableHead className="w-24">Estado</TableHead>
-                    <TableHead className="w-20" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatPrice(p.price)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        <span className={p.stock === 0 ? "text-destructive" : ""}>{p.stock}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Switch
-                          checked={p.sellable_via_whatsapp}
-                          onChange={() => toggleWhatsApp(p)}
-                          aria-label={p.sellable_via_whatsapp ? "Desactivar venta por WhatsApp" : "Activar venta por WhatsApp"}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <Switch
-                            checked={p.is_active}
-                            onChange={() => toggleActive(p)}
-                            aria-label={p.is_active ? "Desactivar producto" : "Activar producto"}
-                          />
-                          <Badge variant={p.is_active ? "success" : "secondary"} className="text-xs tabular-nums">
-                            {p.is_active ? "Activo" : "Inactivo"}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => openEdit(p)}
-                          aria-label="Editar producto"
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {products.length > 0 && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                Mostrando {products.length} de {count}
-              </span>
-              {products.length < count && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={listLoading}
-                  onClick={() =>
-                    loadProducts({
-                      search,
-                      offset: products.length,
-                      append: true,
-                    })
-                  }
-                >
-                  {listLoading ? "Cargando…" : "Cargar más"}
-                </Button>
-              )}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="orders" className="mt-4">
-          {ordersLoading ? (
-            <Loading rows={3} label="Cargando pedidos…" />
-          ) : orders.length === 0 ? (
+        {products.length === 0 ? (
+          search ? (
             <EmptyState
-              icon={Receipt}
-              title="Sin pedidos"
-              description="Los pedidos creados por el asistente o el panel aparecerán aquí."
+              icon={Search}
+              title="Sin resultados"
+              description={`No hay productos que coincidan con "${search}".`}
             />
           ) : (
-            <div className="rounded-xl border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Ítems</TableHead>
-                    <TableHead className="w-32 text-right">Total</TableHead>
-                    <TableHead className="w-28">Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell className="font-medium">{order.customer}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {orderItemsLabel(order.items)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatPrice(order.total)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariants[order.status]}>
-                          {statusLabels[order.status]}
+            <EmptyState
+              icon={ShoppingBag}
+              title="Sin productos"
+              description="Agrega tu primer producto al catálogo."
+              action={
+                <Button onClick={openCreate}>
+                  <Plus className="size-4" />
+                  Nuevo producto
+                </Button>
+              }
+            />
+          )
+        ) : (
+          <div className="rounded-xl border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead className="w-28 text-right">Precio</TableHead>
+                  <TableHead className="w-20 text-right">Stock</TableHead>
+                  <TableHead className="w-28">WhatsApp</TableHead>
+                  <TableHead className="w-24">Estado</TableHead>
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {products.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatPrice(p.price)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <span className={p.stock === 0 ? "text-destructive" : ""}>
+                        {p.stock}
+                      </span>
+                      {p.stock === 0 && (
+                        <Badge variant="destructive" className="ml-1.5 text-xs">
+                          Agotado
                         </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={p.sellable_via_whatsapp}
+                        onChange={() => toggleWhatsApp(p)}
+                        aria-label={
+                          p.sellable_via_whatsapp
+                            ? "Desactivar venta por WhatsApp"
+                            : "Activar venta por WhatsApp"
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          checked={p.is_active}
+                          onChange={() => toggleActive(p)}
+                          aria-label={
+                            p.is_active ? "Desactivar producto" : "Activar producto"
+                          }
+                        />
+                        <Badge
+                          variant={p.is_active ? "success" : "secondary"}
+                          className="text-xs tabular-nums"
+                        >
+                          {p.is_active ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => openEdit(p)}
+                        aria-label="Editar producto"
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {products.length > 0 && (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Mostrando {products.length} de {count}
+            </span>
+            {products.length < count && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={listLoading}
+                onClick={() =>
+                  loadProducts({
+                    search,
+                    offset: products.length,
+                    append: true,
+                  })
+                }
+              >
+                {listLoading ? "Cargando…" : "Cargar más"}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent>
@@ -512,7 +448,9 @@ export default function ProductsPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Ej. Shampoo hipoalergénico"
               />
-              {formErrors.name && <p className="text-xs text-destructive">{formErrors.name}</p>}
+              {formErrors.name && (
+                <p className="text-xs text-destructive">{formErrors.name}</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
@@ -523,10 +461,14 @@ export default function ProductsPage() {
                   min={0}
                   step="0.01"
                   value={form.price}
-                  onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, price: e.target.value }))
+                  }
                   placeholder="8990"
                 />
-                {formErrors.price && <p className="text-xs text-destructive">{formErrors.price}</p>}
+                {formErrors.price && (
+                  <p className="text-xs text-destructive">{formErrors.price}</p>
+                )}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prod-stock">Stock</Label>
@@ -535,10 +477,14 @@ export default function ProductsPage() {
                   type="number"
                   min={0}
                   value={form.stock}
-                  onChange={(e) => setForm((prev) => ({ ...prev, stock: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, stock: e.target.value }))
+                  }
                   placeholder="10"
                 />
-                {formErrors.stock && <p className="text-xs text-destructive">{formErrors.stock}</p>}
+                {formErrors.stock && (
+                  <p className="text-xs text-destructive">{formErrors.stock}</p>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
@@ -548,7 +494,9 @@ export default function ProductsPage() {
               <Switch
                 id="prod-whatsapp"
                 checked={form.sellable_via_whatsapp}
-                onChange={(v) => setForm((prev) => ({ ...prev, sellable_via_whatsapp: v }))}
+                onChange={(v) =>
+                  setForm((prev) => ({ ...prev, sellable_via_whatsapp: v }))
+                }
               />
             </div>
             {formErrors._form && (

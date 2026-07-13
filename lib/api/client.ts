@@ -93,15 +93,16 @@ async function parseBody(res: Response): Promise<unknown> {
   return text;
 }
 
-function extractErrorMessage(
-  payload: unknown,
-  status: number,
-  path: string,
-): string {
+function extractErrorMessage(payload: unknown, status: number, path: string): string {
   if (payload && typeof payload === "object") {
     const detail = (payload as { detail?: unknown }).detail;
     if (typeof detail === "string") return detail;
-    if (Array.isArray(detail) && detail.length > 0 && typeof detail[0] === "object" && detail[0] !== null) {
+    if (
+      Array.isArray(detail) &&
+      detail.length > 0 &&
+      typeof detail[0] === "object" &&
+      detail[0] !== null
+    ) {
       const first = detail[0] as Record<string, unknown>;
       if (typeof first.msg === "string") return String(first.msg);
     }
@@ -135,15 +136,12 @@ export function refreshAuthOnce(): Promise<boolean> {
   return refreshOnce();
 }
 
-/**
- * Makes a request to the API. Throws `ApiError` on non-OK responses.
- * On `401`, it tries to refresh the session once (single-flight) and retries.
- * If the refresh fails, it fires `onSessionExpired`.
- */
-export async function apiFetch<T>(
+/** Shared by `apiFetch`/`apiFetchWithStatus`: does the request + 401 refresh
+ * dance and returns the raw response alongside its parsed body. */
+async function requestRaw(
   path: string,
-  options: RequestOptions = {},
-): Promise<T> {
+  options: RequestOptions,
+): Promise<{ res: Response; payload: unknown }> {
   const { body, query, headers, skipRefresh, ...rest } = options;
   const url = buildUrl(path, query);
 
@@ -184,7 +182,19 @@ export async function apiFetch<T>(
   }
 
   const payload = await parseBody(res);
+  return { res, payload };
+}
 
+/**
+ * Makes a request to the API. Throws `ApiError` on non-OK responses.
+ * On `401`, it tries to refresh the session once (single-flight) and retries.
+ * If the refresh fails, it fires `onSessionExpired`.
+ */
+export async function apiFetch<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const { res, payload } = await requestRaw(path, options);
   if (!res.ok) {
     throw new ApiError(
       res.status,
@@ -192,8 +202,26 @@ export async function apiFetch<T>(
       payload,
     );
   }
-
   return payload as T;
+}
+
+/**
+ * Like `apiFetch`, but also resolves the HTTP status — for endpoints where
+ * 200 vs 201 carries meaning (e.g. a get-or-create POST).
+ */
+export async function apiFetchWithStatus<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ status: number; body: T }> {
+  const { res, payload } = await requestRaw(path, options);
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      extractErrorMessage(payload, res.status, path),
+      payload,
+    );
+  }
+  return { status: res.status, body: payload as T };
 }
 
 // --- Shortcuts by method -----------------------------------------------------

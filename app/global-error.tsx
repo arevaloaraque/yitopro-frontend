@@ -5,8 +5,8 @@ import { useEffect } from "react";
 /**
  * Root boundary: replaces the root layout when something fails before/during its
  * render, so it CANNOT depend on `globals.css` or on token-based components.
- * That's why it uses inline styles with the brand hex values.
- * ponytail: deliberate exception — it's the only point where no token CSS is available.
+ * That's why it uses inline styles with the brand hex values — deliberate
+ * exception, it's the only point where no token CSS is available.
  */
 export default function GlobalError({
   error,

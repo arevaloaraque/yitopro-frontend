@@ -57,3 +57,21 @@ export async function listOrders(status?: OrderStatus): Promise<Order[]> {
   const res = await api.get<BackendOrder[]>("/orders/", { query: { status } });
   return res.map(fromBackend);
 }
+
+/** Confirms a draft order (decrements stock). Throws `ApiError` 409 on insufficient stock. */
+export async function confirmOrder(id: string): Promise<Order> {
+  const res = await api.patch<BackendOrder>(`/orders/${id}/confirm/`);
+  return fromBackend(res);
+}
+
+/** Cancels a draft order. */
+export async function cancelOrder(id: string): Promise<Order> {
+  const res = await api.patch<BackendOrder>(`/orders/${id}/cancel/`);
+  return fromBackend(res);
+}
+
+/** Number of draft orders awaiting confirmation (drives the "Pedidos" nav badge). */
+export async function getPendingOrdersCount(): Promise<number> {
+  const res = await api.get<{ count: number }>("/orders/pending-count/");
+  return res.count;
+}

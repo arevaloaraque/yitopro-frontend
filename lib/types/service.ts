@@ -5,7 +5,7 @@ export interface Service {
   business_id?: string;
   name: string;
   duration_minutes: number;
-  /** Price in the business currency's minor unit (integer). */
+  /** Price in the business currency's major unit (e.g. 1000 = $1.000 CLP). */
   price: number;
   is_active: boolean;
 }

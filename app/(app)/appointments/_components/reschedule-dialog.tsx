@@ -57,8 +57,7 @@ export function RescheduleDialog({
     try {
       const start = new Date(`${date}T${time}:00`);
       const oldDuration =
-        new Date(appointment.end).getTime() -
-        new Date(appointment.start).getTime();
+        new Date(appointment.end).getTime() - new Date(appointment.start).getTime();
       const end = new Date(start.getTime() + oldDuration);
 
       await onReschedule(appointment.id, {
@@ -100,9 +99,7 @@ export function RescheduleDialog({
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
-              {errors.date && (
-                <p className="text-xs text-destructive">{errors.date}</p>
-              )}
+              {errors.date && <p className="text-xs text-destructive">{errors.date}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="reschedule-time">Nueva hora</Label>
@@ -112,14 +109,10 @@ export function RescheduleDialog({
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
               />
-              {errors.time && (
-                <p className="text-xs text-destructive">{errors.time}</p>
-              )}
+              {errors.time && <p className="text-xs text-destructive">{errors.time}</p>}
             </div>
           </div>
-          {errors._form && (
-            <p className="text-sm text-destructive">{errors._form}</p>
-          )}
+          {errors._form && <p className="text-sm text-destructive">{errors._form}</p>}
         </div>
         <DialogFooter showCloseButton>
           <Button onClick={handleSave} disabled={saving}>

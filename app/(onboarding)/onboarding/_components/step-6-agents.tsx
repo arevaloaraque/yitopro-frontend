@@ -13,40 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { AUTONOMY_OPTIONS, agentTypeLabel, skillLabel } from "@/lib/consts/agent";
 import { useOnboarding } from "@/lib/onboarding";
 import type { AgentAutonomy } from "@/lib/types";
-
-const AUTONOMY_OPTIONS: { value: AgentAutonomy; label: string }[] = [
-  { value: "full", label: "Total (sin supervisión)" },
-  { value: "supervised", label: "Supervisado" },
-  { value: "manual", label: "Manual" },
-];
-
-function skillLabel(skill: string): string {
-  const map: Record<string, string> = {
-    detectar_intencion: "Detectar intención",
-    derivar_agente: "Derivar a otro agente",
-    agendar: "Agendar",
-    reagendar: "Reagendar",
-    cancelar: "Cancelar",
-    consultar_stock: "Consultar stock",
-    tomar_pedido: "Tomar pedido",
-    leer_ficha: "Leer ficha",
-    actualizar_ficha: "Actualizar ficha",
-    responder_faq: "Responder FAQ",
-  };
-  return map[skill] ?? skill;
-}
-
-function agentTypeLabel(type: string): string {
-  const map: Record<string, string> = {
-    scheduling: "Agendamiento",
-    sales: "Ventas",
-    records: "Fichas",
-    human: "Humano",
-  };
-  return map[type] ?? type;
-}
 
 export function Step6Agents() {
   const { data, toggleAgent, setAgentAutonomy } = useOnboarding();
@@ -55,11 +24,7 @@ export function Step6Agents() {
   function run(promise: Promise<void>) {
     setError(null);
     promise.catch((err: unknown) => {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo actualizar el agente.",
-      );
+      setError(err instanceof Error ? err.message : "No se pudo actualizar el agente.");
     });
   }
 
@@ -129,11 +94,7 @@ export function Step6Agents() {
               <Label className="text-xs">Skills</Label>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {agent.skills.map((skill) => (
-                  <Badge
-                    key={skill}
-                    variant="outline"
-                    className="text-[0.65rem]"
-                  >
+                  <Badge key={skill} variant="outline" className="text-[0.65rem]">
                     {skillLabel(skill)}
                   </Badge>
                 ))}

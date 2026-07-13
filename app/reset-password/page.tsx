@@ -144,14 +144,17 @@ function ResetPasswordInner() {
             </div>
             <CardTitle>Contraseña actualizada</CardTitle>
             <CardDescription>
-              Tu contraseña fue cambiada y cerramos las demás sesiones. Te llevamos al inicio
-              de sesión…
+              Tu contraseña fue cambiada y cerramos las demás sesiones. Te llevamos al
+              inicio de sesión…
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Link
               href="/login"
-              className={cn(buttonVariants({ variant: "default", size: "lg" }), "w-full")}
+              className={cn(
+                buttonVariants({ variant: "default", size: "lg" }),
+                "w-full",
+              )}
             >
               Ir a iniciar sesión
             </Link>
@@ -182,7 +185,9 @@ function ResetPasswordInner() {
                 {...register("password")}
               />
               {errors.password ? (
-                <p className="text-[0.8rem] text-destructive">{errors.password.message}</p>
+                <p className="text-[0.8rem] text-destructive">
+                  {errors.password.message}
+                </p>
               ) : null}
             </div>
 

@@ -33,22 +33,24 @@ export function useOnboardingRedirect(): OnboardingRedirectResult {
     if (authStatus !== "authenticated") return;
 
     let cancelled = false;
-
-    getOnboardingStatus()
-      .then(({ status }) => {
-        if (!cancelled) {
-          setFetched({ target: status !== "completed" ? "/onboarding" : null });
-        }
-      })
-      .catch(() => {
-        // On error: resilient — don't trap the user.
-        if (!cancelled) {
-          setFetched({ target: null });
-        }
-      });
+    const t = setTimeout(() => {
+      getOnboardingStatus()
+        .then(({ status }) => {
+          if (!cancelled) {
+            setFetched({ target: status !== "completed" ? "/onboarding" : null });
+          }
+        })
+        .catch(() => {
+          // On error: resilient — don't trap the user.
+          if (!cancelled) {
+            setFetched({ target: null });
+          }
+        });
+    }, 0);
 
     return () => {
       cancelled = true;
+      clearTimeout(t);
     };
   }, [authStatus]);
 

@@ -3,6 +3,7 @@
 **Date:** 2026-06-27 · **Branch:** main (user choice) · **Status:** in progress
 
 ## Non-negotiables
+
 - **Visual only.** No edits to `lib/api`, `lib/sse`, `lib/auth`, routes, MSW handlers, validation, component names, props contracts, or data shapes. Only classNames / tokens / styling-markup.
 - **Brand fixed:** `--primary #6D35F2`, `--accent #FF7A1A`, `--foreground #071A3A`. Only derive scales/tints/surfaces.
 - **No hex literals in components** — tokens only.
@@ -10,16 +11,20 @@
 - Gates before "done": `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build` clean.
 
 ## Target visual language
+
 Linear / Stripe / Vercel / Notion / Raycast. Soft layered elevation, generous 8-based spacing, modern radii, crisp typographic hierarchy, 150–200ms ease-out motion, glassmorphism **only** on floating overlays (dropdown/select/popover/tooltip/sheet + dialog scrim); cards stay solid for legibility.
 
 ## Phase 1 — Token engine + shared primitives
+
 **`app/globals.css`** (biggest lever)
+
 - [ ] Shadow scale: replace ~0.03 near-invisible set with soft navy-tinted 5-level scale (xs→sm→md→lg→**xl** for modals).
 - [ ] Add `--info` / `--info-foreground` (light+dark) from existing blue; register in `@theme inline`.
 - [ ] Typography base: antialiasing, `text-rendering: optimizeLegibility`, heading `letter-spacing`, body numeric features; `prefers-reduced-motion` guard.
 - [ ] Tune borders/surfaces slightly for airiness + verify dark parity. Keep radius base 0.75rem (btn/input already 12px on target).
 
 **`components/ui/*`** (consume the engine)
+
 - [ ] `card` — padding 20→24px (`--card-spacing: spacing(6)`), elevation reads from new scale, stays solid.
 - [ ] `input` / `textarea` / `select` trigger — height 36→40px (`h-10`), elegant focus ring, consistent across all three.
 - [ ] `badge` — add `warning` + `info` variants → success/warning/danger/info/neutral complete.
@@ -33,21 +38,25 @@ Linear / Stripe / Vercel / Notion / Raycast. Soft layered elevation, generous 8-
 **Checkpoint:** screenshot dashboard + a table page + a dialog, light & dark → user approves direction.
 
 ## Phase 2 — Pages & the calendar bug
+
 - [ ] **Calendar (`appointment-calendar.tsx`) — appointments clipped.** Root cause: in `TimeGrid`, box height = duration (`min 32px`) but renders 3 lines (name+actions / service / time) under `overflow-hidden` → short slots clip. Fix: taller hour rows + graceful content degradation by height + detail always reachable (tooltip/popover), no clipping. Also harden week view narrow columns + month cell density.
 - [ ] Dashboard red zones (`MetricCard`, `AlertRow`, rows) → new elevation/radii consistency.
 - [ ] Screen-by-screen pass: conversations, services, products, customers, records, agents, settings, onboarding, login.
 
 ## Phase 3 — Verification sweep
+
 - [ ] Before/after screenshots, every route × light/dark; scan for overflow / clipped / hidden content.
 - [ ] `lint` + `typecheck` + `test` + `build` clean.
 
 ## Progreso (2026-06-27)
+
 **Hecho y verificado en navegador (claro + oscuro):**
+
 - Token engine: escala de sombras suave (5 niveles + xl modales), `--info`, tipografía base
   (antialias, tracking de títulos, cifras tabulares), `prefers-reduced-motion`, bordes afinados.
 - Primitivos: card (elevación + padding 24px), badge (+warning/+info), table (celdas amplias,
   header refinado, tabular), dialog (shadow-xl + glass scrim + radio 24px), dropdown/select (glass
-  + radio 18px + ítems grandes), sheet (scrim), tooltip (sombra), sidebar-nav (aire).
+  - radio 18px + ítems grandes), sheet (scrim), tooltip (sombra), sidebar-nav (aire).
 - **Calendario**: corregido el recorte de citas (filas 64→80px, orden nombre→hora→servicio,
   servicio condicional por altura, `title` con detalle completo). Verificado semana.
 - **Overflow responsive**: toolbar de agenda (wrap + tabs scrollables), header del calendario
@@ -57,6 +66,7 @@ Linear / Stripe / Vercel / Notion / Raycast. Soft layered elevation, generous 8-
   arranca — ajeno a los cambios visuales).
 
 **Fase 2 — hecho y verificado:**
+
 - Semántica de badges de estado (sólo color, mismo significado): Activo→success (services/
   products/agents), citas scheduled→info/rescheduled→warning/cancelled→destructive/completed→
   success (list + dashboard), conversaciones ai_active→info/handoff→warning/closed→outline,
@@ -66,6 +76,7 @@ Linear / Stripe / Vercel / Notion / Raycast. Soft layered elevation, generous 8-
 - Gates finales: typecheck ✓, lint ✓, build ✓ (17 rutas).
 
 **Notas / pendientes menores:**
+
 - Node: `.nvmrc` fijado a `24`. Con `nvm use` (node 24.x), `npm ci` + las 4 gates pasan:
   typecheck ✓, lint ✓, build ✓, **test ✓ (30 tests)**. (El shell por defecto usa Homebrew Node 21,
   que rompe vitest — `node:util.styleText`.)
@@ -75,9 +86,11 @@ Linear / Stripe / Vercel / Notion / Raycast. Soft layered elevation, generous 8-
 - Sin commit (a la espera de tu OK; se trabajó sobre main).
 
 ## Redirección — lenguaje "clay" de la referencia (2026-06-27, tarde)
+
 La primera pasada fue minimal Linear/Stripe; **no coincidía con la referencia real**
 (educational-platform demo), que es **claymorphism / soft-neobrutalism**. Tras analizar el demo
 (Playwright: estilos computados + captura) se recalibró a su lenguaje, en colores de marca:
+
 - **Tipografía**: Fredoka (títulos, display redondeada) + DM Sans (cuerpo) vía next/font. Adiós Inter.
 - **Sombras "clay"**: offset duro sin blur, color de línea navy de marca (`--clay-line #1b3354`),
   tokens `--shadow-clay-xs/clay/clay-lg` (1/3/4px). Intensidad elegida: **"más suave"** para B2B.
@@ -88,4 +101,5 @@ La primera pasada fue minimal Linear/Stripe; **no coincidía con la referencia r
 - Verificado claro+oscuro (todas las rutas), 0 overflow en 7 anchos, y las 4 gates en verde.
 
 ## Verification harness
+
 Backend `:8050` up, dev server `:3000` up, MSW worker present. Auth is real → need local login credentials to reach authenticated screens. Playwright drives login → per-route screenshots (light+dark) → overflow scan.

@@ -55,16 +55,12 @@ function mockRehydrationSteps1And2Done() {
     ),
     // Step 2: at least one professional with a name
     http.get(`${BASE}/professionals/`, () =>
-      HttpResponse.json([
-        { id: "pro-1", name: "María Pérez", active: true },
-      ]),
+      HttpResponse.json([{ id: "pro-1", name: "María Pérez", active: true }]),
     ),
     // Step 3: empty schedule → horarios is pending
-    http.get(`${BASE}/businesses/me/schedule/`, () =>
-      HttpResponse.json([]),
-    ),
+    http.get(`${BASE}/businesses/me/schedule/`, () => HttpResponse.json([])),
     // Other endpoints (steps 4, 5, 7)
-    http.get(`${BASE}/services/`, () => HttpResponse.json([])),
+    http.get(`${BASE}/services/`, () => HttpResponse.json({ items: [], count: 0 })),
     http.get(`${BASE}/users/`, () =>
       HttpResponse.json([
         { id: "u1", email: "owner@petspa.cl", role: "owner", is_active: true },
@@ -86,10 +82,7 @@ describe("OnboardingPage — resume to first pending step", () => {
     // After rehydration + init, the wizard should jump to step 3
     // (CardTitle renders as a <div>, use getByText)
     await waitFor(
-      () =>
-        expect(
-          screen.getByText(/horarios de atención/i),
-        ).toBeInTheDocument(),
+      () => expect(screen.getByText(/horarios de atención/i)).toBeInTheDocument(),
       { timeout: 3000 },
     );
   });
@@ -100,10 +93,7 @@ describe("OnboardingPage — resume to first pending step", () => {
     renderPage();
 
     await waitFor(
-      () =>
-        expect(
-          screen.getByText(/horarios de atención/i),
-        ).toBeInTheDocument(),
+      () => expect(screen.getByText(/horarios de atención/i)).toBeInTheDocument(),
       { timeout: 3000 },
     );
 

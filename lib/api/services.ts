@@ -1,4 +1,4 @@
-import type { Service } from "@/lib/types";
+import type { Paginated, Service } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -18,6 +18,11 @@ interface BackendService {
   active: boolean;
 }
 
+interface Page {
+  items: BackendService[];
+  count: number;
+}
+
 function fromBackend(s: BackendService): Service {
   return {
     id: String(s.id),
@@ -28,9 +33,34 @@ function fromBackend(s: BackendService): Service {
   };
 }
 
+/**
+ * All services (for consumers that expect the full list: appointment/booking
+ * dropdowns, dashboard, onboarding). Cap of 1000; the Services table uses the
+ * paginated `searchServices`.
+ */
 export async function listServices(): Promise<Service[]> {
-  const res = await api.get<BackendService[]>("/services/");
-  return res.map(fromBackend);
+  const res = await api.get<Page>("/services/", { query: { limit: 1000 } });
+  return res.items.map(fromBackend);
+}
+
+export interface ServiceSearchParams {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Server-side search/pagination (Services table). */
+export async function searchServices(
+  params: ServiceSearchParams = {},
+): Promise<Paginated<Service>> {
+  const res = await api.get<Page>("/services/", {
+    query: {
+      search: params.search,
+      limit: params.limit ?? 20,
+      offset: params.offset ?? 0,
+    },
+  });
+  return { items: res.items.map(fromBackend), count: res.count };
 }
 
 export type CreateServiceInput = Omit<Service, "id" | "business_id">;
@@ -52,7 +82,8 @@ export function updateService(
 ): Promise<Service> {
   const body: Record<string, unknown> = {};
   if (patch.name !== undefined) body.name = patch.name;
-  if (patch.duration_minutes !== undefined) body.duration_minutes = patch.duration_minutes;
+  if (patch.duration_minutes !== undefined)
+    body.duration_minutes = patch.duration_minutes;
   if (patch.price !== undefined) body.price = patch.price;
   if (patch.is_active !== undefined) body.active = patch.is_active;
   return api.patch<BackendService>(`/services/${id}/`, body).then(fromBackend);

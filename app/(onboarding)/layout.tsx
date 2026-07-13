@@ -22,25 +22,28 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
     if (authStatus !== "authenticated") return;
 
     let cancelled = false;
-    (async () => {
-      try {
-        const { status } = await getOnboardingStatus();
-        if (cancelled) return;
-        if (status === "completed") {
-          // Completed → redirect away; stay null until navigation completes.
-          router.replace("/dashboard");
-        } else {
-          // Not completed → let the wizard render.
-          setChecked(true);
+    const t = setTimeout(() => {
+      (async () => {
+        try {
+          const { status } = await getOnboardingStatus();
+          if (cancelled) return;
+          if (status === "completed") {
+            // Completed → redirect away; stay null until navigation completes.
+            router.replace("/dashboard");
+          } else {
+            // Not completed → let the wizard render.
+            setChecked(true);
+          }
+        } catch {
+          // On error: let the user stay (resilient — don't block the wizard).
+          if (!cancelled) setChecked(true);
         }
-      } catch {
-        // On error: let the user stay (resilient — don't block the wizard).
-        if (!cancelled) setChecked(true);
-      }
-    })();
+      })();
+    }, 0);
 
     return () => {
       cancelled = true;
+      clearTimeout(t);
     };
   }, [authStatus, router]);
 
@@ -48,11 +51,7 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function OnboardingLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
     <RequireAuth>
       <OnboardingGuard>

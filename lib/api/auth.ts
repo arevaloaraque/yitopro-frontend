@@ -17,10 +17,7 @@ export interface TokenResponse {
 }
 
 /** Exchanges credentials for an access token + refresh cookie. */
-export function loginRequest(
-  email: string,
-  password: string,
-): Promise<TokenResponse> {
+export function loginRequest(email: string, password: string): Promise<TokenResponse> {
   return api.post<TokenResponse>(
     "/auth/login/",
     { email, password },
@@ -47,6 +44,7 @@ export interface MeResponse {
   id: string;
   email: string;
   name: string;
+  role: "owner" | "staff";
 }
 
 /**
@@ -73,9 +71,7 @@ export interface GenericDetailResponse {
  * backend doesn't disclose whether the address belongs to an account. A 429
  * (`ApiError`) means the IP hit the abuse throttle.
  */
-export function requestPasswordReset(
-  email: string,
-): Promise<GenericDetailResponse> {
+export function requestPasswordReset(email: string): Promise<GenericDetailResponse> {
   return api.post<GenericDetailResponse>(
     "/auth/password/reset/request/",
     { email },

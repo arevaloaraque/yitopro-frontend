@@ -39,18 +39,13 @@ describe("StepConfirmar", () => {
       await screen.findByRole("button", { name: /activar negocio/i }),
     );
 
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith("/dashboard"),
-    );
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/dashboard"));
   });
 
   it("shows missing steps with a jump button when the backend reports them", async () => {
     server.use(
       http.post(`${BASE}/businesses/me/onboarding/complete/`, () =>
-        HttpResponse.json(
-          { missing_steps: ["services", "whatsapp"] },
-          { status: 400 },
-        ),
+        HttpResponse.json({ missing_steps: ["services", "whatsapp"] }, { status: 400 }),
       ),
     );
 
