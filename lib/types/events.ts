@@ -12,6 +12,7 @@ export type SSEEventType =
   | "mensaje_automatico_enviado"
   | "pedido_creado"
   | "pedido_borrador_creado"
+  | "pedido_borrador_actualizado"
   | "conversacion_cerrada"
   | "conversacion_asignada"
   | "agente_actualizado"
@@ -104,6 +105,12 @@ export type PedidoCreadoEvent = SSEEventBase<
 /** Draft order created by the sales agent or the panel. */
 export type PedidoBorradorCreadoEvent = SSEEventBase<
   "pedido_borrador_creado",
+  { order_id: string; total: string; customer_id: string }
+>;
+
+/** A draft order's line items were modified (sales agent or panel). */
+export type PedidoBorradorActualizadoEvent = SSEEventBase<
+  "pedido_borrador_actualizado",
   { order_id: string; total: string; customer_id: string }
 >;
 
@@ -201,6 +208,7 @@ export type SSEEvent =
   | MensajeAutomaticoEnviadoEvent
   | PedidoCreadoEvent
   | PedidoBorradorCreadoEvent
+  | PedidoBorradorActualizadoEvent
   | ConversacionCerradaEvent
   | ConversacionAsignadaEvent
   | AgenteActualizadoEvent

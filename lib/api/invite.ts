@@ -3,6 +3,8 @@
  * Both routes are unauthenticated: a 401 here means a bad token,
  * not a dead session — so `skipRefresh` is used on accept.
  */
+import type { TokenResponse } from "./auth";
+
 import { api } from "./client";
 
 /**
@@ -18,24 +20,17 @@ export async function validateInvite(token: string): Promise<boolean> {
   ).valid;
 }
 
-/** Response from `/auth/invite/accept/`. */
-export interface InviteAcceptResponse {
-  access_token: string;
-  expires_in: number;
-  token_type: string;
-}
-
 /**
  * Accepts an invite by setting a password. Returns an access token that
- * establishes the session immediately.
+ * establishes the session immediately (same shape as login: `TokenResponse`).
  * `POST /api/auth/invite/accept/`
  */
 export function acceptInvite(
   token: string,
   password: string,
-): Promise<InviteAcceptResponse> {
+): Promise<TokenResponse> {
   // skipRefresh: a 400 here is "bad token/weak password", not an expired session.
-  return api.post<InviteAcceptResponse>(
+  return api.post<TokenResponse>(
     "/auth/invite/accept/",
     { token, password },
     { skipRefresh: true },

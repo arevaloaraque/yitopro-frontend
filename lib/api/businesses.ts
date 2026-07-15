@@ -50,12 +50,18 @@ export async function getBusiness(): Promise<Business> {
 }
 
 /**
- * Updates business fields (including the nested `assistant_config`).
- * `is_active` is not accepted by `BusinessUpdateIn` on the backend — passing
- * it here is a silent no-op (ninja ignores unknown fields).
+ * Updates the writable business fields (including the nested `assistant_config`).
+ * The param mirrors the backend `BusinessUpdateIn`: server-owned fields
+ * (`is_active`, `is_operative`, `whatsapp_*`, `onboarding_status`) are not
+ * accepted and are intentionally excluded from the type.
  */
 export async function updateBusiness(
-  patch: Partial<Omit<Business, "id">>,
+  patch: Partial<
+    Pick<
+      Business,
+      "name" | "country" | "currency" | "language" | "timezone" | "assistant_config"
+    >
+  >,
 ): Promise<Business> {
   return toBusiness(await api.patch<BackendBusiness>("/businesses/me/", patch));
 }

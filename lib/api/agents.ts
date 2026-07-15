@@ -1,4 +1,4 @@
-import type { Agent, Paginated } from "@/lib/types";
+import type { Agent, AgentAutonomy, Paginated } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -7,9 +7,11 @@ export async function listAgents(): Promise<Agent[]> {
   return res.items;
 }
 
+// The backend `AgentUpdateIn` only accepts these two fields (name/skills/tools
+// come from the static catalog); anything else is silently dropped by ninja.
 export function updateAgent(
   id: string,
-  patch: Partial<Omit<Agent, "id" | "business_id" | "type">>,
+  patch: { is_active?: boolean; autonomy?: AgentAutonomy },
 ): Promise<Agent> {
   return api.patch<Agent>(`/agents/${id}/`, patch);
 }

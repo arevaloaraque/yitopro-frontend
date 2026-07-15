@@ -9,11 +9,12 @@
  */
 import { api } from "./client";
 
-/** Response from `/auth/login/` and `/auth/refresh/`. */
+/** Response from `/auth/login/`, `/auth/refresh/` and `/auth/invite/accept/`. */
 export interface TokenResponse {
   access_token: string;
   expires_in: number;
-  token_type: string;
+  /** Always "Bearer"; optional per the backend schema (has a default). */
+  token_type?: string;
 }
 
 /** Exchanges credentials for an access token + refresh cookie. */

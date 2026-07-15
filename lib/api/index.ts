@@ -10,7 +10,6 @@ export {
   validateResetToken,
   confirmPasswordReset,
 } from "./auth";
-export type { TokenResponse, MeResponse, GenericDetailResponse } from "./auth";
 
 export { submitEmbeddedSignupCode } from "./whatsapp";
 export type { EmbeddedSignupResult } from "./whatsapp";

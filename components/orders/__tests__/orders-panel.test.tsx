@@ -90,4 +90,16 @@ describe("OrdersPanel", () => {
     } as SSEEvent);
     await waitFor(() => expect(listOrders).toHaveBeenCalledTimes(2));
   });
+
+  it("refetches the list when a draft is modified (pedido_borrador_actualizado)", async () => {
+    render(<OrdersPanel />);
+    await waitFor(() => expect(listOrders).toHaveBeenCalledTimes(1));
+    emitSse({
+      id: "e2",
+      type: "pedido_borrador_actualizado",
+      emitted_at: "2026-07-13T10:02:00Z",
+      data: { order_id: "2", total: "20", customer_id: "1" },
+    } as SSEEvent);
+    await waitFor(() => expect(listOrders).toHaveBeenCalledTimes(2));
+  });
 });

@@ -163,4 +163,24 @@ describe("NotificationsProvider", () => {
     expect(toastFns.success).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("count").textContent).toBe("1");
   });
+
+  it("toasts (neutral, not success) for a modified draft order (pedido_borrador_actualizado)", () => {
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse({
+      id: "p2",
+      type: "pedido_borrador_actualizado",
+      emitted_at: "2026-07-11T10:05:00Z",
+      data: { order_id: "1", total: "12990", customer_id: "9" },
+    } as SSEEvent);
+
+    expect(toastFns.base).toHaveBeenCalledTimes(1);
+    expect(toastFns.base).toHaveBeenCalledWith("Pedido actualizado", expect.anything());
+    expect(toastFns.success).not.toHaveBeenCalled();
+    expect(screen.getByTestId("count").textContent).toBe("1");
+  });
 });

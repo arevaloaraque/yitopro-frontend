@@ -75,11 +75,15 @@ export function OrdersPanel() {
     return () => clearTimeout(t);
   }, [loadOrders]);
 
-  // Real-time: a draft or a confirmed order refreshes the list (same multiplexed
-  // stream the rest of the app uses; NotificationsProvider owns the toasts).
+  // Real-time: a draft created/updated or a confirmed order refreshes the list
+  // (same multiplexed stream the rest of the app uses; NotificationsProvider owns the toasts).
   useEffect(() => {
     const unsub = subscribeToEvents((event: SSEEvent) => {
-      if (event.type === "pedido_creado" || event.type === "pedido_borrador_creado") {
+      if (
+        event.type === "pedido_creado" ||
+        event.type === "pedido_borrador_creado" ||
+        event.type === "pedido_borrador_actualizado"
+      ) {
         listOrders()
           .then(setOrders)
           .catch((err) => console.error("Error al refrescar pedidos vía SSE:", err));

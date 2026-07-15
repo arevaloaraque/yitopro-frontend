@@ -138,6 +138,13 @@ function toNotification(event: SSEEvent): AppNotification | null {
         description: `Total ${event.data.total}`,
         tone: "default",
       };
+    case "pedido_borrador_actualizado":
+      return {
+        ...base,
+        title: "Pedido actualizado",
+        description: `Total ${event.data.total}`,
+        tone: "default",
+      };
     case "error_operativo":
       return {
         ...base,
