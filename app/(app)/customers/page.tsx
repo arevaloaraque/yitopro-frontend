@@ -152,6 +152,7 @@ export default function CustomersPage() {
   function validate(f: FormData): Record<string, string> {
     const errs: Record<string, string> = {};
     if (!f.name.trim()) errs.name = "Requerido";
+    else if (f.name.trim().length > 120) errs.name = "Máximo 120 caracteres";
     if (!f.phone.trim()) errs.phone = "Requerido";
     else if (!/^\+?[\d\s-]{7,15}$/.test(f.phone.trim()))
       errs.phone = "Teléfono inválido";
@@ -174,7 +175,9 @@ export default function CustomersPage() {
       });
       closeCreate();
       loadCustomers({ search, offset: 0, append: false });
-      if (!created) {
+      if (created) {
+        toast.success("Cliente creado");
+      } else {
         toast.warning("Ya existía un cliente con ese teléfono", {
           description:
             "Se muestra el registro existente; los datos escritos no se guardaron.",
@@ -362,11 +365,16 @@ export default function CustomersPage() {
               <Input
                 id="cust-name"
                 value={form.name}
+                maxLength={120}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Ej. Ana Fuentes"
+                aria-invalid={formErrors.name ? true : undefined}
+                aria-describedby={formErrors.name ? "cust-name-error" : undefined}
               />
               {formErrors.name && (
-                <p className="text-xs text-destructive">{formErrors.name}</p>
+                <p id="cust-name-error" role="alert" className="text-xs text-destructive">
+                  {formErrors.name}
+                </p>
               )}
             </div>
             <div className="flex flex-col gap-1.5">
@@ -378,9 +386,17 @@ export default function CustomersPage() {
                   setForm((prev) => ({ ...prev, phone: e.target.value }))
                 }
                 placeholder="+56912345678"
+                aria-invalid={formErrors.phone ? true : undefined}
+                aria-describedby={formErrors.phone ? "cust-phone-error" : undefined}
               />
               {formErrors.phone && (
-                <p className="text-xs text-destructive">{formErrors.phone}</p>
+                <p
+                  id="cust-phone-error"
+                  role="alert"
+                  className="text-xs text-destructive"
+                >
+                  {formErrors.phone}
+                </p>
               )}
             </div>
             <div className="flex flex-col gap-1.5">
@@ -393,13 +409,23 @@ export default function CustomersPage() {
                   setForm((prev) => ({ ...prev, email: e.target.value }))
                 }
                 placeholder="cliente@correo.com"
+                aria-invalid={formErrors.email ? true : undefined}
+                aria-describedby={formErrors.email ? "cust-email-error" : undefined}
               />
               {formErrors.email && (
-                <p className="text-xs text-destructive">{formErrors.email}</p>
+                <p
+                  id="cust-email-error"
+                  role="alert"
+                  className="text-xs text-destructive"
+                >
+                  {formErrors.email}
+                </p>
               )}
             </div>
             {formErrors._form && (
-              <p className="text-sm text-destructive">{formErrors._form}</p>
+              <p role="alert" className="text-sm text-destructive">
+                {formErrors._form}
+              </p>
             )}
           </div>
           <DialogFooter showCloseButton>

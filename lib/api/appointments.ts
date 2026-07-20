@@ -111,10 +111,44 @@ export function rescheduleAppointment(
     .then(fromBackend);
 }
 
+/** Backend `HistoryEventOut` — a chronological lifecycle event. */
+interface BackendHistoryEvent {
+  event_type: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+/** `event_type` (backend) → the UI's audit `event`. */
+const HISTORY_EVENT_MAP: Record<string, AppointmentAuditEntry["event"]> = {
+  appointment_created: "created",
+  appointment_cancelled: "cancelled",
+  appointment_rescheduled: "rescheduled",
+  appointment_completed: "completed",
+  appointment_no_show: "no_show",
+};
+
+/**
+ * Chronological lifecycle history of an appointment (`GET /{id}/history/`).
+ * The backend returns `{event_type, created_at, metadata}` ordered by time;
+ * we map it to the UI's `AppointmentAuditEntry`. `metadata`'s shape isn't part
+ * of the agreed display contract, so `details` stays null (the dialog omits it).
+ * Unknown event types are dropped so a future backend event can't crash the UI.
+ */
 export async function getAppointmentHistory(
-  _id: string,
+  id: string,
 ): Promise<AppointmentAuditEntry[]> {
-  // The backend does not yet expose appointment audit history (no endpoint
-  // nor model). We return empty until it exists; see README (F4-B).
-  return [];
+  const res = await api.get<BackendHistoryEvent[]>(`/appointments/${id}/history/`);
+  return res
+    .map((e, i): AppointmentAuditEntry | null => {
+      const event = HISTORY_EVENT_MAP[e.event_type];
+      if (!event) return null;
+      return {
+        id: `${id}-${i}`,
+        appointment_id: id,
+        event,
+        timestamp: e.created_at,
+        details: null,
+      };
+    })
+    .filter((e): e is AppointmentAuditEntry => e !== null);
 }

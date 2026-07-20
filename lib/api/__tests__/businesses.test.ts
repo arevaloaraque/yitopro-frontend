@@ -22,6 +22,7 @@ describe("businesses api", () => {
           id: 7,
           name: "Acme",
           country: "CL",
+          address: "Av. Providencia 123",
           currency: "CLP",
           language: "es",
           timezone: "America/Santiago",

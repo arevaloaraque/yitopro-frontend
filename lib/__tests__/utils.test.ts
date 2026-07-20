@@ -8,8 +8,8 @@ describe("formatPrice", () => {
     expect(formatPrice(15.25)).toMatch(/15[.,]25/);
   });
 
-  it("shows a single decimal as-is", () => {
-    expect(formatPrice(15.5)).toMatch(/15[.,]5/);
+  it("pads non-integers to two decimals (15.5 → 15,50)", () => {
+    expect(formatPrice(15.5)).toMatch(/15[.,]50/);
   });
 
   it("keeps whole amounts clean (no trailing ,00)", () => {

@@ -22,6 +22,7 @@ import { BootSplash } from "@/components/states";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { ApiError, getOnboardingStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useSubmitGuard } from "@/lib/hooks/use-submit-guard";
 import { type LoginValues, loginSchema } from "@/lib/validation/schemas";
 
 /** Fetches onboarding status and returns the target route. Resilient: on error → "/dashboard". */
@@ -54,7 +55,10 @@ export default function LoginPage() {
     void resolvePostLoginTarget().then((target) => router.replace(target));
   }, [isAuthenticated, router]);
 
-  async function onSubmit(values: LoginValues) {
+  const submitGuard = useSubmitGuard();
+  const onSubmit = (values: LoginValues) => submitGuard(() => doLogin(values));
+
+  async function doLogin(values: LoginValues) {
     try {
       await login(values.email, values.password);
       const target = await resolvePostLoginTarget();

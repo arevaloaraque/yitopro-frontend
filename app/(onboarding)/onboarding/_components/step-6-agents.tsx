@@ -69,6 +69,7 @@ export function Step6Agents() {
           <div className="mt-3 space-y-1.5">
             <Label className="text-xs">Autonomía</Label>
             <Select
+              items={AUTONOMY_OPTIONS}
               value={agent.autonomy}
               onValueChange={(v) =>
                 run(setAgentAutonomy(agent.type, v as AgentAutonomy))

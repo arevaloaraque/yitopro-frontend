@@ -13,6 +13,15 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
+// jsdom no implementa ResizeObserver (lo usa la affordance de overflow de Table).
+if (typeof window !== "undefined" && !window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 // jsdom no implementa matchMedia (lo usan next-themes y media queries).
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({

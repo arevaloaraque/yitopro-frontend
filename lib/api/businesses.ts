@@ -16,6 +16,7 @@ interface BackendBusiness {
   id: number;
   name: string;
   country: string;
+  address: string;
   currency: string;
   language: string;
   timezone: string;
@@ -32,6 +33,7 @@ function toBusiness(b: BackendBusiness): Business {
     id: String(b.id),
     name: b.name,
     country: b.country,
+    address: b.address,
     currency: b.currency,
     language: b.language,
     timezone: b.timezone,
@@ -59,7 +61,13 @@ export async function updateBusiness(
   patch: Partial<
     Pick<
       Business,
-      "name" | "country" | "currency" | "language" | "timezone" | "assistant_config"
+      | "name"
+      | "country"
+      | "address"
+      | "currency"
+      | "language"
+      | "timezone"
+      | "assistant_config"
     >
   >,
 ): Promise<Business> {

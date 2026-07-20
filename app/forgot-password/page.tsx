@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, requestPasswordReset } from "@/lib/api";
+import { useSubmitGuard } from "@/lib/hooks/use-submit-guard";
 import { cn } from "@/lib/utils";
 import {
   type ForgotPasswordValues,
@@ -38,7 +39,11 @@ export default function ForgotPasswordPage() {
     defaultValues: { email: "" },
   });
 
-  async function onSubmit(values: ForgotPasswordValues) {
+  const submitGuard = useSubmitGuard();
+  const onSubmit = (values: ForgotPasswordValues) =>
+    submitGuard(() => doRequestReset(values));
+
+  async function doRequestReset(values: ForgotPasswordValues) {
     try {
       await requestPasswordReset(values.email);
       // The backend never reveals whether the email exists, so we always show
@@ -47,8 +52,9 @@ export default function ForgotPasswordPage() {
     } catch (err) {
       setError("root", {
         message:
+          // 429: el backend manda el detalle en español (con el tiempo de espera).
           err instanceof ApiError && err.status === 429
-            ? "Demasiados intentos. Inténtalo de nuevo en unos minutos."
+            ? err.message
             : "No pudimos procesar la solicitud. Inténtalo de nuevo.",
       });
     }

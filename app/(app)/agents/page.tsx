@@ -113,30 +113,33 @@ export default function AgentsPage() {
             const isExpanded = expandedId === agent.id;
             return (
               <Card key={agent.id}>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <div className="flex items-center gap-3">
+                <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
                       {(() => {
                         const Icon = AGENT_TYPE_ICONS[agent.type];
                         return <Icon className="size-5" />;
                       })()}
                     </span>
-                    <div>
-                      <CardTitle className="text-base">{agent.name}</CardTitle>
+                    <div className="min-w-0">
+                      <CardTitle className="min-w-0 truncate text-base">
+                        {agent.name}
+                      </CardTitle>
                       <p className="text-[0.75rem] text-muted-foreground">
                         {AGENT_TYPE_LABELS[agent.type]}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <Select
+                      items={AUTONOMY_OPTIONS}
                       value={agent.autonomy}
                       onValueChange={(v) => changeAutonomy(agent, v as AgentAutonomy)}
                     >
                       <SelectTrigger size="sm" className="w-32">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="min-w-72 max-w-[min(24rem,calc(100vw-2rem))]">
                         <SelectGroup>
                           {AUTONOMY_OPTIONS.map((o) => (
                             <SelectItem key={o.value} value={o.value}>

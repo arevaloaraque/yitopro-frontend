@@ -1,9 +1,11 @@
 "use client";
 
-import { MessageSquare, User } from "lucide-react";
+import { useState } from "react";
+import { MessageSquare, Search, User } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/states/empty-state";
 import { ErrorState } from "@/components/states/error-state";
 import { Loading } from "@/components/states/loading";
@@ -74,12 +76,35 @@ export function ConversationList({
   onRetry,
   agentNames,
 }: ConversationListProps) {
+  const [search, setSearch] = useState("");
+
   if (loading) return <Loading rows={6} className="p-4" />;
   if (error) return <ErrorState onRetry={onRetry} className="m-4" />;
 
+  const query = search.trim().toLowerCase();
+  // ponytail: filtro client-side sobre la lista ya cargada; migrar a `?search=`
+  // cuando el backend lo exponga (hoy la API no lo tiene y trae la lista completa).
+  const visible = query
+    ? conversations.filter(
+        (c) =>
+          c.customer_name.toLowerCase().includes(query) ||
+          c.customer_phone.toLowerCase().includes(query),
+      )
+    : conversations;
+
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-border/60 px-3 py-2.5">
+      <div className="shrink-0 space-y-2 border-b border-border/60 px-3 py-2.5">
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre o teléfono"
+            aria-label="Buscar conversaciones"
+            className="h-8 pl-8 text-[0.8rem]"
+          />
+        </div>
         <div className="flex gap-1 overflow-x-auto">
           {STATUS_OPTIONS.map((opt) => (
             <Button
@@ -94,7 +119,7 @@ export function ConversationList({
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {conversations.length === 0 ? (
+        {visible.length === 0 ? (
           <EmptyState
             title="Sin conversaciones"
             description="No hay conversaciones que coincidan con el filtro."
@@ -102,7 +127,7 @@ export function ConversationList({
             className="m-4 border-none bg-transparent"
           />
         ) : (
-          conversations.map((conv) => (
+          visible.map((conv) => (
             <button
               key={conv.id}
               type="button"

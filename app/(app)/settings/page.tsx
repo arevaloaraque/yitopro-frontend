@@ -34,9 +34,11 @@ import {
 } from "@/lib/api/businesses";
 import { listTemplates, type WhatsAppTemplate } from "@/lib/api/whatsapp";
 import { useBusiness } from "@/lib/business";
+import { useSubmitGuard } from "@/lib/hooks/use-submit-guard";
 import {
   buildWindows,
   emptyWeek,
+  validateWeek,
   windowsToWeek,
   type DayState,
 } from "@/lib/schedule/windows";
@@ -50,17 +52,31 @@ const COUNTRIES = [
     currency: "ARS",
     zone: "America/Argentina/Buenos_Aires",
   },
-  { code: "MX", label: "Mexico", currency: "MXN", zone: "America/Mexico_City" },
+  { code: "MX", label: "México", currency: "MXN", zone: "America/Mexico_City" },
   { code: "CO", label: "Colombia", currency: "COP", zone: "America/Bogota" },
-  { code: "PE", label: "Peru", currency: "PEN", zone: "America/Lima" },
-  { code: "ES", label: "Espana", currency: "EUR", zone: "Europe/Madrid" },
+  { code: "PE", label: "Perú", currency: "PEN", zone: "America/Lima" },
+  { code: "VE", label: "Venezuela", currency: "VES", zone: "America/Caracas" },
+  { code: "ES", label: "España", currency: "EUR", zone: "Europe/Madrid" },
   { code: "US", label: "Estados Unidos", currency: "USD", zone: "America/New_York" },
 ];
 
+// Solo monedas dentro de los choices del backend:
+// CLP, ARS, BOB, BRL, COP, MXN, PEN, PYG, USD, UYU, EUR, VES.
+const CURRENCIES = [
+  { code: "CLP", label: "CLP — Peso chileno" },
+  { code: "ARS", label: "ARS — Peso argentino" },
+  { code: "MXN", label: "MXN — Peso mexicano" },
+  { code: "COP", label: "COP — Peso colombiano" },
+  { code: "PEN", label: "PEN — Sol peruano" },
+  { code: "VES", label: "VES — Bolívar venezolano" },
+  { code: "EUR", label: "EUR — Euro" },
+  { code: "USD", label: "USD — Dólar" },
+];
+
 const LANGUAGES = [
-  { code: "es", label: "Espanol" },
+  { code: "es", label: "Español" },
   { code: "en", label: "English" },
-  { code: "pt", label: "Portugues" },
+  { code: "pt", label: "Portugués" },
 ];
 
 const TONES: { value: AssistantTone; label: string }[] = [
@@ -138,9 +154,12 @@ export default function SettingsPage() {
   // Business form
   const [name, setName] = useState("");
   const [country, setCountry] = useState("");
+  const [address, setAddress] = useState("");
   const [currency, setCurrency] = useState("");
   const [language, setLanguage] = useState("");
   const [timezone, setTimezone] = useState("");
+  // One-shot hint: cambiar el país re-escribe moneda/tz; se avisa en la re-edición.
+  const [autofillHint, setAutofillHint] = useState(false);
 
   // Assistant form (the assistant's language is inherited from the business)
   const [displayName, setDisplayName] = useState("");
@@ -173,6 +192,7 @@ export default function SettingsPage() {
 
   // Separate "Guardado" auto-clear timers so one section doesn't clear another.
   const bizTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const submitGuard = useSubmitGuard();
   const asstTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const hoursTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -188,6 +208,7 @@ export default function SettingsPage() {
   function hydrateBusiness(b: Business) {
     setName(b.name);
     setCountry(b.country);
+    setAddress(b.address);
     setCurrency(b.currency);
     setLanguage(b.language);
     setTimezone(b.timezone);
@@ -255,7 +276,9 @@ export default function SettingsPage() {
     return () => clearTimeout(t);
   }, [whatsappConnected, loadTemplates]);
 
-  async function handleSaveNegocio() {
+  const handleSaveNegocio = () => submitGuard(saveNegocio);
+
+  async function saveNegocio() {
     if (!name.trim()) {
       setBizError("El nombre del negocio es obligatorio.");
       return;
@@ -271,6 +294,7 @@ export default function SettingsPage() {
       await updateBusiness({
         name: name.trim(),
         country,
+        address: address.trim(),
         currency,
         language,
         timezone,
@@ -310,6 +334,11 @@ export default function SettingsPage() {
   }
 
   async function handleSaveHours() {
+    const invalid = validateWeek(hours);
+    if (invalid) {
+      setHoursError(invalid);
+      return;
+    }
     setSavingHours(true);
     setHoursError(null);
     setHoursSaved(false);
@@ -347,6 +376,17 @@ export default function SettingsPage() {
     }
     return <Loading rows={6} label="Cargando configuracion…" />;
   }
+
+  // Un valor guardado fuera de catálogo se agrega como ítem {value, label: value}:
+  // el trigger siempre muestra algo y el valor no se pierde al re-guardar.
+  const countryItems =
+    !country || COUNTRIES.some((c) => c.code === country)
+      ? COUNTRIES
+      : [...COUNTRIES, { code: country, label: country }];
+  const currencyItems =
+    !currency || CURRENCIES.some((c) => c.code === currency)
+      ? CURRENCIES
+      : [...CURRENCIES, { code: currency, label: currency }];
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
@@ -386,8 +426,23 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="biz-address">Dirección</Label>
+                <Input
+                  id="biz-address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Dirección de la tienda (opcional)"
+                />
+                <p className="text-[0.7rem] text-muted-foreground">
+                  El asistente la usa para responder «¿dónde están?». Si la dejas
+                  vacía, dirá que el equipo la confirmará.
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="biz-country">País</Label>
                 <Select
+                  items={countryItems.map((c) => ({ value: c.code, label: c.label }))}
                   value={country}
                   onValueChange={(v) => {
                     const selected = v ?? country;
@@ -396,6 +451,7 @@ export default function SettingsPage() {
                     if (c) {
                       setCurrency(c.currency);
                       setTimezone(c.zone);
+                      setAutofillHint(true);
                     }
                   }}
                 >
@@ -404,7 +460,7 @@ export default function SettingsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {COUNTRIES.map((c) => (
+                      {countryItems.map((c) => (
                         <SelectItem key={c.code} value={c.code}>
                           {c.label}
                         </SelectItem>
@@ -412,12 +468,21 @@ export default function SettingsPage() {
                     </SelectGroup>
                   </SelectContent>
                 </Select>
+                {autofillHint && (
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    Se actualizaron la moneda y la zona horaria según el país.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="biz-currency">Moneda</Label>
                   <Select
+                    items={currencyItems.map((c) => ({
+                      value: c.code,
+                      label: c.label,
+                    }))}
                     value={currency}
                     onValueChange={(v) => setCurrency(v ?? currency)}
                   >
@@ -426,13 +491,11 @@ export default function SettingsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="CLP">CLP — Peso chileno</SelectItem>
-                        <SelectItem value="ARS">ARS — Peso argentino</SelectItem>
-                        <SelectItem value="MXN">MXN — Peso mexicano</SelectItem>
-                        <SelectItem value="COP">COP — Peso colombiano</SelectItem>
-                        <SelectItem value="PEN">PEN — Sol peruano</SelectItem>
-                        <SelectItem value="EUR">EUR — Euro</SelectItem>
-                        <SelectItem value="USD">USD — Dolar</SelectItem>
+                        {currencyItems.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
                       </SelectGroup>
                     </SelectContent>
                   </Select>
@@ -441,6 +504,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="biz-language">Idioma del negocio</Label>
                   <Select
+                    items={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
                     value={language}
                     onValueChange={(v) => setLanguage(v ?? language)}
                   >
@@ -503,11 +567,21 @@ export default function SettingsPage() {
                   cambia el nombre de contacto que se ve en WhatsApp (ese se configura
                   en Meta).
                 </p>
+                {!displayName.trim() && (
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    Si lo dejas vacío, el asistente no se presenta con un nombre propio:
+                    responde directamente en nombre del negocio.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="asst-tone">Tono</Label>
-                <Select value={tone} onValueChange={(v) => setTone(v as AssistantTone)}>
+                <Select
+                  items={TONES}
+                  value={tone}
+                  onValueChange={(v) => setTone(v as AssistantTone)}
+                >
                   <SelectTrigger id="asst-tone" className="w-full">
                     <SelectValue placeholder="Tono" />
                   </SelectTrigger>

@@ -5,10 +5,11 @@
  * customer, the list must refetch instead of going stale.
  */
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Customer, SSEEvent } from "@/lib/types";
-import { searchCustomers } from "@/lib/api/customers";
+import { createCustomer, searchCustomers } from "@/lib/api/customers";
 import { listConversations } from "@/lib/api/conversations";
 
 import CustomersPage from "../page";
@@ -16,6 +17,18 @@ import CustomersPage from "../page";
 vi.mock("@/lib/api/customers");
 vi.mock("@/lib/api/conversations");
 vi.mock("@/lib/api/records");
+
+const { toastFns } = vi.hoisted(() => ({
+  toastFns: { base: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
+}));
+vi.mock("sonner", () => {
+  const toast = Object.assign(toastFns.base, {
+    success: toastFns.success,
+    warning: toastFns.warning,
+    error: toastFns.error,
+  });
+  return { toast };
+});
 
 const { sseHandlers } = vi.hoisted(() => ({
   sseHandlers: [] as ((event: SSEEvent) => void)[],
@@ -92,5 +105,25 @@ describe("CustomersPage — SSE freshness", () => {
     } as SSEEvent);
 
     await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("CustomersPage — crear cliente", () => {
+  it("muestra toast de éxito al crear un cliente nuevo (A11Y-04)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createCustomer).mockResolvedValue({
+      customer: makeCustomer({ id: "cust-9", name: "Pedro" }),
+      created: true,
+    });
+
+    render(<CustomersPage />);
+    await waitFor(() => expect(searchCustomers).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: /nuevo cliente/i }));
+    await user.type(screen.getByLabelText("Nombre"), "Pedro");
+    await user.type(screen.getByLabelText("Teléfono"), "+56922222222");
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => expect(toastFns.success).toHaveBeenCalledWith("Cliente creado"));
   });
 });

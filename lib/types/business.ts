@@ -22,6 +22,8 @@ export interface Business {
   name: string;
   /** ISO 3166-1 alpha-2 country code (e.g. "CL"). */
   country: string;
+  /** Store street address shown to customers by the AI ("" when not set). */
+  address: string;
   /** ISO 4217 currency code (e.g. "CLP"). */
   currency: string;
   /** Business language (BCP-47). */

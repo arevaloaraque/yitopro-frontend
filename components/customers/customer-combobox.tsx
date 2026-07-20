@@ -24,11 +24,18 @@ export function CustomerCombobox({
   onChange,
   placeholder = "Buscar cliente…",
   className,
+  id,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedby,
 }: {
   value: Selection;
   onChange: (customer: Selection) => void;
   placeholder?: string;
   className?: string;
+  /** Se reenvía al input para que un `<Label htmlFor>` externo lo asocie. */
+  id?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
+  "aria-describedby"?: string;
 }) {
   const [options, setOptions] = React.useState<Option[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -94,6 +101,9 @@ export function CustomerCombobox({
       <div className={cn("relative", className)}>
         <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Combobox.Input
+          id={id}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedby}
           placeholder={placeholder}
           className="h-9 w-full min-w-0 rounded-xl border-[1.5px] border-input bg-background py-1.5 pr-3 pl-8 text-sm transition-all duration-150 outline-none placeholder:text-muted-foreground hover:border-input/80 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/20"
         />

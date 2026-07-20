@@ -59,6 +59,7 @@ interface OnboardingContextValue {
   updateBusinessInfo: (info: {
     businessName: string;
     country: string;
+    address: string;
     currency: string;
     language: string;
     timezone: string;
@@ -162,6 +163,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
           ...prev,
           businessName: business.name,
           country: business.country,
+          address: business.address,
           currency: business.currency,
           language: business.language,
           timezone: business.timezone,
@@ -209,6 +211,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     async (info: {
       businessName: string;
       country: string;
+      address: string;
       currency: string;
       language: string;
       timezone: string;
@@ -216,6 +219,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       const business = await updateBusiness({
         name: info.businessName,
         country: info.country,
+        address: info.address,
         currency: info.currency,
         language: info.language,
         timezone: info.timezone,
@@ -224,6 +228,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         ...prev,
         businessName: business.name,
         country: business.country,
+        address: business.address,
         currency: business.currency,
         language: business.language,
         timezone: business.timezone,

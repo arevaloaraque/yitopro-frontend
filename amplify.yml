@@ -1,0 +1,19 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm install 24 && nvm use 24 # Node 24 (matches .nvmrc / package.json engines)
+        - npm install --legacy-peer-deps # peer-dep conflicts; mirrors vercel.json install
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    # Next.js SSR (WEB_COMPUTE): Amplify serves .next via the compute adapter.
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*

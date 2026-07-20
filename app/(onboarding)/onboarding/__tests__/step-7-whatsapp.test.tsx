@@ -27,6 +27,7 @@ function baseData(
   return {
     businessName: "PET Spa",
     country: "CL",
+    address: "",
     currency: "CLP",
     language: "es",
     timezone: "America/Santiago",

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 
 import {
@@ -33,14 +34,19 @@ import { cn } from "@/lib/utils";
 import { ConversationDetail } from "./_components/conversation-detail";
 import { ConversationList } from "./_components/conversation-list";
 
-export default function ConversationsPage() {
+function ConversationsInner() {
   const { user } = useAuth();
+  // Initial selection comes from the URL (?id=…) so it survives F5 and is
+  // deep-linkable (from the dashboard, a shared link, etc.).
+  const searchParams = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | "all">("all");
   const [retryKey, setRetryKey] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    searchParams.get("id"),
+  );
 
   const [messages, setMessages] = useState<Message[]>([]);
   // Which conversation `messages` belongs to. Loading is *derived* from this vs
@@ -140,6 +146,9 @@ export default function ConversationsPage() {
     // wiping them and getting stuck on the skeleton.
     if (id === selectedIdRef.current) return;
     setSelectedId(id);
+    // Mirror the selection into the URL (deep-linkable, survives F5) without a
+    // navigation/refetch — replaceState keeps the list and thread state intact.
+    window.history.replaceState(null, "", `?id=${id}`);
     setActionError(null);
     setConversations((prev) =>
       prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)),
@@ -376,7 +385,10 @@ export default function ConversationsPage() {
           <ConversationDetail
             conversation={selectedConversation}
             currentUserId={user?.id ?? null}
-            onBack={() => setSelectedId(null)}
+            onBack={() => {
+              setSelectedId(null);
+              window.history.replaceState(null, "", window.location.pathname);
+            }}
             messages={messages}
             customerName={
               selectedConversation.customer_name.trim() ||
@@ -409,5 +421,14 @@ export default function ConversationsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ConversationsPage() {
+  // useSearchParams requires a Suspense boundary in the App Router.
+  return (
+    <Suspense fallback={null}>
+      <ConversationsInner />
+    </Suspense>
   );
 }

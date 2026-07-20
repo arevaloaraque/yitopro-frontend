@@ -8,6 +8,7 @@ import {
   Bot,
   Calendar,
   MessageSquare,
+  Minus,
   TrendingDown,
   TrendingUp,
   Users,
@@ -218,12 +219,15 @@ function MetricCard({
                 "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.65rem] font-semibold",
                 trend === "up" && "bg-success/10 text-success",
                 trend === "down" && "bg-destructive/10 text-destructive",
+                trend === "neutral" && "bg-muted text-muted-foreground",
               )}
             >
               {trend === "up" ? (
                 <TrendingUp className="size-2.5" />
-              ) : (
+              ) : trend === "down" ? (
                 <TrendingDown className="size-2.5" />
+              ) : (
+                <Minus className="size-2.5" />
               )}
             </span>
           ) : null}
@@ -252,7 +256,7 @@ function ConversationRow({
   const s = statusBadge(conversation.status);
   return (
     <Link
-      href="/conversations"
+      href={`/conversations?id=${conversation.id}`}
       className="flex cursor-pointer items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5 transition-all duration-200 hover:border-border/60 hover:bg-surface active:scale-[0.99]"
     >
       <div
@@ -306,7 +310,7 @@ function AppointmentRow({
   const s = appointmentStatusBadge(appointment.status);
   return (
     <Link
-      href="/appointments"
+      href={`/appointments?id=${appointment.id}`}
       className="flex cursor-pointer items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5 transition-all duration-200 hover:border-border/60 hover:bg-surface active:scale-[0.99]"
     >
       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
@@ -558,10 +562,16 @@ export default function DashboardPage() {
           icon={<Calendar className="size-4" />}
           trend={todayAppointments.length >= 3 ? "up" : "neutral"}
         />
+        {/* DASHBOARD-03: el backend no modela leído/no leído; `unread` arranca en 0
+            y sólo sube en memoria por SSE mientras la pestaña sigue abierta (se
+            reinicia en cada F5). Se reencuadra el KPI como actividad de esta
+            sesión, no como un contador persistente. */}
         <MetricCard
-          label="Mensajes sin leer"
+          label="Mensajes nuevos"
           value={totalUnread}
-          subValue={totalUnread > 0 ? "Requieren atención" : "Todo al día"}
+          subValue={
+            totalUnread > 0 ? "Recibidos en esta sesión" : "Sin mensajes nuevos"
+          }
           icon={<Users className="size-4" />}
           trend={totalUnread > 5 ? "up" : totalUnread > 0 ? "down" : "neutral"}
           variant={totalUnread > 0 ? "warning" : "default"}
@@ -606,7 +616,7 @@ export default function DashboardPage() {
             <div>
               <CardTitle>Conversaciones recientes</CardTitle>
               <CardDescription>
-                Últimas {recentConversations.length} conversaciones activas
+                Últimas {recentConversations.length} conversaciones
               </CardDescription>
             </div>
             <Link

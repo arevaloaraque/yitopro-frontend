@@ -69,7 +69,7 @@ export function WeekEditor({
                       aria-label={`${day.label} inicio turno ${ri + 1}`}
                       value={range.start}
                       onChange={(e) => patchRange(i, ri, { start: e.target.value })}
-                      className="w-32"
+                      className="w-32 min-w-[5.5rem]"
                     />
                     <span className="text-muted-foreground">—</span>
                     <Input
@@ -77,7 +77,7 @@ export function WeekEditor({
                       aria-label={`${day.label} fin turno ${ri + 1}`}
                       value={range.end}
                       onChange={(e) => patchRange(i, ri, { end: e.target.value })}
-                      className="w-32"
+                      className="w-32 min-w-[5.5rem]"
                     />
                     {state.ranges.length > 1 ? (
                       <Button

@@ -27,6 +27,7 @@ function fromBackend(s: BackendService): Service {
   return {
     id: String(s.id),
     name: s.name,
+    description: s.description,
     duration_minutes: s.duration_minutes,
     price: Number(s.price),
     is_active: s.active,
@@ -40,7 +41,9 @@ function fromBackend(s: BackendService): Service {
  */
 export async function listServices(): Promise<Service[]> {
   const res = await api.get<Page>("/services/", { query: { limit: 1000 } });
-  return res.items.map(fromBackend);
+  // Backend now returns newest-first (so new services show on page 1 of the paginated
+  // table); dropdowns/onboarding want alphabetical, so re-sort here.
+  return res.items.map(fromBackend).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface ServiceSearchParams {
@@ -69,6 +72,7 @@ export function createService(input: CreateServiceInput): Promise<Service> {
   return api
     .post<BackendService>("/services/", {
       name: input.name,
+      description: input.description ?? "",
       duration_minutes: input.duration_minutes,
       price: input.price,
       active: input.is_active,
@@ -82,6 +86,7 @@ export function updateService(
 ): Promise<Service> {
   const body: Record<string, unknown> = {};
   if (patch.name !== undefined) body.name = patch.name;
+  if (patch.description !== undefined) body.description = patch.description;
   if (patch.duration_minutes !== undefined)
     body.duration_minutes = patch.duration_minutes;
   if (patch.price !== undefined) body.price = patch.price;

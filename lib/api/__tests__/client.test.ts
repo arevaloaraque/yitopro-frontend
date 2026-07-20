@@ -52,6 +52,37 @@ describe("apiFetch (lib/api/client)", () => {
     await expect(api.get("/boom")).rejects.toMatchObject({ status: 400 });
   });
 
+  it("passes the backend `detail` through on 4xx", async () => {
+    server.use(
+      http.get(`${BASE}/limited`, () =>
+        HttpResponse.json({ detail: "Demasiados intentos." }, { status: 429 }),
+      ),
+    );
+    await expect(api.get("/limited")).rejects.toMatchObject({
+      message: "Demasiados intentos.",
+    });
+  });
+
+  it("never surfaces a 5xx body: uses the Spanish status message", async () => {
+    server.use(
+      http.get(`${BASE}/crash`, () =>
+        HttpResponse.json({ detail: "Traceback (most recent call last)…" }, { status: 500 }),
+      ),
+    );
+    await expect(api.get("/crash")).rejects.toMatchObject({
+      message: "El servidor tuvo un problema. Inténtalo más tarde.",
+    });
+  });
+
+  it("falls back to a Spanish message on 4xx without detail", async () => {
+    server.use(
+      http.get(`${BASE}/teapot`, () => new HttpResponse(null, { status: 418 })),
+    );
+    await expect(api.get("/teapot")).rejects.toMatchObject({
+      message: "Algo salió mal. Inténtalo de nuevo.",
+    });
+  });
+
   it("on 401 refreshes once and retries with the new token", async () => {
     const tokens = ["old", "new"];
     const refresh = vi.fn(async () => true);

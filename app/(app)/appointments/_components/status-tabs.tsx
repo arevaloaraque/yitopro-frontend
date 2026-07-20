@@ -13,6 +13,11 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "no_show", label: "No asistió" },
 ];
 
+/** Label in Spanish for a status filter (falls back to the raw value). */
+export function statusLabel(status: StatusFilter): string {
+  return STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
+}
+
 interface StatusTabsProps {
   value: StatusFilter;
   onChange: (value: StatusFilter) => void;

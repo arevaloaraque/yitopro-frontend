@@ -43,6 +43,14 @@ vi.mock("@/lib/sse", () => ({
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ user: { id: "op-1", email: "op@x.cl", name: "Op" } }),
 }));
+// selectedId is seeded from the URL (?id=…); mock useSearchParams so tests can
+// drive the initial deep-linked selection. Reset to empty in beforeEach.
+const { searchParamsStub } = vi.hoisted(() => ({
+  searchParamsStub: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParamsStub.current,
+}));
 
 function emitSse(event: SSEEvent) {
   act(() => {
@@ -80,6 +88,8 @@ function makeMessage(over: Partial<Message> = {}): Message {
 beforeEach(() => {
   vi.clearAllMocks();
   sseHandlers.length = 0;
+  searchParamsStub.current = new URLSearchParams();
+  window.history.replaceState(null, "", "/");
   // jsdom doesn't implement scrollIntoView (used by the message thread).
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
 });
@@ -209,5 +219,53 @@ describe("ConversationsPage — live SSE freshness", () => {
 
     expect(await screen.findByRole("button", { name: /Bruno/ })).toBeInTheDocument();
     expect(getConversation).toHaveBeenCalledWith("conv-2");
+  });
+});
+
+describe("ConversationsPage — URL selection (CONV-02) & search (CONV-01)", () => {
+  it("preselects the conversation from ?id= on mount (deep-link / survives F5)", async () => {
+    searchParamsStub.current = new URLSearchParams("id=conv-1");
+    vi.mocked(listConversations).mockResolvedValue([makeConversation()]);
+    vi.mocked(listMessages).mockResolvedValue([makeMessage()]);
+
+    render(<ConversationsPage />);
+
+    // No click needed: the detail opens straight from the URL param.
+    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
+  });
+
+  it("mirrors the selected conversation id into the URL", async () => {
+    vi.mocked(listConversations).mockResolvedValue([makeConversation()]);
+    vi.mocked(listMessages).mockResolvedValue([makeMessage()]);
+
+    render(<ConversationsPage />);
+    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
+
+    expect(window.location.search).toContain("id=conv-1");
+  });
+
+  it("filters the inbox client-side by customer name", async () => {
+    vi.mocked(listConversations).mockResolvedValue([
+      makeConversation(),
+      makeConversation({
+        id: "conv-2",
+        customer_id: "cust-2",
+        customer_name: "Bruno",
+        customer_phone: "+56933334444",
+      }),
+    ]);
+    vi.mocked(listMessages).mockResolvedValue([makeMessage()]);
+
+    render(<ConversationsPage />);
+    await screen.findByRole("button", { name: /Ana/ });
+    expect(screen.getByRole("button", { name: /Bruno/ })).toBeInTheDocument();
+
+    await userEvent.type(
+      screen.getByRole("textbox", { name: /buscar/i }),
+      "Bruno",
+    );
+
+    expect(screen.queryByRole("button", { name: /Ana/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bruno/ })).toBeInTheDocument();
   });
 });

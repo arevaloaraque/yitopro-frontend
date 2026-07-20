@@ -40,6 +40,7 @@ import {
   updateCustomer,
 } from "@/lib/api/customers";
 import { getRecord, updateRecordValues } from "@/lib/api/records";
+import { useSubmitGuard } from "@/lib/hooks/use-submit-guard";
 import { subscribeToEvents } from "@/lib/sse";
 import type {
   Conversation,
@@ -135,6 +136,8 @@ function renderFieldInput(
         />
       );
     case "select":
+      // ponytail: sin `items` en el Root — las opciones de ficha son strings
+      // planos (valor === label), el trigger ya muestra el texto correcto.
       return (
         <Select
           value={typeof value === "string" ? value : ""}
@@ -247,6 +250,7 @@ export function CustomerDrawer({
   const [openNote, setOpenNote] = useState<Note | null>(null);
 
   const reqRef = useRef(0);
+  const submitGuard = useSubmitGuard();
   const custTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const recordTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -432,7 +436,9 @@ export function CustomerDrawer({
     }
   }
 
-  async function handleAddNote() {
+  const handleAddNote = () => submitGuard(addNote);
+
+  async function addNote() {
     if (!customerId) return;
     const body = noteDraft.trim();
     if (!body) {

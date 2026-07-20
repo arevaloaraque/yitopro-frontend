@@ -5,16 +5,46 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Overflow affordance: fade on the right edge while columns are hidden past it.
+  // ponytail: solo borde derecho (tablas LTR); agregar el izquierdo si algún día importa.
+  const updateOverflow = React.useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || !containerRef.current) return;
+    containerRef.current.dataset.overflow = String(
+      scroller.scrollWidth - scroller.clientWidth - scroller.scrollLeft > 1,
+    );
+  }, []);
+
+  React.useEffect(() => {
+    updateOverflow();
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const ro = new ResizeObserver(updateOverflow);
+    ro.observe(scroller);
+    if (scroller.firstElementChild) ro.observe(scroller.firstElementChild);
+    return () => ro.disconnect();
+  }, [updateOverflow]);
+
   return (
     <div
+      ref={containerRef}
       data-slot="table-container"
-      className="relative w-full overflow-x-auto rounded-2xl border-[1.5px] border-clay-line shadow-clay"
+      className="relative w-full rounded-2xl border-[1.5px] border-clay-line shadow-clay after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-8 after:rounded-r-2xl after:bg-gradient-to-l after:from-background after:opacity-0 after:transition-opacity data-[overflow=true]:after:opacity-100"
     >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
+      <div
+        ref={scrollRef}
+        onScroll={updateOverflow}
+        className="w-full overflow-x-auto rounded-2xl"
+      >
+        <table
+          data-slot="table"
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      </div>
     </div>
   );
 }

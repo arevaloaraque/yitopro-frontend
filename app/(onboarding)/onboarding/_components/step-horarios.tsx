@@ -22,6 +22,7 @@ import {
   buildWindows,
   emptyWeek,
   hasValidOpenDay,
+  validateWeek,
   windowsToWeek,
 } from "@/lib/schedule/windows";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,11 @@ function ProfessionalOverride() {
   async function handleSave() {
     if (!selectedId) {
       setError("Selecciona un profesional.");
+      return;
+    }
+    const invalid = validateWeek(week);
+    if (invalid) {
+      setError(invalid);
       return;
     }
     if (!hasValidOpenDay(week)) {
@@ -182,6 +188,11 @@ export function StepHorarios() {
   }, [data.weeklySchedule]);
 
   async function handleApplyAll() {
+    const invalid = validateWeek(week);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
     if (!hasValidOpenDay(week)) {
       setError("Marca al menos un día con un horario válido (inicio < fin).");
       return;

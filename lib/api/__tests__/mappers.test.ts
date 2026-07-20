@@ -5,11 +5,13 @@ import { configureApiAuth } from "@/lib/api";
 import {
   cancelAppointment,
   createAppointment,
+  getAppointmentHistory,
   listAppointments,
   rescheduleAppointment,
 } from "@/lib/api/appointments";
 import { listConversations, listMessages, sendMessage } from "@/lib/api/conversations";
 import { createCustomer, updateCustomer } from "@/lib/api/customers";
+import { createOrder, updateOrder } from "@/lib/api/orders";
 import { createService, listServices, searchServices } from "@/lib/api/services";
 import { server } from "@/mocks/server";
 
@@ -37,7 +39,14 @@ describe("services mapper", () => {
       ),
     );
     expect(await listServices()).toEqual([
-      { id: "1", name: "Baño", duration_minutes: 30, price: 20, is_active: true },
+      {
+        id: "1",
+        name: "Baño",
+        description: "",
+        duration_minutes: 30,
+        price: 20,
+        is_active: true,
+      },
     ]);
   });
 
@@ -61,7 +70,14 @@ describe("services mapper", () => {
     );
     expect(await searchServices({ limit: 1, offset: 0 })).toEqual({
       items: [
-        { id: "2", name: "Corte", duration_minutes: 45, price: 15000, is_active: true },
+        {
+          id: "2",
+          name: "Corte",
+          description: "",
+          duration_minutes: 45,
+          price: 15000,
+          is_active: true,
+        },
       ],
       count: 7,
     });
@@ -332,5 +348,90 @@ describe("appointments mapper", () => {
     const cancelled = await cancelAppointment("1", "no show");
     expect(cancelBody).toEqual({ reason: "no show" });
     expect(cancelled.status).toBe("cancelled");
+  });
+
+  it("history maps event_type->event chronologically and drops unknown types", async () => {
+    server.use(
+      http.get(`${BASE}/appointments/7/history/`, () =>
+        HttpResponse.json([
+          {
+            event_type: "appointment_created",
+            created_at: "2026-07-01T09:00:00Z",
+            metadata: {},
+          },
+          {
+            event_type: "appointment_no_show",
+            created_at: "2026-07-03T09:00:00Z",
+            metadata: {},
+          },
+          {
+            event_type: "something_unknown",
+            created_at: "2026-07-04T09:00:00Z",
+            metadata: {},
+          },
+        ]),
+      ),
+    );
+    const history = await getAppointmentHistory("7");
+    expect(history.map((h) => h.event)).toEqual(["created", "no_show"]);
+    expect(history[0]).toMatchObject({
+      appointment_id: "7",
+      timestamp: "2026-07-01T09:00:00Z",
+      details: null,
+    });
+  });
+});
+
+describe("orders mapper", () => {
+  const backendOrder = {
+    id: 5,
+    customer_id: 4,
+    customer_name: "Ana",
+    status: "draft",
+    total: "30.00",
+    created_by_ai: false,
+    created_at: "2026-07-01T00:00:00Z",
+    items: [
+      {
+        id: 1,
+        product_id: 9,
+        product_name: "Croquetas",
+        quantity: 2,
+        unit_price: "15.00",
+      },
+    ],
+  };
+
+  it("createOrder posts {customer_id, items:[{product_id, quantity}]} and maps the response", async () => {
+    let body: unknown;
+    server.use(
+      http.post(`${BASE}/orders/`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(backendOrder, { status: 201 });
+      }),
+    );
+    const out = await createOrder({
+      customer_id: "4",
+      items: [{ product_id: "9", quantity: 2 }],
+    });
+    expect(body).toEqual({ customer_id: 4, items: [{ product_id: 9, quantity: 2 }] });
+    expect(out).toMatchObject({
+      id: "5",
+      customer: "Ana",
+      total: 30,
+      items: [{ product_id: "9", product_name: "Croquetas", quantity: 2, unit_price: 15 }],
+    });
+  });
+
+  it("updateOrder PATCHes {items:[...]} only (the customer is fixed by the order)", async () => {
+    let body: unknown;
+    server.use(
+      http.patch(`${BASE}/orders/5/`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(backendOrder);
+      }),
+    );
+    await updateOrder("5", [{ product_id: "9", quantity: 3 }]);
+    expect(body).toEqual({ items: [{ product_id: 9, quantity: 3 }] });
   });
 });

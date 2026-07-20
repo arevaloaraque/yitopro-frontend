@@ -34,7 +34,7 @@ export function Topbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="lg:hidden"
               aria-label="Abrir menú"
             />
           }

@@ -56,6 +56,7 @@ describe("Step3Services (adapted)", () => {
     await waitFor(() =>
       expect(posted).toEqual({
         name: "Baño",
+        description: "",
         duration_minutes: 45,
         price: 12000,
         active: true,

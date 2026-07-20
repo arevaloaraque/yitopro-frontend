@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Search, Sparkles } from "lucide-react";
+import { Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import type { Service } from "@/lib/types";
-import { searchServices, createService, updateService } from "@/lib/api";
+import {
+  searchServices,
+  createService,
+  updateService,
+  deleteService,
+} from "@/lib/api";
 import { subscribeToEvents } from "@/lib/sse";
 import { formatPrice } from "@/lib/utils";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
@@ -12,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -33,9 +40,17 @@ interface FormData {
   name: string;
   duration_minutes: string;
   price: string;
+  description: string;
+  is_active: boolean;
 }
 
-const emptyForm: FormData = { name: "", duration_minutes: "", price: "" };
+const emptyForm: FormData = {
+  name: "",
+  duration_minutes: "",
+  price: "",
+  description: "",
+  is_active: true,
+};
 const PAGE_SIZE = 20;
 
 function formatDuration(minutes: number): string {
@@ -50,6 +65,8 @@ function serviceToForm(s: Service): FormData {
     name: s.name,
     duration_minutes: String(s.duration_minutes),
     price: String(s.price),
+    description: s.description ?? "",
+    is_active: s.is_active,
   };
 }
 
@@ -66,7 +83,6 @@ export default function ServicesPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [actionError, setActionError] = useState<string | null>(null);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -157,19 +173,26 @@ export default function ServicesPage() {
       if (editing) {
         const updated = await updateService(editing.id, {
           name: form.name.trim(),
+          description: form.description.trim(),
           duration_minutes: Number(form.duration_minutes),
           price: Number(form.price),
         });
         setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        toast.success(`Servicio «${updated.name}» actualizado`);
       } else {
         const created = await createService({
           name: form.name.trim(),
+          description: form.description.trim(),
           duration_minutes: Number(form.duration_minutes),
           price: Number(form.price),
-          is_active: true,
+          is_active: form.is_active,
         });
-        setServices((prev) => [...prev, created]);
+        // Prepend: the list is newest-first (backend order_by -id), so a just-created
+        // service belongs at the top — appending hid it below the page limit (QA-SERVICIOS-02).
+        // filter guards the rare optimistic-add vs SSE-refetch race (duplicate React key).
+        setServices((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
         setCount((c) => c + 1);
+        toast.success(`Servicio «${created.name}» creado`);
       }
       closeDialog();
     } catch (e) {
@@ -180,19 +203,35 @@ export default function ServicesPage() {
   }
 
   async function toggleActive(service: Service) {
-    setActionError(null);
     setServices((prev) =>
       prev.map((s) => (s.id === service.id ? { ...s, is_active: !s.is_active } : s)),
     );
     try {
       await updateService(service.id, { is_active: !service.is_active });
+      toast.success(
+        `Servicio «${service.name}» ${service.is_active ? "desactivado" : "activado"}`,
+      );
     } catch {
       setServices((prev) =>
         prev.map((s) =>
           s.id === service.id ? { ...s, is_active: service.is_active } : s,
         ),
       );
-      setActionError("No se pudo cambiar el estado del servicio.");
+      toast.error("No se pudo cambiar el estado del servicio.");
+    }
+  }
+
+  async function handleDelete(service: Service) {
+    // ponytail: confirm() nativo; si diseño pide un Dialog de marca, cambiarlo aquí.
+    if (!window.confirm(`¿Eliminar el servicio «${service.name}»?`)) return;
+    try {
+      await deleteService(service.id);
+      setServices((prev) => prev.filter((s) => s.id !== service.id));
+      setCount((c) => Math.max(0, c - 1));
+      toast.success(`Servicio «${service.name}» eliminado`);
+    } catch (e) {
+      // 409 (p. ej. citas asociadas): e.message ya trae el mensaje del backend.
+      toast.error(e instanceof Error ? e.message : "No se pudo eliminar el servicio.");
     }
   }
 
@@ -254,8 +293,6 @@ export default function ServicesPage() {
           Nuevo servicio
         </Button>
       </div>
-
-      {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
       <div className="relative max-w-xs">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -328,14 +365,24 @@ export default function ServicesPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => openEdit(s)}
-                      aria-label="Editar servicio"
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => openEdit(s)}
+                        aria-label="Editar servicio"
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => handleDelete(s)}
+                        aria-label="Eliminar servicio"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -382,9 +429,13 @@ export default function ServicesPage() {
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Ej. Consulta inicial"
+                aria-invalid={formErrors.name ? true : undefined}
+                aria-describedby={formErrors.name ? "svc-name-error" : undefined}
               />
               {formErrors.name && (
-                <p className="text-xs text-destructive">{formErrors.name}</p>
+                <p id="svc-name-error" role="alert" className="text-xs text-destructive">
+                  {formErrors.name}
+                </p>
               )}
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -399,9 +450,17 @@ export default function ServicesPage() {
                     setForm((prev) => ({ ...prev, duration_minutes: e.target.value }))
                   }
                   placeholder="45"
+                  aria-invalid={formErrors.duration_minutes ? true : undefined}
+                  aria-describedby={
+                    formErrors.duration_minutes ? "svc-duration-error" : undefined
+                  }
                 />
                 {formErrors.duration_minutes && (
-                  <p className="text-xs text-destructive">
+                  <p
+                    id="svc-duration-error"
+                    role="alert"
+                    className="text-xs text-destructive"
+                  >
                     {formErrors.duration_minutes}
                   </p>
                 )}
@@ -418,14 +477,50 @@ export default function ServicesPage() {
                     setForm((prev) => ({ ...prev, price: e.target.value }))
                   }
                   placeholder="12000"
+                  aria-invalid={formErrors.price ? true : undefined}
+                  aria-describedby={formErrors.price ? "svc-price-error" : undefined}
                 />
                 {formErrors.price && (
-                  <p className="text-xs text-destructive">{formErrors.price}</p>
+                  <p
+                    id="svc-price-error"
+                    role="alert"
+                    className="text-xs text-destructive"
+                  >
+                    {formErrors.price}
+                  </p>
                 )}
               </div>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="svc-description">Descripción (opcional)</Label>
+              <Textarea
+                id="svc-description"
+                value={form.description}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, description: e.target.value }))
+                }
+                placeholder="Ej. Incluye baño, secado y corte de uñas"
+              />
+            </div>
+            {creating && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="svc-active"
+                  checked={form.is_active}
+                  onChange={(checked) =>
+                    setForm((prev) => ({ ...prev, is_active: checked }))
+                  }
+                  aria-label="Servicio activo"
+                />
+                <Label htmlFor="svc-active">
+                  {form.is_active ? "Activo" : "Inactivo"}
+                </Label>
+              </div>
+            )}
             {formErrors._form && (
-              <p className="text-sm text-destructive">{formErrors._form}</p>
+              <p role="alert" className="text-sm text-destructive">
+                {formErrors._form}
+              </p>
             )}
           </div>
           <DialogFooter showCloseButton>

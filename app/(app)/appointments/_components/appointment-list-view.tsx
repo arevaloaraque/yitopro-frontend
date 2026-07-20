@@ -13,7 +13,7 @@ import {
 import type { Appointment } from "@/lib/types";
 
 import { AppointmentActions } from "./appointment-actions";
-import type { StatusFilter } from "./status-tabs";
+import { statusLabel, type StatusFilter } from "./status-tabs";
 import type { EnrichedAppointment } from "./types";
 
 interface AppointmentListViewProps {
@@ -83,7 +83,8 @@ export function AppointmentListView({
         {filtered.length === 0 ? (
           <TableRow>
             <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-              Sin citas{statusFilter !== "all" ? ` en estado "${statusFilter}"` : ""}
+              Sin citas
+              {statusFilter !== "all" ? ` en estado "${statusLabel(statusFilter)}"` : ""}
             </TableCell>
           </TableRow>
         ) : (

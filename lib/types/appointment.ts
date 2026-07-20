@@ -28,7 +28,7 @@ export interface Appointment {
 export interface AppointmentAuditEntry {
   id: string;
   appointment_id: string;
-  event: "created" | "cancelled" | "rescheduled" | "completed";
+  event: "created" | "cancelled" | "rescheduled" | "completed" | "no_show";
   /** ISO 8601. */
   timestamp: string;
   details: string | null;

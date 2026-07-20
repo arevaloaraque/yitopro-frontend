@@ -128,6 +128,15 @@ export default function AppointmentsPage() {
     return unsub;
   }, []);
 
+  // DASHBOARD-04: un deep-link `?id=…` (p. ej. desde una fila del dashboard)
+  // abre el historial de esa cita concreta. Lectura única al montar; el diálogo
+  // busca por id, así que no depende de que las citas ya estén cargadas.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deep-link de una sola vez al montar
+    if (id) setHistoryFor(id);
+  }, []);
+
   const handleCreate = useCallback(
     async (input: {
       service_id: string;
@@ -220,10 +229,14 @@ export default function AppointmentsPage() {
 
       {/* Toolbar: tabs + smart filters + view toggle */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <StatusTabs value={statusFilter} onChange={setStatusFilter} />
           {activeProfessionals.length > 1 && (
             <Select
+              items={[
+                { value: "all", label: "Todos los profesionales" },
+                ...activeProfessionals.map((p) => ({ value: p.id, label: p.name })),
+              ]}
               value={professionalFilter}
               onValueChange={(v) => setProfessionalFilter(v ?? "all")}
             >
@@ -246,6 +259,10 @@ export default function AppointmentsPage() {
           )}
           {services.length > 1 && (
             <Select
+              items={[
+                { value: "all", label: "Todos los servicios" },
+                ...services.map((s) => ({ value: s.id, label: s.name })),
+              ]}
               value={serviceFilter}
               onValueChange={(v) => setServiceFilter(v ?? "all")}
             >

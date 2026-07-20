@@ -145,6 +145,7 @@ export default function ProductsPage() {
   function validate(f: FormData): Record<string, string> {
     const errs: Record<string, string> = {};
     if (!f.name.trim()) errs.name = "Requerido";
+    else if (f.name.trim().length > 255) errs.name = "Máximo 255 caracteres";
     const price = f.price.trim();
     if (
       !price ||
@@ -445,6 +446,7 @@ export default function ProductsPage() {
               <Input
                 id="prod-name"
                 value={form.name}
+                maxLength={255}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Ej. Shampoo hipoalergénico"
               />

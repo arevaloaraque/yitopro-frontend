@@ -38,7 +38,7 @@ function makeOrder(over: Partial<Order> = {}): Order {
   return {
     id: "ord-1",
     customer: "Ana",
-    items: [{ product_name: "Croquetas", quantity: 2 }],
+    items: [{ product_id: "p1", product_name: "Croquetas", quantity: 2, unit_price: 15 }],
     total: 33,
     status: "draft",
     created_by_ai: true,
@@ -56,11 +56,19 @@ beforeEach(() => {
 });
 
 describe("OrdersPanel", () => {
-  it("renders orders from the API", async () => {
+  it("renders orders from the API with the unit price in the items label", async () => {
     render(<OrdersPanel />);
     expect(await screen.findByText("Ana")).toBeInTheDocument();
-    expect(screen.getByText("Croquetas ×2")).toBeInTheDocument();
+    // PEDIDOS-05: the items label carries name ×qty (unit price).
+    expect(screen.getByText(/Croquetas ×2 \(.*15.*\)/)).toBeInTheDocument();
     expect(screen.getByText("Borrador")).toBeInTheDocument();
+  });
+
+  it("truncates the items cell and exposes the full list via title", async () => {
+    render(<OrdersPanel />);
+    const cell = await screen.findByText(/Croquetas ×2/);
+    expect(cell).toHaveAttribute("title", expect.stringContaining("Croquetas ×2"));
+    expect(cell).toHaveClass("truncate", "max-w-[24rem]");
   });
 
   it("confirming a draft calls the API and refreshes the badge count", async () => {

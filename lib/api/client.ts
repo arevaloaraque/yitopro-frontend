@@ -13,6 +13,8 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost
 /** API prefix (Django Ninja mounts at `/api`). */
 const API_PREFIX = "/api";
 
+import { messageForStatus } from "@/lib/errors";
+
 /** Typed error from the network layer. */
 export class ApiError extends Error {
   readonly status: number;
@@ -93,7 +95,9 @@ async function parseBody(res: Response): Promise<unknown> {
   return text;
 }
 
-function extractErrorMessage(payload: unknown, status: number, path: string): string {
+function extractErrorMessage(payload: unknown, status: number): string {
+  // 5xx bodies can be stack traces or HTML; never show them to the user.
+  if (status >= 500) return messageForStatus(status);
   if (payload && typeof payload === "object") {
     const detail = (payload as { detail?: unknown }).detail;
     if (typeof detail === "string") return detail;
@@ -110,7 +114,7 @@ function extractErrorMessage(payload: unknown, status: number, path: string): st
     if (Array.isArray(firstField) && typeof firstField[0] === "string")
       return String(firstField[0]);
   }
-  return `Error ${status} en ${path}`;
+  return messageForStatus(status);
 }
 
 // Single-flight: a single refresh even if N requests receive a 401 at once.
@@ -196,11 +200,7 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const { res, payload } = await requestRaw(path, options);
   if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      extractErrorMessage(payload, res.status, path),
-      payload,
-    );
+    throw new ApiError(res.status, extractErrorMessage(payload, res.status), payload);
   }
   return payload as T;
 }
@@ -215,11 +215,7 @@ export async function apiFetchWithStatus<T>(
 ): Promise<{ status: number; body: T }> {
   const { res, payload } = await requestRaw(path, options);
   if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      extractErrorMessage(payload, res.status, path),
-      payload,
-    );
+    throw new ApiError(res.status, extractErrorMessage(payload, res.status), payload);
   }
   return { status: res.status, body: payload as T };
 }

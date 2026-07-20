@@ -26,6 +26,7 @@ export interface OnboardingData {
   // Step 1 — Business details
   businessName: string;
   country: string;
+  address: string;
   currency: string;
   language: string;
   timezone: string;
@@ -58,6 +59,7 @@ export function createEmptyOnboardingData(): OnboardingData {
   return {
     businessName: "",
     country: "CL",
+    address: "",
     currency: "CLP",
     language: "es",
     timezone: "America/Santiago",
