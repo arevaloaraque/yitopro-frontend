@@ -171,8 +171,10 @@ Flujo invitado por el operador (el backend manda; ver su `CLAUDE.md`):
 - **Testing**: Vitest + RTL + MSW (node) — `npm run test`, ningún test toca el backend real
   (`mocks/server.ts`). **Forms**: RHF + Zod con esquemas en `lib/validation/schemas.ts` (login
   convertido; resto pendiente de migrar — ver README).
-- **CI**: `.github/workflows/ci.yml` (install→lint→typecheck→test→build). **Deploy**: `vercel.json`
-  - `.env.production.example`; en prod `NEXT_PUBLIC_API_URL` apunta al backend desplegado.
+- **CI**: `.github/workflows/ci.yml` (install→lint→typecheck→test→build). **Deploy**: `amplify.yml`
+  (AWS Amplify Hosting, Next.js SSR/WEB_COMPUTE) + `vercel.json` + `.env.production.example`; ambos
+  instalan con `--legacy-peer-deps` y fijan Node 24; en prod `NEXT_PUBLIC_API_URL` apunta al backend
+  desplegado. Env vars (`NEXT_PUBLIC_*`) se definen en la consola del host, no en el repo.
 - Antes de cerrar cualquier tarea: `npm run lint`, `npm run typecheck`, `npm run test` y
   `npm run build` deben pasar limpios.
 

@@ -232,7 +232,11 @@ build**. Cualquier paso que falle hace fallar el workflow. Node 24, `npm ci --le
 
 ## Deploy (F5)
 
-- `vercel.json`: framework Next.js, `installCommand` con `--legacy-peer-deps`.
+- **AWS Amplify Hosting** — `amplify.yml` (Next.js SSR / WEB_COMPUTE). El `preBuild` fija Node 24 e
+  instala con `npm install --legacy-peer-deps` (mismo flag que Vercel); artifacts en `.next`.
+  Conecta el repo/rama en la consola de Amplify y define **ahí** las env vars (`NEXT_PUBLIC_API_URL`,
+  `NEXT_PUBLIC_META_*`) — no van en el repo (`.env*` está gitignored salvo `.env.example`).
+- **Vercel** — `vercel.json`: framework Next.js, `installCommand` con `--legacy-peer-deps`.
 - Variables de producción en `.env.production.example`. MSW no se carga en runtime, así que toda
   la red va siempre al backend real.
 - `NEXT_PUBLIC_API_URL` apunta al backend real; `NEXT_PUBLIC_META_*` para el Embedded Signup.
