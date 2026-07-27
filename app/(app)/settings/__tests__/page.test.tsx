@@ -5,11 +5,18 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Business } from "@/lib/types";
+import type { Business, BusinessConfig } from "@/lib/types";
 
 import SettingsPage from "../page";
+
+const { api } = vi.hoisted(() => ({
+  api: {
+    getBusinessConfig: vi.fn(),
+    updateBusinessConfig: vi.fn(),
+  },
+}));
 
 vi.mock("@/lib/api/businesses", () => ({
   getBusinessHours: vi.fn().mockResolvedValue([]),
@@ -18,7 +25,28 @@ vi.mock("@/lib/api/businesses", () => ({
   getScheduleBlocks: vi.fn().mockResolvedValue([]),
   createScheduleBlock: vi.fn(),
   deleteScheduleBlock: vi.fn(),
+  getBusinessConfig: api.getBusinessConfig,
+  updateBusinessConfig: api.updateBusinessConfig,
 }));
+
+/** The business's voice, as the backend returns it. */
+const config: BusinessConfig = {
+  tone: "casual",
+  welcome_message: "",
+  fallback_message: "",
+  out_of_hours_message: "Estamos cerrados.",
+  out_of_hours_ack_message: "",
+  human_handoff_message: "",
+  handoff_waiting_ack_message: "",
+  handoff_timeout_revert_message: "",
+  off_topic_message: "",
+  business_context: "Barbería en el centro.",
+};
+
+beforeEach(() => {
+  api.getBusinessConfig.mockResolvedValue(config);
+  api.updateBusinessConfig.mockImplementation(async (patch) => ({ ...config, ...patch }));
+});
 vi.mock("@/lib/api/whatsapp", () => ({ listTemplates: vi.fn() }));
 vi.mock("@/lib/business", () => ({
   useBusiness: () => ({
@@ -84,5 +112,52 @@ describe("SettingsPage — catálogo de país/moneda", () => {
       screen.getByRole("option", { name: "VES — Bolívar venezolano" }),
     );
     expect(trigger).toHaveTextContent("VES — Bolívar venezolano");
+  });
+});
+
+/** The page opens on «Negocio»; these fields live in «Asistente», so get there
+ * the way the operator does. */
+async function openAsistente() {
+  render(<SettingsPage />);
+  await userEvent.click(await screen.findByRole("tab", { name: /Asistente/i }));
+  return screen.findByLabelText("Sobre tu negocio");
+}
+
+describe("SettingsPage — la voz del negocio", () => {
+  it("carga los mensajes del negocio y deja el guardado apagado hasta que algo cambia", async () => {
+    const context = await openAsistente();
+    expect(context).toHaveValue("Barbería en el centro.");
+    // Nothing edited yet: saving would be a pointless write.
+    expect(screen.getByRole("button", { name: /Guardar mensajes/i })).toBeDisabled();
+  });
+
+  it("guarda lo que el operador escribió y manda SOLO campos de la voz del negocio", async () => {
+    const context = await openAsistente();
+    await userEvent.clear(context);
+    await userEvent.type(context, "Cortes clásicos y barbería tradicional.");
+
+    const save = screen.getByRole("button", { name: /Guardar mensajes/i });
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+
+    expect(api.updateBusinessConfig).toHaveBeenCalledTimes(1);
+    const sent = api.updateBusinessConfig.mock.calls[0][0];
+    expect(sent.business_context).toBe("Cortes clásicos y barbería tradicional.");
+    // What decides how the assistant BEHAVES is not the tenant's to send.
+    for (const forbidden of [
+      "llm_model",
+      "llm_provider",
+      "settings",
+      "identity_message",
+      "appointment_created_template",
+    ]) {
+      expect(sent).not.toHaveProperty(forbidden);
+    }
+  });
+
+  it("muestra el contador de caracteres del contexto", async () => {
+    await openAsistente();
+    // "Barbería en el centro." = 22 chars, cap 4000.
+    expect(screen.getByText("22/4000")).toBeInTheDocument();
   });
 });

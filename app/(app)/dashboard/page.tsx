@@ -379,6 +379,11 @@ export default function DashboardPage() {
   const [state, setState] = useState<PageState>("loading");
   const [data, setData] = useState<DashboardData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  /** Inbound WhatsApp messages seen since this panel was opened. The backend has
+   * no read/unread model, so this is honestly a per-session count — the card says
+   * so — and it must NOT be derived from `conversations`, which every refetch
+   * resets to the backend's hardcoded 0. */
+  const [inboundThisSession, setInboundThisSession] = useState(0);
   // Kept in sync with business.timezone so the SSE handler below (set up once,
   // outside the render) can compute "today" in the business's own timezone.
   const businessTimezoneRef = useRef<string | undefined>(undefined);
@@ -426,6 +431,13 @@ export default function DashboardPage() {
     const unsubscribe = subscribeToEvents((event: SSEEvent) => {
       switch (event.type) {
         case "mensaje_recibido":
+          // Counted HERE and kept out of `data`: the refetch below replaces the
+          // conversations with the backend's, whose `unread` is hardcoded to 0
+          // (the backend models no read/unread state), so summing it made the
+          // metric permanently 0 — a card that says "no hay nada nuevo" while
+          // WhatsApp messages arrive (live QA 2026-07-26).
+          setInboundThisSession((n) => n + 1);
+        // falls through to the shared refetch
         case "conversacion_escalada":
         case "conversacion_reactivada":
         case "mensaje_automatico_enviado":
@@ -527,7 +539,10 @@ export default function DashboardPage() {
   const serviceMap = new Map(services.map((s) => [s.id, s]));
 
   const activeConversations = conversations.filter((c) => c.status !== "closed");
-  const totalUnread = conversations.reduce((sum, c) => sum + c.unread, 0);
+  // NOT `Σ conversations.unread`: that field is hardcoded to 0 by the API mapper
+  // (no backend read/unread model), and the `mensaje_recibido` refetch overwrote
+  // any in-memory increment, so the card could never leave 0.
+  const totalUnread = inboundThisSession;
   // Live = the business is operative (answers customers) and has at least one agent on.
   const assistantActive = business.is_operative && hasActiveAgents;
 
@@ -562,15 +577,17 @@ export default function DashboardPage() {
           icon={<Calendar className="size-4" />}
           trend={todayAppointments.length >= 3 ? "up" : "neutral"}
         />
-        {/* DASHBOARD-03: el backend no modela leído/no leído; `unread` arranca en 0
-            y sólo sube en memoria por SSE mientras la pestaña sigue abierta (se
-            reinicia en cada F5). Se reencuadra el KPI como actividad de esta
-            sesión, no como un contador persistente. */}
+        {/* DASHBOARD-03: el backend no modela leído/no leído, así que este KPI sólo
+            puede contar lo que llegó mientras el panel está abierto — y el rótulo lo
+            dice. Antes se derivaba de `Σ conversations.unread`, que el refetch de
+            `mensaje_recibido` devolvía siempre en 0: la tarjeta decía "sin mensajes
+            nuevos" con mensajes de WhatsApp entrando (QA en vivo 2026-07-26). El
+            arreglo de fondo es un `last_read_at` por operador en el backend. */}
         <MetricCard
           label="Mensajes nuevos"
           value={totalUnread}
           subValue={
-            totalUnread > 0 ? "Recibidos en esta sesión" : "Sin mensajes nuevos"
+            totalUnread > 0 ? "Recibidos en esta sesión" : "Sin mensajes en esta sesión"
           }
           icon={<Users className="size-4" />}
           trend={totalUnread > 5 ? "up" : totalUnread > 0 ? "down" : "neutral"}

@@ -1,5 +1,6 @@
 import type {
   Business,
+  BusinessConfig,
   OnboardingState,
   ScheduleBlock,
   ScheduleWindow,
@@ -72,6 +73,26 @@ export async function updateBusiness(
   >,
 ): Promise<Business> {
   return toBusiness(await api.patch<BackendBusiness>("/businesses/me/", patch));
+}
+
+/**
+ * The business's voice — every message its customers read.
+ *
+ * A separate endpoint from `PATCH /businesses/me/`: the config row lives on
+ * `BusinessConfig`, and the backend exposes a deliberately narrow slice of it here.
+ * `display_name` is NOT part of it (it is not in the backend's config schema) — that
+ * one still travels in the nested `assistant_config` of `updateBusiness`.
+ *
+ * The wire shape is already flat snake_case, so there is no mapper to write.
+ */
+export function getBusinessConfig(): Promise<BusinessConfig> {
+  return api.get<BusinessConfig>("/businesses/me/config/");
+}
+
+export function updateBusinessConfig(
+  patch: Partial<BusinessConfig>,
+): Promise<BusinessConfig> {
+  return api.patch<BusinessConfig>("/businesses/me/config/", patch);
 }
 
 /** Detailed onboarding status (the backend already returns the exact shape). */

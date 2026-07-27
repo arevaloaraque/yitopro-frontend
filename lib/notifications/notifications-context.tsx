@@ -8,11 +8,21 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
 
 import { subscribeToEvents } from "@/lib/sse";
 import type { ConversacionEscaladaEvent, SSEEvent, SSEEventType } from "@/lib/types";
+
+import {
+  isSoundMuted,
+  playNotificationSound,
+  setSoundMuted,
+  subscribeSoundMuted,
+  unlockSound,
+  type SoundKind,
+} from "./sound";
 
 /** Visual severity of a notification. */
 export type NotificationTone = "default" | "accent" | "error";
@@ -27,12 +37,17 @@ export interface AppNotification {
   /** ISO 8601. */
   at: string;
   read: boolean;
+  /** Where the operator should land when they act on it. `undefined` when the
+   * event has no screen worth opening. */
+  href?: string;
 }
 
 interface NotificationsContextValue {
   notifications: AppNotification[];
   unreadCount: number;
   markAllRead: () => void;
+  soundMuted: boolean;
+  toggleSound: () => void;
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
@@ -57,8 +72,56 @@ const ESCALATION_REASON_LABELS: Record<
  * service domain changes — screens refresh their own data; toasting them would
  * be noise since they're mostly the operator's own echo).
  */
+/**
+ * Screen to open when the operator acts on a notification.
+ *
+ * Derived centrally from the payload ids instead of at each of the 12 return
+ * sites below: every event that is worth surfacing already carries the id of the
+ * thing it happened to. Without this the bell was a dead end — "Nuevo mensaje"
+ * with no way to reach the message (live QA 2026-07-26).
+ */
+function hrefFor(event: SSEEvent): string | undefined {
+  const data = event.data as Record<string, unknown>;
+  if (typeof data.conversation_id === "string") {
+    return `/conversations?id=${data.conversation_id}`;
+  }
+  if (typeof data.appointment_id === "string") {
+    return `/appointments?id=${data.appointment_id}`;
+  }
+  // The orders screen has no per-order deep link; the panel opens on the list.
+  if (typeof data.order_id === "string") return "/orders";
+  return undefined;
+}
+
+/** Which ping an event deserves, or `null` for silence. */
+function soundFor(notification: AppNotification): SoundKind | null {
+  switch (notification.type) {
+    // Someone is waiting on a human: the loudest thing we have.
+    case "conversacion_escalada":
+    case "error_operativo":
+    case "error_integracion":
+      return "alert";
+    case "mensaje_recibido":
+      return "message";
+    case "nueva_cita":
+    case "pedido_creado":
+    case "pedido_borrador_creado":
+      return "success";
+    // Everything else is an echo of something already in motion (cancellations,
+    // reactivations, automatic sends): visible in the bell, but not audible.
+    default:
+      return null;
+  }
+}
+
 function toNotification(event: SSEEvent): AppNotification | null {
-  const base = { id: event.id, type: event.type, at: event.emitted_at, read: false };
+  const base = {
+    id: event.id,
+    type: event.type,
+    at: event.emitted_at,
+    read: false,
+    href: hrefFor(event),
+  };
 
   switch (event.type) {
     case "mensaje_recibido":
@@ -176,8 +239,10 @@ function toNotification(event: SSEEvent): AppNotification | null {
   }
 }
 
-/** Fires a non-intrusive toast according to the notification's severity. */
+/** Fires a non-intrusive toast (and its ping) according to the severity. */
 function notify(notification: AppNotification): void {
+  const kind = soundFor(notification);
+  if (kind) playNotificationSound(kind);
   const options = { description: notification.description };
   switch (notification.tone) {
     case "error":
@@ -203,16 +268,54 @@ function notify(notification: AppNotification): void {
  * Provides the notifications store and opens the SSE subscription ONLY once.
  * Must be mounted at the authenticated layout level, not per screen.
  */
+/** A duplicate delivery is the same event about the same thing within a moment.
+ * The previous dedupe keyed on `event.id`, which `lib/sse` mints locally and
+ * monotonically (`evt_<time>_<seq>`) — so the Set could never hit, the guard was
+ * dead code, and it grew unbounded. Content + a short window is the only thing
+ * we can key on until the backend sends a stable id. */
+const DEDUPE_WINDOW_MS = 3000;
+
+function dedupeKey(event: SSEEvent): string {
+  const data = event.data as Record<string, unknown>;
+  const subject =
+    data.conversation_id ?? data.appointment_id ?? data.order_id ?? data.customer_id ?? "";
+  return `${event.type}:${String(subject)}`;
+}
+
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  // Avoids duplicate toasts if an event arrives twice (dedupe by id).
-  const seenIds = useRef<Set<string>>(new Set());
+  // The mute preference lives in localStorage, i.e. outside React. Reading it with
+  // useSyncExternalStore keeps SSR and the first client render in agreement (server
+  // snapshot = audible) without mirroring it in state.
+  const soundMuted = useSyncExternalStore(subscribeSoundMuted, isSoundMuted, () => false);
+
+  const lastSeen = useRef<Map<string, number>>(new Map());
+
+  // The autoplay policy keeps an AudioContext suspended until a real gesture, and
+  // a suspended context drops beeps silently — so the FIRST notification of the
+  // session would be mute without this. Any click in the shell unlocks it, once.
+  useEffect(() => {
+    const unlock = () => unlockSound();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToEvents((event) => {
-      if (seenIds.current.has(event.id)) return;
-      seenIds.current.add(event.id);
+      const key = dedupeKey(event);
+      const now = Date.now();
+      const previous = lastSeen.current.get(key);
+      if (previous !== undefined && now - previous < DEDUPE_WINDOW_MS) return;
+      lastSeen.current.set(key, now);
+      // Keep the map bounded: drop anything older than the window.
+      for (const [k, t] of lastSeen.current) {
+        if (now - t >= DEDUPE_WINDOW_MS) lastSeen.current.delete(k);
+      }
 
       const notification = toNotification(event);
       if (!notification) return; // data-sync event — no toast / bell entry
@@ -228,13 +331,19 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     );
   }, []);
 
+  const toggleSound = useCallback(() => {
+    setSoundMuted(!isSoundMuted());
+  }, []);
+
   const value = useMemo<NotificationsContextValue>(
     () => ({
       notifications,
       unreadCount: notifications.reduce((acc, n) => acc + (n.read ? 0 : 1), 0),
       markAllRead,
+      soundMuted,
+      toggleSound,
     }),
-    [notifications, markAllRead],
+    [notifications, markAllRead, soundMuted, toggleSound],
   );
 
   return <NotificationsContext value={value}>{children}</NotificationsContext>;
