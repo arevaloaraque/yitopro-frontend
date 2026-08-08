@@ -41,7 +41,7 @@ export function logoutRequest(): Promise<{ detail: string }> {
 }
 
 /** Authenticated user's profile (to reconstruct the visible identity). */
-export interface MeResponse {
+interface MeResponse {
   id: string;
   email: string;
   name: string;
@@ -63,7 +63,7 @@ export function getMe(): Promise<MeResponse> {
 // so the UI always shows the same generic confirmation.
 
 /** Generic `{ detail }` response from the reset request/confirm endpoints. */
-export interface GenericDetailResponse {
+interface GenericDetailResponse {
   detail: string;
 }
 

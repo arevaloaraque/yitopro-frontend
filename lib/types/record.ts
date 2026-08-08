@@ -28,7 +28,7 @@ export interface RecordField {
 }
 
 /** Entry in a record's change history. */
-export interface RecordAuditEntry {
+interface RecordAuditEntry {
   field: string;
   old_value: RecordValue;
   new_value: RecordValue;

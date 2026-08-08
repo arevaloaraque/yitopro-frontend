@@ -5,11 +5,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Appointment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { AppointmentActions } from "./appointment-actions";
+import { AppointmentDetailPopover } from "./appointment-detail-popover";
 import type { StatusFilter } from "./status-tabs";
 import type { EnrichedAppointment } from "./types";
 
@@ -92,6 +91,7 @@ interface AppointmentCalendarProps {
   onCancel: (a: Appointment) => void;
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
+  onCreatePaymentLink: (a: EnrichedAppointment) => void;
 }
 
 function statusBarColor(status: Appointment["status"]): string {
@@ -113,6 +113,7 @@ export function AppointmentCalendar({
   onCancel,
   onReschedule,
   onHistory,
+  onCreatePaymentLink,
 }: AppointmentCalendarProps) {
   const [view, setView] = useState<CalendarView>("week");
   const [cursor, setCursor] = useState(() => new Date());
@@ -251,6 +252,7 @@ export function AppointmentCalendar({
           onCancel={onCancel}
           onReschedule={onReschedule}
           onHistory={onHistory}
+          onCreatePaymentLink={onCreatePaymentLink}
         />
       ) : (
         <TimeGrid
@@ -261,6 +263,7 @@ export function AppointmentCalendar({
           onCancel={onCancel}
           onReschedule={onReschedule}
           onHistory={onHistory}
+          onCreatePaymentLink={onCreatePaymentLink}
         />
       )}
     </div>
@@ -275,6 +278,7 @@ function TimeGrid({
   onCancel,
   onReschedule,
   onHistory,
+  onCreatePaymentLink,
 }: {
   view: "day" | "week";
   cursor: Date;
@@ -283,6 +287,7 @@ function TimeGrid({
   onCancel: (a: Appointment) => void;
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
+  onCreatePaymentLink: (a: EnrichedAppointment) => void;
 }) {
   const days =
     view === "day"
@@ -344,49 +349,51 @@ function TimeGrid({
               {HOURS.map((h) => (
                 <div key={h} className="h-20 border-b border-border/50" />
               ))}
-              {/* Appointments */}
+              {/* Appointments — the whole event is the detail trigger; its
+                  actions live inside the card, Google Calendar style. */}
               {dayApps.map((apt) => {
                 const { top, height } = getPosition(apt.start, apt.end);
                 const showService = height >= 64;
                 const timeLabel = `${new Date(apt.start).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} – ${new Date(apt.end).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}`;
                 return (
-                  <div
+                  <AppointmentDetailPopover
                     key={apt.id}
-                    title={`${apt.customerName} · ${apt.serviceName} · ${timeLabel}`}
-                    className={cn(
-                      "absolute right-0.5 left-0.5 z-10 flex flex-col gap-0.5 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-xs leading-tight",
-                      statusBarColor(apt.status),
-                    )}
-                    style={{ top: `${top}px`, height: `${height}px` }}
-                  >
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="truncate font-medium">{apt.customerName}</span>
-                      <div className="-mt-0.5 -mr-1 flex shrink-0 items-center gap-0.5">
-                        {apt.created_by === "ai" && (
-                          <Badge
-                            variant="outline"
-                            className="h-4 px-1 text-[0.625rem] leading-none"
-                          >
-                            IA
-                          </Badge>
+                    appointment={apt}
+                    onCancel={onCancel}
+                    onReschedule={onReschedule}
+                    onHistory={onHistory}
+                    onCreatePaymentLink={onCreatePaymentLink}
+                    trigger={
+                      <div
+                        title={`${apt.customerName} · ${apt.serviceName} · ${timeLabel}`}
+                        className={cn(
+                          "absolute right-0.5 left-0.5 z-10 flex cursor-pointer flex-col gap-0.5 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left text-xs leading-tight",
+                          statusBarColor(apt.status),
                         )}
-                        <AppointmentActions
-                          appointment={apt}
-                          onCancel={onCancel}
-                          onReschedule={onReschedule}
-                          onHistory={onHistory}
-                        />
+                        style={{ top: `${top}px`, height: `${height}px` }}
+                      >
+                        <div className="flex items-start justify-between gap-1">
+                          <span className="truncate font-medium">{apt.customerName}</span>
+                          {apt.created_by === "ai" && (
+                            <Badge
+                              variant="outline"
+                              className="-mt-0.5 -mr-1 h-4 shrink-0 px-1 text-[0.625rem] leading-none"
+                            >
+                              IA
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="truncate text-[0.6875rem] text-muted-foreground">
+                          {timeLabel}
+                        </span>
+                        {showService && (
+                          <span className="truncate text-muted-foreground">
+                            {apt.serviceName}
+                          </span>
+                        )}
                       </div>
-                    </div>
-                    <span className="truncate text-[0.6875rem] text-muted-foreground">
-                      {timeLabel}
-                    </span>
-                    {showService && (
-                      <span className="truncate text-muted-foreground">
-                        {apt.serviceName}
-                      </span>
-                    )}
-                  </div>
+                    }
+                  />
                 );
               })}
             </div>
@@ -404,6 +411,7 @@ function MonthGrid({
   onCancel,
   onReschedule,
   onHistory,
+  onCreatePaymentLink,
 }: {
   days: Date[];
   monthStart: Date;
@@ -411,6 +419,7 @@ function MonthGrid({
   onCancel: (a: Appointment) => void;
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
+  onCreatePaymentLink: (a: EnrichedAppointment) => void;
 }) {
   return (
     <div className="grid grid-cols-7">
@@ -442,11 +451,17 @@ function MonthGrid({
             </span>
             <div className="mt-0.5 space-y-0.5">
               {dayApps.slice(0, 3).map((apt) => (
-                <Tooltip key={apt.id}>
-                  <TooltipTrigger>
+                <AppointmentDetailPopover
+                  key={apt.id}
+                  appointment={apt}
+                  onCancel={onCancel}
+                  onReschedule={onReschedule}
+                  onHistory={onHistory}
+                  onCreatePaymentLink={onCreatePaymentLink}
+                  trigger={
                     <div
                       className={cn(
-                        "flex cursor-default items-center gap-1 truncate rounded px-1 py-0.5 text-[0.625rem] leading-none",
+                        "flex cursor-pointer items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[0.625rem] leading-none",
                         statusBarColor(apt.status),
                       )}
                     >
@@ -457,28 +472,8 @@ function MonthGrid({
                         </span>
                       )}
                     </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-medium">{apt.customerName}</p>
-                        <p className="text-muted-foreground">{apt.serviceName}</p>
-                        <p className="text-muted-foreground">
-                          {new Date(apt.start).toLocaleTimeString("es-CL", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                      <AppointmentActions
-                        appointment={apt}
-                        onCancel={onCancel}
-                        onReschedule={onReschedule}
-                        onHistory={onHistory}
-                      />
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
+                  }
+                />
               ))}
               {dayApps.length > 3 && (
                 <p className="px-1 text-[0.625rem] text-muted-foreground">

@@ -14,7 +14,7 @@
 import { API_BASE_URL, peekAccessToken, refreshAuthOnce } from "@/lib/api/client";
 import type { SSEEvent, SSEEventType } from "@/lib/types";
 
-export type SSEEventHandler = (event: SSEEvent) => void;
+type SSEEventHandler = (event: SSEEvent) => void;
 
 let seq = 0;
 /** Unique event id (for client-side dedupe). */

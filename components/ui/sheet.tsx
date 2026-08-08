@@ -4,11 +4,31 @@ import * as React from "react";
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 
 import { cn } from "@/lib/utils";
+import { useInertBackground } from "@/lib/a11y/use-inert-background";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
 
-function Sheet({ ...props }: SheetPrimitive.Root.Props) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />;
+function Sheet({
+  open,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: SheetPrimitive.Root.Props) {
+  // Same containment gap as the dialog, fixed at the same layer; see use-inert-background.
+  const [uncontrolled, setUncontrolled] = React.useState(defaultOpen ?? false);
+  useInertBackground(open ?? uncontrolled);
+  return (
+    <SheetPrimitive.Root
+      data-slot="sheet"
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={(...args) => {
+        setUncontrolled(args[0]);
+        onOpenChange?.(...args);
+      }}
+      {...props}
+    />
+  );
 }
 
 function SheetTrigger({ ...props }: SheetPrimitive.Trigger.Props) {

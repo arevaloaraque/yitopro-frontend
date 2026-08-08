@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
                 <div className="mb-2 flex justify-center">
                   <CheckCircle2 className="size-10 text-success" aria-hidden="true" />
                 </div>
-                <CardTitle>Revisa tu correo</CardTitle>
+                <CardTitle as="h1">Revisa tu correo</CardTitle>
                 <CardDescription>
                   Si el correo está registrado, te enviamos un enlace para restablecer
                   tu contraseña. El enlace caduca en unos minutos.
@@ -98,7 +98,7 @@ export default function ForgotPasswordPage() {
           ) : (
             <>
               <CardHeader className="text-center">
-                <CardTitle>Recupera tu contraseña</CardTitle>
+                <CardTitle as="h1">Recupera tu contraseña</CardTitle>
                 <CardDescription>
                   Ingresa tu email y te enviaremos un enlace para crear una nueva
                   contraseña.

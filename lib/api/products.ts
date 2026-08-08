@@ -35,7 +35,7 @@ function fromBackend(p: BackendProduct): Product {
   };
 }
 
-export interface ProductSearchParams {
+interface ProductSearchParams {
   search?: string;
   limit?: number;
   offset?: number;
@@ -59,7 +59,7 @@ export async function searchProducts(
   return { items: res.items.map(fromBackend), count: res.count };
 }
 
-export type CreateProductInput = Omit<Product, "id" | "business_id">;
+type CreateProductInput = Omit<Product, "id" | "business_id">;
 
 export function createProduct(input: CreateProductInput): Promise<Product> {
   return api

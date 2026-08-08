@@ -19,11 +19,22 @@ interface BackendConversation {
   status: string;
   channel_type: string;
   active_agent: string;
-  customer: { id: number; display_name: string; phone: string };
+  customer: {
+    id: number;
+    display_name: string;
+    phone: string;
+    rating_avg: number | null;
+    rating_count: number;
+  };
   assignee_id: number | null;
   last_message_at: string | null;
   created_at: string;
   updated_at: string;
+  customer_rating: number | null;
+  rating_status: string;
+  last_message_preview: string;
+  last_message_direction: string;
+  last_message_sender_kind: string;
 }
 
 interface BackendMessage {
@@ -52,6 +63,13 @@ function convFromBackend(c: BackendConversation): Conversation {
     assignee_id: c.assignee_id === null ? null : String(c.assignee_id),
     last_message_at: c.last_message_at ?? c.created_at,
     unread: 0, // not exposed; the SSE `mensaje_recibido` increments it live
+    customer_rating: c.customer_rating ?? null,
+    rating_status: c.rating_status ?? "",
+    customer_rating_avg: c.customer.rating_avg ?? null,
+    customer_rating_count: c.customer.rating_count ?? 0,
+    last_message_preview: c.last_message_preview ?? "",
+    last_message_direction: c.last_message_direction ?? "",
+    last_message_sender_kind: c.last_message_sender_kind ?? "",
   };
 }
 
@@ -81,8 +99,10 @@ function msgFromBackend(
   };
 }
 
-export interface ListConversationsParams {
+interface ListConversationsParams {
   status?: ConversationStatus;
+  /** One customer's history, filtered server-side (see the customer drawer). */
+  customerId?: string;
 }
 
 export async function listConversations(
@@ -96,9 +116,11 @@ export async function listConversations(
       : params.status === "closed"
         ? "closed"
         : undefined;
-  const res = await api.get<BackendConversation[]>("/conversations/", {
-    query: backendStatus ? { status: backendStatus } : {},
-  });
+  const query: Record<string, string> = {};
+  if (backendStatus) query.status = backendStatus;
+  // Ids travel as strings in the UI and as integers on the wire (see convFromBackend).
+  if (params.customerId) query.customer_id = params.customerId;
+  const res = await api.get<BackendConversation[]>("/conversations/", { query });
   const mapped = res.map(convFromBackend);
   return params.status === "ai_active"
     ? mapped.filter((c) => c.status === "ai_active")

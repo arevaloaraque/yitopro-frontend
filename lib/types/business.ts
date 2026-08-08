@@ -1,11 +1,11 @@
 /** Status of the business onboarding. */
-export type OnboardingStatus = "not_started" | "in_progress" | "completed";
+type OnboardingStatus = "not_started" | "in_progress" | "completed";
 
 /** Tone the AI assistant responds with (mirrors the backend). */
 export type AssistantTone = "formal" | "friendly" | "casual";
 
 /** Configuration of the business's AI assistant. */
-export interface AssistantConfig {
+interface AssistantConfig {
   /** Name the assistant introduces itself with to customers. */
   display_name: string;
   /** Tone of the responses. */
@@ -73,7 +73,7 @@ export interface Business {
 }
 
 /** A step in the onboarding flow. */
-export interface OnboardingStep {
+interface OnboardingStep {
   key: string;
   label: string;
   completed: boolean;

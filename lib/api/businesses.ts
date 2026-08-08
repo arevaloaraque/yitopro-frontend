@@ -83,16 +83,49 @@ export async function updateBusiness(
  * `display_name` is NOT part of it (it is not in the backend's config schema) — that
  * one still travels in the nested `assistant_config` of `updateBusiness`.
  *
- * The wire shape is already flat snake_case, so there is no mapper to write.
+ * The wire shape is already flat snake_case, so the only mapping needed is the pick
+ * below.
  */
-export function getBusinessConfig(): Promise<BusinessConfig> {
-  return api.get<BusinessConfig>("/businesses/me/config/");
+const CONFIG_FIELDS: (keyof BusinessConfig)[] = [
+  "tone",
+  "welcome_message",
+  "fallback_message",
+  "out_of_hours_message",
+  "out_of_hours_ack_message",
+  "human_handoff_message",
+  "handoff_waiting_ack_message",
+  "handoff_timeout_revert_message",
+  "off_topic_message",
+  "business_context",
+];
+
+/**
+ * `GET /businesses/me/config/` returns the WHOLE config row — ~25 fields, including the
+ * model, the six confirmation templates, the identity reply and plan entitlements — so
+ * typing the response as `BusinessConfig` was a lie, and a PATCH built from a GET
+ * carried all of it back. The server ignores unknown fields today, which means the
+ * guarantee rested on the server's goodwill rather than on us (review 2026-07-27).
+ * Picking here fixes it in ONE place: every caller gets exactly the writable slice.
+ */
+function pickConfig(raw: Record<string, unknown>): BusinessConfig {
+  return Object.fromEntries(
+    // "" is the meaningful empty for every message (the backend falls back to its
+    // per-language default), but not for `tone`, which is a closed enum — an absent one
+    // would mint an invalid AssistantTone through the cast below.
+    CONFIG_FIELDS.map((key) => [key, raw[key] ?? (key === "tone" ? "friendly" : "")]),
+  ) as unknown as BusinessConfig;
 }
 
-export function updateBusinessConfig(
+export async function getBusinessConfig(): Promise<BusinessConfig> {
+  return pickConfig(await api.get<Record<string, unknown>>("/businesses/me/config/"));
+}
+
+export async function updateBusinessConfig(
   patch: Partial<BusinessConfig>,
 ): Promise<BusinessConfig> {
-  return api.patch<BusinessConfig>("/businesses/me/config/", patch);
+  return pickConfig(
+    await api.patch<Record<string, unknown>>("/businesses/me/config/", patch),
+  );
 }
 
 /** Detailed onboarding status (the backend already returns the exact shape). */

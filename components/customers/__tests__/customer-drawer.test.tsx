@@ -66,6 +66,8 @@ beforeEach(() => {
     phone: "+56911111111",
     email: "",
     created_at: "2026-07-11T10:00:00Z",
+    rating_avg: null,
+    rating_count: 0,
   });
   vi.mocked(getRecord).mockResolvedValue(makeRecord());
   vi.mocked(getCustomerNotes).mockResolvedValue([]);
@@ -138,5 +140,84 @@ describe("CustomerDrawer — live refresh", () => {
     // The record must not be refetched/reapplied — the edit stands.
     expect(getRecord).toHaveBeenCalledTimes(1);
     expect(input).toHaveValue(20);
+  });
+});
+
+describe("CustomerDrawer — calificación e historial", () => {
+  it("pide SOLO las conversaciones de este cliente al servidor", async () => {
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+    // Antes bajaba la tabla completa del negocio y filtraba en el navegador por
+    // `customer_id`; el filtro vive ahora en el endpoint.
+    expect(vi.mocked(listConversations)).toHaveBeenCalledWith({ customerId: "cust-1" });
+  });
+
+  it("muestra el promedio del cliente diciendo de quién es", async () => {
+    vi.mocked(getCustomer).mockResolvedValue({
+      id: "cust-1",
+      name: "Ana",
+      phone: "+56911111111",
+      email: "",
+      created_at: "2026-07-11T10:00:00Z",
+      rating_avg: 4.5,
+      rating_count: 2,
+    });
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+    expect(screen.getByText(/\/ 5 · 2 conversaciones/)).toBeTruthy();
+  });
+
+  it("lista el historial con la nota de cada hilo y un enlace para abrirlo", async () => {
+    vi.mocked(listConversations).mockResolvedValue([
+      {
+        id: "conv-9",
+        customer_id: "cust-1",
+        customer_name: "Ana",
+        customer_phone: "+56911111111",
+        status: "closed",
+        active_agent: null,
+        assignee_id: null,
+        last_message_at: "2026-07-30T18:00:00Z",
+        unread: 0,
+        customer_rating: 2,
+        rating_status: "rated",
+        customer_rating_avg: null,
+        customer_rating_count: 0,
+        last_message_preview: "",
+        last_message_direction: "",
+        last_message_sender_kind: "",
+      },
+      {
+        id: "conv-10",
+        customer_id: "cust-1",
+        customer_name: "Ana",
+        customer_phone: "+56911111111",
+        status: "ai_active",
+        active_agent: "sales",
+        assignee_id: null,
+        last_message_at: "2026-07-31T09:00:00Z",
+        unread: 0,
+        customer_rating: null,
+        rating_status: "pending",
+        customer_rating_avg: null,
+        customer_rating_count: 0,
+        last_message_preview: "",
+        last_message_direction: "",
+        last_message_sender_kind: "",
+      },
+    ]);
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+
+    // El hilo calificado muestra su nota; el pendiente dice por qué no la tiene —
+    // nunca un 0, que se leería como la peor calificación posible.
+    expect(screen.getByText("2")).toBeTruthy();
+    expect(screen.getByText("Sin calificar aún")).toBeTruthy();
+
+    // Y cada fila es navegable al inbox, que acepta `?id=`.
+    const links = screen.getAllByRole("link");
+    const hrefs = links.map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("/conversations?id=conv-9");
+    expect(hrefs).toContain("/conversations?id=conv-10");
   });
 });

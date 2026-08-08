@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronRight, MessageSquare, Plus, Search, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CharCountInput } from "@/components/ui/char-count-input";
+import { CustomerRating } from "@/components/customers/rating";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,7 +54,8 @@ const emptyForm: FormData = { name: "", phone: "", email: "" };
 
 const PAGE_SIZE = 20;
 
-export default function CustomersPage() {
+function CustomersPageContent() {
+  const searchParams = useSearchParams();
   const [state, setState] = useState<PageState>("loading");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [count, setCount] = useState(0);
@@ -63,8 +67,24 @@ export default function CustomersPage() {
     {},
   );
 
-  // The customer whose detail drawer is open (null = closed).
-  const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
+  // The customer whose detail drawer is open (null = closed). Seeded from `?id=` so
+  // other screens can link straight to a person — the orders detail links here to
+  // answer "who is this?" without making the operator search for them by hand.
+  const [openCustomerId, setOpenCustomerId] = useState<string | null>(() =>
+    searchParams.get("id"),
+  );
+
+  // `replaceState`, not `router.push`: pushing would re-render the route and refetch the
+  // whole list just to open a drawer (same reasoning as the conversations inbox).
+  const openCustomer = useCallback((id: string) => {
+    setOpenCustomerId(id);
+    window.history.replaceState(null, "", `?id=${id}`);
+  }, []);
+
+  const closeCustomer = useCallback(() => {
+    setOpenCustomerId(null);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -285,6 +305,10 @@ export default function CustomersPage() {
                 <TableHead>Teléfono</TableHead>
                 <TableHead className="w-32">Creado</TableHead>
                 <TableHead className="w-28">Conversaciones</TableHead>
+                {/* Comportamiento DEL cliente (1-5), del evaluador de conversaciones. El
+                    encabezado nombra la dirección: un "Rating" pelado se lee como la
+                    calificación que el cliente nos dio. */}
+                <TableHead className="w-40">Comportamiento</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
@@ -298,11 +322,11 @@ export default function CustomersPage() {
                     role="button"
                     tabIndex={0}
                     aria-label={`Ver datos de ${c.name}`}
-                    onClick={() => setOpenCustomerId(c.id)}
+                    onClick={() => openCustomer(c.id)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setOpenCustomerId(c.id);
+                        openCustomer(c.id);
                       }
                     }}
                   >
@@ -316,6 +340,9 @@ export default function CustomersPage() {
                         <MessageSquare className="mr-0.5 size-3" />
                         {convCount}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <CustomerRating avg={c.rating_avg} count={c.rating_count} />
                     </TableCell>
                     <TableCell>
                       <ChevronRight className="size-4 text-muted-foreground" />
@@ -362,14 +389,14 @@ export default function CustomersPage() {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cust-name">Nombre</Label>
-              <Input
+              <CharCountInput
                 id="cust-name"
+                max={120}
                 value={form.name}
-                maxLength={120}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                onChange={(name) => setForm((prev) => ({ ...prev, name }))}
                 placeholder="Ej. Ana Fuentes"
                 aria-invalid={formErrors.name ? true : undefined}
-                aria-describedby={formErrors.name ? "cust-name-error" : undefined}
+                describedBy={formErrors.name ? "cust-name-error" : undefined}
               />
               {formErrors.name && (
                 <p id="cust-name-error" role="alert" className="text-xs text-destructive">
@@ -439,10 +466,19 @@ export default function CustomersPage() {
       <CustomerDrawer
         customerId={openCustomerId}
         onOpenChange={(open) => {
-          if (!open) setOpenCustomerId(null);
+          if (!open) closeCustomer();
         }}
         onCustomerSaved={handleCustomerSaved}
       />
     </div>
+  );
+}
+
+// `useSearchParams` requires a Suspense boundary in the App Router.
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={null}>
+      <CustomersPageContent />
+    </Suspense>
   );
 }

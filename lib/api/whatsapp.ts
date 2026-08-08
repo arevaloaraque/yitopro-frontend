@@ -1,7 +1,7 @@
 import { api } from "./client";
 
 /** Response from the Embedded Signup callback (public WABA metadata). */
-export interface EmbeddedSignupResult {
+interface EmbeddedSignupResult {
   waba_id: string;
   phone_number_id: string;
   display_phone_number: string;

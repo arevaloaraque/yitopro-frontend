@@ -91,7 +91,7 @@ export default function LoginPage() {
 
         <Card elevated>
           <CardHeader className="text-center">
-            <CardTitle>Inicia sesión</CardTitle>
+            <CardTitle as="h1">Inicia sesión</CardTitle>
             <CardDescription>Accede al panel de tu negocio</CardDescription>
           </CardHeader>
           <CardContent>

@@ -92,3 +92,16 @@ export function useBusiness(): BusinessContextValue {
   }
   return ctx;
 }
+
+/**
+ * Same context, `null` instead of a throw when the provider is absent.
+ *
+ * For consumers where the business only REFINES the output and its absence has a
+ * correct fallback — the money formatter's currency, say. Those must not be able to
+ * blank a whole screen (or fail a unit test that renders the page in isolation) just
+ * because a provider is missing; a consumer that cannot work without the business
+ * should keep using `useBusiness` and get the loud error.
+ */
+export function useBusinessOptional(): BusinessContextValue | null {
+  return useContext(BusinessContext);
+}

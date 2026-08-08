@@ -22,6 +22,12 @@ export interface Appointment {
   /** Who created the appointment: the AI or a human. */
   created_by: ActorType;
   notes: string | null;
+  /** The service booked, resolved server-side. `service_price` is what the
+   *  appointment is worth — the payment-link dialog charges exactly this rather
+   *  than making the panel fetch the whole catalogue to price one booking.
+   *  Optional so an older cached response (or a mock) reads as "unknown". */
+  service_name?: string;
+  service_price?: number;
 }
 
 /** Event in an appointment's change history. */

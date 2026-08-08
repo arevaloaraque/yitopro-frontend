@@ -11,6 +11,9 @@ export type SSEEventType =
   | "conversacion_reactivada"
   | "mensaje_automatico_enviado"
   | "pedido_creado"
+  | "pedido_cancelado"
+  | "pago_recibido"
+  | "pago_rechazado"
   | "pedido_borrador_creado"
   | "pedido_borrador_actualizado"
   | "conversacion_cerrada"
@@ -37,7 +40,10 @@ interface SSEEventBase<T extends SSEEventType, P> {
   data: P;
 }
 
-export type NuevaCitaEvent = SSEEventBase<
+// Only the event types a consumer actually switches on by name are exported;
+// the rest exist to type the `SSEEvent` union below and stay module-private.
+
+type NuevaCitaEvent = SSEEventBase<
   "nueva_cita",
   {
     appointment_id: string;
@@ -49,14 +55,14 @@ export type NuevaCitaEvent = SSEEventBase<
   }
 >;
 
-export type CitaCanceladaEvent = SSEEventBase<
+type CitaCanceladaEvent = SSEEventBase<
   "cita_cancelada",
   // No cancellation reason travels over this channel (PII policy: SSE
   // payloads carry ids only).
   { appointment_id: string; customer_id: string }
 >;
 
-export type CitaReagendadaEvent = SSEEventBase<
+type CitaReagendadaEvent = SSEEventBase<
   "cita_reagendada",
   {
     appointment_id: string;
@@ -97,20 +103,26 @@ export type MensajeAutomaticoEnviadoEvent = SSEEventBase<
   }
 >;
 
-export type PedidoCreadoEvent = SSEEventBase<
+type PedidoCreadoEvent = SSEEventBase<
   "pedido_creado",
   { order_id: string; total: string; customer_id: string }
 >;
 
 /** Draft order created by the sales agent or the panel. */
-export type PedidoBorradorCreadoEvent = SSEEventBase<
+type PedidoBorradorCreadoEvent = SSEEventBase<
   "pedido_borrador_creado",
   { order_id: string; total: string; customer_id: string }
 >;
 
 /** A draft order's line items were modified (sales agent or panel). */
-export type PedidoBorradorActualizadoEvent = SSEEventBase<
+type PedidoBorradorActualizadoEvent = SSEEventBase<
   "pedido_borrador_actualizado",
+  { order_id: string; total: string; customer_id: string }
+>;
+
+/** An order was cancelled (a draft dropped, or a confirmed one reversed + stock restored). */
+type PedidoCanceladoEvent = SSEEventBase<
+  "pedido_cancelado",
   { order_id: string; total: string; customer_id: string }
 >;
 
@@ -120,6 +132,20 @@ export type ConversacionCerradaEvent = SSEEventBase<
   { conversation_id: string; reason: "manual" | "idle" }
 >;
 
+/** A payment was confirmed by the gateway. Ids and amounts only — no shopper. */
+type PagoRecibidoEvent = SSEEventBase<
+  "pago_recibido",
+  { payment_id: string; amount: string; currency: string; customer_id: string | null }
+>;
+
+/** The gateway gave a FINAL no. The mirror of `pago_recibido`, and the reason it
+ *  exists: a refused charge used to keep rendering "Pendiente" on every open
+ *  panel — including operators who never triggered the check — until a reload. */
+type PagoRechazadoEvent = SSEEventBase<
+  "pago_rechazado",
+  { payment_id: string; amount: string; currency: string; customer_id: string | null }
+>;
+
 /** A conversation was taken or reassigned to a different operator. */
 export type ConversacionAsignadaEvent = SSEEventBase<
   "conversacion_asignada",
@@ -127,7 +153,7 @@ export type ConversacionAsignadaEvent = SSEEventBase<
 >;
 
 /** An agent's config changed (PATCH /agents/{id}/). */
-export type AgenteActualizadoEvent = SSEEventBase<
+type AgenteActualizadoEvent = SSEEventBase<
   "agente_actualizado",
   { agent_type: AgentType; is_active: boolean }
 >;
@@ -136,24 +162,24 @@ export type AgenteActualizadoEvent = SSEEventBase<
  * The business's operative status changed (PATCH /businesses/me/,
  * onboarding/complete, or an admin activate/deactivate action).
  */
-export type NegocioActualizadoEvent = SSEEventBase<
+type NegocioActualizadoEvent = SSEEventBase<
   "negocio_actualizado",
   { is_operative: boolean }
 >;
 
 // --- Customer domain (data-sync: refresh lists/drawer, no toast) ---
 
-export type ClienteCreadoEvent = SSEEventBase<
+type ClienteCreadoEvent = SSEEventBase<
   "cliente_creado",
   { customer_id: string; origin: "operator" | "whatsapp" }
 >;
 
-export type ClienteActualizadoEvent = SSEEventBase<
+type ClienteActualizadoEvent = SSEEventBase<
   "cliente_actualizado",
   { customer_id: string; fields: string[] }
 >;
 
-export type FichaActualizadaEvent = SSEEventBase<
+type FichaActualizadaEvent = SSEEventBase<
   "ficha_actualizada",
   {
     customer_id: string;
@@ -163,36 +189,36 @@ export type FichaActualizadaEvent = SSEEventBase<
   }
 >;
 
-export type NotaCreadaEvent = SSEEventBase<
+type NotaCreadaEvent = SSEEventBase<
   "nota_creada",
   { customer_id: string; note_id: string; author: string }
 >;
 
 // --- Service catalog (data-sync) ---
 
-export type ServicioCreadoEvent = SSEEventBase<
+type ServicioCreadoEvent = SSEEventBase<
   "servicio_creado",
   { service_id: string; active: boolean }
 >;
 
-export type ServicioActualizadoEvent = SSEEventBase<
+type ServicioActualizadoEvent = SSEEventBase<
   "servicio_actualizado",
   { service_id: string; active: boolean }
 >;
 
-export type ServicioEliminadoEvent = SSEEventBase<
+type ServicioEliminadoEvent = SSEEventBase<
   "servicio_eliminado",
   { service_id: string }
 >;
 
-export type ErrorOperativoEvent = SSEEventBase<
+type ErrorOperativoEvent = SSEEventBase<
   "error_operativo",
   // `event_type` names the operational event that failed; any extra keys are
   // sanitized metadata specific to that event type.
   { source: string; event_type: string; [key: string]: unknown }
 >;
 
-export type ErrorIntegracionEvent = SSEEventBase<
+type ErrorIntegracionEvent = SSEEventBase<
   "error_integracion",
   { provider: string; direction: string; error_type: string }
 >;
@@ -207,6 +233,9 @@ export type SSEEvent =
   | ConversacionReactivadaEvent
   | MensajeAutomaticoEnviadoEvent
   | PedidoCreadoEvent
+  | PedidoCanceladoEvent
+  | PagoRecibidoEvent
+  | PagoRechazadoEvent
   | PedidoBorradorCreadoEvent
   | PedidoBorradorActualizadoEvent
   | ConversacionCerradaEvent

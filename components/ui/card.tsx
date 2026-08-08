@@ -35,9 +35,26 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * A card's title is a HEADING, so it renders as one: it was a plain `<div>`, which
+ * looked identical and exposed nothing to the accessibility tree — a screen reader
+ * found no heading at all on a page whose only title is a CardTitle (e.g.
+ * /reset-password's "Crea una nueva contraseña"), and `getByRole("heading")` could
+ * never match it (QA 2026-07-30).
+ *
+ * `as` lets a caller pick the right level for its document outline. `h2` is the default
+ * because a card normally sits under the page's `h1` — `h3` skipped a level on every
+ * screen that has no section heading in between (axe `heading-order`). `h1` is in the
+ * union for the auth and onboarding screens, where the CardTitle is the page's ONLY
+ * heading and no other element can carry the top level.
+ */
+function CardTitle({
+  className,
+  as: Tag = "h2",
+  ...props
+}: React.ComponentProps<"h3"> & { as?: "h1" | "h2" | "h3" | "h4" }) {
   return (
-    <div
+    <Tag
       data-slot="card-title"
       className={cn(
         "font-heading text-sm leading-tight font-semibold group-data-[size=sm]/card:text-[0.8rem]",

@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState, ErrorState, Loading } from "@/components/states";
+import { PaymentLinkDialog } from "@/components/payments/payment-link-dialog";
 import { cn } from "@/lib/utils";
 
 import { AppointmentCalendar } from "./_components/appointment-calendar";
@@ -31,6 +32,7 @@ import { CreateDialog } from "./_components/create-dialog";
 import { HistoryDialog } from "./_components/history-dialog";
 import { RescheduleDialog } from "./_components/reschedule-dialog";
 import { StatusTabs, type StatusFilter } from "./_components/status-tabs";
+import type { EnrichedAppointment } from "./_components/types";
 
 type ViewMode = "calendar" | "list";
 type PageState = "loading" | "error" | "ready" | "empty";
@@ -52,6 +54,10 @@ export default function AppointmentsPage() {
   const [cancelling, setCancelling] = useState<Appointment | null>(null);
   const [rescheduling, setRescheduling] = useState<Appointment | null>(null);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
+  // The appointment the detail popover is charging, or null. The dialog
+  // remounts per appointment (key below) so its preset state never leaks
+  // from one cita into the next.
+  const [charging, setCharging] = useState<EnrichedAppointment | null>(null);
 
   const appointmentsRef = useRef(appointments);
   const pageStateRef = useRef(pageState);
@@ -336,6 +342,7 @@ export default function AppointmentsPage() {
               onCancel={setCancelling}
               onReschedule={setRescheduling}
               onHistory={(a) => setHistoryFor(a.id)}
+              onCreatePaymentLink={setCharging}
             />
           ) : (
             <AppointmentListView
@@ -344,6 +351,7 @@ export default function AppointmentsPage() {
               onCancel={setCancelling}
               onReschedule={setRescheduling}
               onHistory={(a) => setHistoryFor(a.id)}
+              onCreatePaymentLink={setCharging}
             />
           )}
         </>
@@ -381,6 +389,18 @@ export default function AppointmentsPage() {
         onOpenChange={(open) => !open && setHistoryFor(null)}
         appointmentId={historyFor}
       />
+
+      {charging && (
+        <PaymentLinkDialog
+          key={charging.id}
+          open
+          onOpenChange={(open) => !open && setCharging(null)}
+          preset={{
+            customer: { id: charging.customer_id, name: charging.customerName },
+            appointment: charging,
+          }}
+        />
+      )}
     </div>
   );
 }

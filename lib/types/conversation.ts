@@ -17,4 +17,17 @@ export interface Conversation {
   last_message_at: string;
   /** Number of messages unread by the operator. */
   unread: number;
+  /** Behaviour rating (1-5) for THIS thread, or `null` when it has none. */
+  customer_rating: number | null;
+  /** Why a rating may be missing: "pending" | "rated" | "skipped" | "failed". */
+  rating_status: string;
+  /** The CUSTOMER's own aggregate — shown on a group header, not per thread. */
+  customer_rating_avg: number | null;
+  customer_rating_count: number;
+  /** Last message of the thread, truncated server-side. "" when it has none yet. */
+  last_message_preview: string;
+  /** "in" | "out" | "" — which way the last message went. */
+  last_message_direction: string;
+  /** "" (customer) | "ai" | "operator" | "system" — who wrote it. */
+  last_message_sender_kind: string;
 }

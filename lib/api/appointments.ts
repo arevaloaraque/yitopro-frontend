@@ -20,6 +20,8 @@ interface BackendAppointment {
   origin: string;
   notes: string;
   cancellation_reason: string;
+  service_name: string;
+  service_price: string;
 }
 
 function fromBackend(a: BackendAppointment): Appointment {
@@ -35,10 +37,13 @@ function fromBackend(a: BackendAppointment): Appointment {
     // The admin panel counts as human as opposed to the AI.
     created_by: a.origin === "ai" ? "ai" : "human",
     notes: a.notes || null,
+    service_name: a.service_name,
+    // Backend Decimal string → number, like every other money field.
+    service_price: a.service_price === undefined ? undefined : Number(a.service_price),
   };
 }
 
-export interface ListAppointmentsParams {
+interface ListAppointmentsParams {
   status?: Appointment["status"];
   /** Range (ISO 8601) — the backend only filters by date; the day of `from` is used. */
   from?: string;
@@ -53,18 +58,19 @@ export async function listAppointments(
   params: ListAppointmentsParams = {},
 ): Promise<Appointment[]> {
   // The backend filters by `date` (a single day, mapped from `from`), `status`,
-  // `professional_id` and `service_id`. `to`/`customer_id` have no equivalent
-  // and are omitted.
+  // `professional_id`, `service_id` and `customer_id`. `to` still has no
+  // equivalent and is omitted.
   const query: Record<string, string> = {};
   if (params.from) query.date = params.from.slice(0, 10);
   if (params.status) query.status = params.status;
   if (params.professional_id) query.professional_id = params.professional_id;
   if (params.service_id) query.service_id = params.service_id;
+  if (params.customer_id) query.customer_id = params.customer_id;
   const res = await api.get<BackendAppointment[]>("/appointments/", { query });
   return res.map(fromBackend);
 }
 
-export interface CreateAppointmentInput {
+interface CreateAppointmentInput {
   service_id: string;
   customer_id: string;
   start: string;

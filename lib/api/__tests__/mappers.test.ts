@@ -10,7 +10,7 @@ import {
   rescheduleAppointment,
 } from "@/lib/api/appointments";
 import { listConversations, listMessages, sendMessage } from "@/lib/api/conversations";
-import { createCustomer, updateCustomer } from "@/lib/api/customers";
+import { createCustomer, getCustomer, updateCustomer } from "@/lib/api/customers";
 import { createOrder, updateOrder } from "@/lib/api/orders";
 import { createService, listServices, searchServices } from "@/lib/api/services";
 import { server } from "@/mocks/server";
@@ -124,6 +124,8 @@ describe("customers mapper", () => {
             display_name: "Bob",
             email: "",
             created_at: "2026-06-01T00:00:00Z",
+            rating_avg: null,
+            rating_count: 0,
           },
           { status: 201 },
         );
@@ -146,6 +148,8 @@ describe("customers mapper", () => {
           display_name: "Ana B",
           email: "ana@x.cl",
           created_at: "2026-06-01T00:00:00Z",
+          rating_avg: null,
+          rating_count: 0,
         });
       }),
     );
@@ -170,11 +174,22 @@ describe("conversations mapper", () => {
             status: "assigned_to_human",
             channel_type: "whatsapp",
             active_agent: "",
-            customer: { id: 7, display_name: "Ana", phone: "569" },
+            customer: {
+              id: 7,
+              display_name: "Ana",
+              phone: "569",
+              rating_avg: 4.5,
+              rating_count: 2,
+            },
             assignee_id: 2,
             last_message_at: "2026-06-01T00:00:00Z",
             created_at: "2026-06-01T00:00:00Z",
             updated_at: "2026-06-01T00:00:00Z",
+            customer_rating: 3,
+            rating_status: "rated",
+            last_message_preview: "hola, tienen hora?",
+            last_message_direction: "in",
+            last_message_sender_kind: "",
           },
         ]),
       ),
@@ -188,6 +203,15 @@ describe("conversations mapper", () => {
       active_agent: null,
       assignee_id: "2",
       unread: 0,
+      customer_rating: 3,
+      rating_status: "rated",
+      // El agregado del cliente viaja ANIDADO en `customer` y se aplana acá: si el mapper
+      // leyera un `customer_rating_avg` plano (que el backend NO manda) esto lo caza.
+      customer_rating_avg: 4.5,
+      customer_rating_count: 2,
+      last_message_preview: "hola, tienen hora?",
+      last_message_direction: "in",
+      last_message_sender_kind: "",
     });
 
     let body: unknown;
@@ -433,5 +457,57 @@ describe("orders mapper", () => {
     );
     await updateOrder("5", [{ product_id: "9", quantity: 3 }]);
     expect(body).toEqual({ items: [{ product_id: 9, quantity: 3 }] });
+  });
+});
+
+describe("rating fields that landed later than the rest of the schema", () => {
+  it("a payload WITHOUT them reads as «no rating», never as a zero", async () => {
+    // Un caché viejo, un mock, o un backend a medio desplegar. `?? null` / `?? ""` /
+    // `?? 0` existen para que eso no se pinte como la peor calificación posible.
+    server.use(
+      http.get(`${BASE}/conversations/`, () =>
+        HttpResponse.json([
+          {
+            id: 5,
+            status: "closed",
+            channel_type: "whatsapp",
+            active_agent: "",
+            customer: { id: 7, display_name: "Ana", phone: "569" },
+            assignee_id: null,
+            last_message_at: "2026-06-01T00:00:00Z",
+            created_at: "2026-06-01T00:00:00Z",
+            updated_at: "2026-06-01T00:00:00Z",
+          },
+        ]),
+      ),
+      http.get(`${BASE}/customers/8/`, () =>
+        HttpResponse.json({
+          id: 8,
+          phone: "569",
+          display_name: "Ana",
+          email: "",
+          created_at: "2026-06-01T00:00:00Z",
+        }),
+      ),
+    );
+    const conv = (await listConversations())[0];
+    expect(conv.customer_rating).toBeNull();
+    expect(conv.rating_status).toBe("");
+
+    const cust = await getCustomer("8");
+    expect(cust.rating_avg).toBeNull();
+    expect(cust.rating_count).toBe(0);
+  });
+
+  it("sends customer_id on the wire when the drawer asks for one customer's history", async () => {
+    let seen: string | null = null;
+    server.use(
+      http.get(`${BASE}/conversations/`, ({ request }) => {
+        seen = new URL(request.url).searchParams.get("customer_id");
+        return HttpResponse.json([]);
+      }),
+    );
+    await listConversations({ customerId: "42" });
+    expect(seen).toBe("42");
   });
 });

@@ -40,6 +40,15 @@ vi.mock("@/lib/sse", () => ({
   },
 }));
 
+// The open drawer is seeded from `?id=` so other screens (the order detail) can link
+// straight to a person. Mock useSearchParams so tests can drive that initial state.
+const { searchParamsStub } = vi.hoisted(() => ({
+  searchParamsStub: { current: new URLSearchParams() },
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => searchParamsStub.current,
+}));
+
 function emitSse(event: SSEEvent) {
   for (const handler of sseHandlers) handler(event);
 }
@@ -51,6 +60,8 @@ function makeCustomer(over: Partial<Customer> = {}): Customer {
     phone: "+56911111111",
     email: "",
     created_at: "2026-07-11T10:00:00Z",
+    rating_avg: null,
+    rating_count: 0,
     ...over,
   };
 }
@@ -58,6 +69,7 @@ function makeCustomer(over: Partial<Customer> = {}): Customer {
 beforeEach(() => {
   vi.clearAllMocks();
   sseHandlers.length = 0;
+  searchParamsStub.current = new URLSearchParams();
   vi.mocked(listConversations).mockResolvedValue([]);
   vi.mocked(searchCustomers).mockResolvedValue({ items: [makeCustomer()], count: 1 });
 });
@@ -125,5 +137,25 @@ describe("CustomersPage — crear cliente", () => {
     await user.click(screen.getByRole("button", { name: /^crear$/i }));
 
     await waitFor(() => expect(toastFns.success).toHaveBeenCalledWith("Cliente creado"));
+  });
+});
+
+describe("CustomersPage — deep-link ?id=", () => {
+  it("abre el detalle del cliente indicado en la URL", async () => {
+    // Es lo que hace utilizable el link «ver cliente» del detalle de un pedido: sin esto
+    // el operador cae en la lista y tiene que buscar a la persona a mano.
+    searchParamsStub.current = new URLSearchParams("id=cust-1");
+    const { container } = render(<CustomersPage />);
+    await waitFor(() =>
+      expect(container.ownerDocument.querySelector('[data-slot="sheet-content"]')).not.toBeNull(),
+    );
+  });
+
+  it("sin ?id= no abre nada", async () => {
+    const { container } = render(<CustomersPage />);
+    await waitFor(() => expect(searchCustomers).toHaveBeenCalledTimes(1));
+    expect(
+      container.ownerDocument.querySelector('[data-slot="sheet-content"]'),
+    ).toBeNull();
   });
 });

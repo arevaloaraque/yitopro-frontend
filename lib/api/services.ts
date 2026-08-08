@@ -46,7 +46,7 @@ export async function listServices(): Promise<Service[]> {
   return res.items.map(fromBackend).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export interface ServiceSearchParams {
+interface ServiceSearchParams {
   search?: string;
   limit?: number;
   offset?: number;

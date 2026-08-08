@@ -155,6 +155,30 @@ function ConversationsInner() {
     );
   }, []);
 
+  /**
+   * Re-pide UNA conversación para refrescar su preview.
+   *
+   * Los eventos de realtime no traen el texto del mensaje a propósito: `apps/realtime`
+   * publica solo ids y datos operativos, sin PII, y el mensaje de un cliente es PII. Así que
+   * el preview no se puede parchear desde el payload. Sin esto la fila salta a «Ahora» y
+   * sigue mostrando el mensaje ANTERIOR — un preview viejo con hora nueva es peor que no
+   * tener preview.
+   *
+   * `unread` se preserva del estado local: el backend no lo expone (el mapper devuelve 0),
+   * así que un refetch a secas borraría el contador que este mismo handler acaba de subir.
+   */
+  const refreshRow = useCallback((conversationId: string) => {
+    getConversation(conversationId)
+      .then((fresh) =>
+        setConversations((prev) =>
+          prev
+            .map((c) => (c.id === conversationId ? { ...fresh, unread: c.unread } : c))
+            .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
+        ),
+      )
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const unsub = subscribeToEvents((event) => {
       switch (event.type) {
@@ -175,6 +199,9 @@ function ConversationsInner() {
                 )
                 .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
             );
+            // El parche de arriba es feedback inmediato (hora + no leídos); el preview
+            // necesita el servidor.
+            refreshRow(conversation_id);
           } else {
             // Brand-new conversation (first message from a customer we don't
             // have in the inbox yet): fetch it and insert it instead of
@@ -266,6 +293,7 @@ function ConversationsInner() {
               )
               .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
           });
+          refreshRow(conversation_id);
           if (selectedIdRef.current === conversation_id) {
             listMessages(conversation_id)
               .then(setMessages)
@@ -276,7 +304,8 @@ function ConversationsInner() {
       }
     });
     return unsub;
-  }, []);
+    // `refreshRow` es estable (useCallback sin deps): no re-suscribe el stream.
+  }, [refreshRow]);
 
   const handleSendMessage = useCallback(
     async (text: string) => {

@@ -4,11 +4,33 @@ import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { cn } from "@/lib/utils";
+import { useInertBackground } from "@/lib/a11y/use-inert-background";
 import { Button } from "@/components/ui/button";
 import { XIcon } from "lucide-react";
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+function Dialog({
+  open,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: DialogPrimitive.Root.Props) {
+  // Focus containment lives here, at the root, because this is where the OPEN state is —
+  // `DialogContent` only knows whether it is mounted, and a closing dialog stays mounted
+  // through its exit animation (see use-inert-background).
+  const [uncontrolled, setUncontrolled] = React.useState(defaultOpen ?? false);
+  useInertBackground(open ?? uncontrolled);
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={(...args) => {
+        setUncontrolled(args[0]);
+        onOpenChange?.(...args);
+      }}
+      {...props}
+    />
+  );
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -44,13 +66,20 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
 }) {
+  // `grid-cols-[minmax(0,1fr)]`: sin esto la columna IMPLÍCITA del grid se dimensiona al
+  // min-content de su contenido y puede exceder el `max-w` del propio diálogo — el mismo
+  // vicio que `min-width: auto` en un flex item, pero en grid. Medido en el editor de pedidos
+  // (2026-07-31): columna de 391.66px dentro de una caja de 343px en móvil, así que TODOS los
+  // hijos (incluido el <h2> del título) se dibujaban 49px más anchos que el diálogo. Va en el
+  // primitivo porque afecta a cualquier diálogo con contenido que no se pueda encoger, no
+  // solo al que lo reportó.
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border-[1.5px] border-clay-line bg-popover p-5 text-sm text-popover-foreground shadow-clay-lg duration-150 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid grid-cols-[minmax(0,1fr)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl border-[1.5px] border-clay-line bg-popover p-5 text-sm text-popover-foreground shadow-clay-lg duration-150 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className,
         )}
         {...props}

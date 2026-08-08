@@ -55,7 +55,7 @@ export function configureApiAuth(opts: {
 
 type QueryValue = string | number | boolean | null | undefined;
 
-export interface RequestOptions extends Omit<RequestInit, "body"> {
+interface RequestOptions extends Omit<RequestInit, "body"> {
   /** JSON body; serialized automatically. */
   body?: unknown;
   /** Query parameters; `undefined`/`null` values are omitted. */

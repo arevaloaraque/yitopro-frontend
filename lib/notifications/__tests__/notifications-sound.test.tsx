@@ -26,10 +26,14 @@ vi.mock("@/lib/sse", () => ({
 }));
 
 vi.mock("sonner", () => {
+  // `custom` es el que usa el provider: la tarjeta del aviso es markup propio para que toda
+  // la caja sea el enlace. `dismiss` lo llama el tope de 4 y el botón de cerrar.
   const toast = Object.assign(vi.fn(), {
     success: vi.fn(),
     warning: vi.fn(),
     error: vi.fn(),
+    custom: vi.fn(),
+    dismiss: vi.fn(),
   });
   return { toast };
 });
@@ -47,7 +51,7 @@ vi.mock("../sound", () => ({
   unlockSound: sound.unlock,
   setSoundMuted: sound.setMuted,
   isSoundMuted: () => sound.muted.value,
-  subscribeSoundMuted: () => () => {},
+  subscribeSoundSettings: () => () => {},
 }));
 
 let seq = 0;
@@ -113,7 +117,7 @@ describe("notification sound policy", () => {
     expect(sound.play).toHaveBeenCalledExactlyOnceWith("alert");
   });
 
-  it("uses the bright voice for a booking or an order", () => {
+  it("gives the agenda its own voice, separate from orders and messages", () => {
     mount();
     emit({
       type: "nueva_cita",
@@ -130,13 +134,32 @@ describe("notification sound policy", () => {
       data: { order_id: "2", total: "40000", customer_id: "9" },
     });
     expect(sound.play).toHaveBeenCalledTimes(2);
-    expect(sound.play).toHaveBeenNthCalledWith(1, "success");
-    expect(sound.play).toHaveBeenNthCalledWith(2, "success");
+    // Three configurable slots, guaranteed distinct, so "the agenda moved" is told apart
+    // from "an order came in" and from "a customer wrote" without looking at the screen.
+    expect(sound.play).toHaveBeenNthCalledWith(1, "appointment");
+    expect(sound.play).toHaveBeenNthCalledWith(2, "order");
+  });
+
+  it("uses the agenda voice for a cancellation — nobody at the console caused it", () => {
+    mount();
+    emit({ type: "cita_cancelada", data: { appointment_id: "3", customer_id: "9" } });
+    emit({
+      type: "cita_reagendada",
+      data: {
+        appointment_id: "3",
+        customer_id: "9",
+        start: "2026-07-29T15:00:00Z",
+      },
+    });
+    // Both were silent before, so a customer cancelling from WhatsApp made no sound at
+    // all — the operator found out by looking, which is what the sound exists to avoid.
+    expect(sound.play).toHaveBeenCalledTimes(2);
+    expect(sound.play).toHaveBeenNthCalledWith(1, "appointment");
+    expect(sound.play).toHaveBeenNthCalledWith(2, "appointment");
   });
 
   it("stays silent for echoes of work already in motion", () => {
     mount();
-    emit({ type: "cita_cancelada", data: { appointment_id: "3", customer_id: "9" } });
     emit({ type: "conversacion_reactivada", data: { conversation_id: "7", reason: "timeout" } });
     emit({
       type: "mensaje_automatico_enviado",
@@ -148,7 +171,7 @@ describe("notification sound policy", () => {
       },
     });
     expect(sound.play).not.toHaveBeenCalled();
-    expect(count()).toBe("3"); // …but they are still visible in the bell
+    expect(count()).toBe("2"); // …but they are still visible in the bell
   });
 
   it("stays silent for data-sync events that never reach the bell", () => {
@@ -173,7 +196,7 @@ describe("notification deep links", () => {
     expect(hrefs()).toBe("/conversations?id=42");
   });
 
-  it("points a booking at that appointment", () => {
+  it("points a booking at the appointments list, without a parameter nobody reads", () => {
     mount();
     emit({
       type: "nueva_cita",
@@ -185,7 +208,10 @@ describe("notification deep links", () => {
         origin: "human",
       },
     });
-    expect(hrefs()).toBe("/appointments?id=5");
+    // The appointments screen never reads `id` from the query string — only
+    // /conversations does — so the link asserted here used to land on the plain list with
+    // a junk parameter (review 2026-07-27). Change this the day the screen reads it.
+    expect(hrefs()).toBe("/appointments");
   });
 
   it("leaves an event with nowhere to go without a link", () => {

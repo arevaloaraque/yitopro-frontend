@@ -1,5 +1,4 @@
 export { ApiError, API_BASE_URL, api, configureApiAuth } from "./client";
-export type { RequestOptions } from "./client";
 
 export {
   loginRequest,
@@ -12,7 +11,6 @@ export {
 } from "./auth";
 
 export { submitEmbeddedSignupCode } from "./whatsapp";
-export type { EmbeddedSignupResult } from "./whatsapp";
 
 export * from "./invite";
 export * from "./businesses";

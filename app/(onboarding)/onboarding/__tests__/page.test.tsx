@@ -79,10 +79,13 @@ describe("OnboardingPage — resume to first pending step", () => {
     // Loading initially
     expect(screen.getByText(/cargando el onboarding/i)).toBeInTheDocument();
 
-    // After rehydration + init, the wizard should jump to step 3
-    // (CardTitle renders as a <div>, use getByText)
+    // After rehydration + init, the wizard should jump to step 3. Asserted by ROLE: the
+    // step title is a real heading now (`as="h1"`: the wizard has no other one).
     await waitFor(
-      () => expect(screen.getByText(/horarios de atención/i)).toBeInTheDocument(),
+      () =>
+        expect(
+          screen.getByRole("heading", { level: 1, name: /horarios de atención/i }),
+        ).toBeInTheDocument(),
       { timeout: 3000 },
     );
   });

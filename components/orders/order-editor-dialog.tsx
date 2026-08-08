@@ -12,7 +12,7 @@ import {
   type OrderItemInput,
 } from "@/lib/api";
 import type { Product } from "@/lib/types";
-import { formatPrice } from "@/lib/utils";
+import { useMoney } from "@/lib/business";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,11 +63,25 @@ export function OrderEditorDialog({
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [rows, setRows] = useState<Row[]>(() =>
     order && order.items.length > 0
-      ? order.items.map((i) => ({ product_id: i.product_id, quantity: String(i.quantity) }))
+      ? order.items.map((i) => ({
+          product_id: i.product_id,
+          quantity: String(i.quantity),
+        }))
       : [{ ...emptyRow }],
   );
   const [products, setProducts] = useState<Product[]>([]);
+  const money = useMoney();
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  /** Subtotal de una fila, o `null` si todavía no hay producto elegido (se muestra «—»). */
+  function rowSubtotal(row: Row): number | null {
+    const product = products.find((p) => p.id === row.product_id);
+    if (!product) return null;
+    const qty = Number(row.quantity);
+    return Number.isFinite(qty) && qty > 0 ? product.price * qty : 0;
+  }
+
+  const total = rows.reduce((sum, row) => sum + (rowSubtotal(row) ?? 0), 0);
   const [saving, setSaving] = useState(false);
 
   // Load the sellable catalogue when the dialog opens (async setState only).
@@ -95,7 +109,7 @@ export function OrderEditorDialog({
     const byId = new Map<string, string>();
     if (order) for (const i of order.items) byId.set(i.product_id, i.product_name);
     for (const p of products) {
-      byId.set(p.id, `${p.name} · ${formatPrice(p.price)}`);
+      byId.set(p.id, `${p.name} · ${money(p.price)}`);
     }
     return [...byId].map(([value, label]) => ({ value, label }));
   })();
@@ -136,7 +150,9 @@ export function OrderEditorDialog({
       onSaved(saved);
       onOpenChange(false);
     } catch (err) {
-      setErrors({ _form: err instanceof Error ? err.message : "Error al guardar el pedido." });
+      setErrors({
+        _form: err instanceof Error ? err.message : "Error al guardar el pedido.",
+      });
     } finally {
       setSaving(false);
     }
@@ -144,7 +160,14 @@ export function OrderEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* Ancho: el editor tiene una tabla de ítems (producto + cantidad + subtotal + quitar) y
+          el `sm:max-w-sm` (384px) del primitivo no alcanza — el nombre del producto se comía la
+          fila.
+          Alto: `max-h-[85vh]` para que un pedido de 8 ítems no crezca más que la pantalla, y
+          `grid-rows-[auto_minmax(0,1fr)_auto]` para que scrollee SOLO el formulario del medio.
+          Poner el `overflow-y-auto` en el diálogo entero (primer intento) dejaba el botón
+          «Guardar» fuera de la vista al scrollear: el operador tenía que buscarlo. */}
+      <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editing ? "Editar pedido" : "Nuevo pedido"}</DialogTitle>
           <DialogDescription>
@@ -153,7 +176,9 @@ export function OrderEditorDialog({
               : "Crea un pedido manual para un cliente."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        {/* La región que scrollea. `min-h-0` es lo que permite que una fila de grid se
+            encoja por debajo de su contenido; sin él el `1fr` no acota nada. */}
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="order-customer">Cliente</Label>
             {editing ? (
@@ -165,10 +190,14 @@ export function OrderEditorDialog({
                   value={customer}
                   onChange={(c) => {
                     setCustomer(c);
-                    setErrors((prev) => (prev.customer ? { ...prev, customer: "" } : prev));
+                    setErrors((prev) =>
+                      prev.customer ? { ...prev, customer: "" } : prev,
+                    );
                   }}
                   aria-invalid={errors.customer ? true : undefined}
-                  aria-describedby={errors.customer ? "order-customer-error" : undefined}
+                  aria-describedby={
+                    errors.customer ? "order-customer-error" : undefined
+                  }
                 />
                 {errors.customer && (
                   <p
@@ -185,16 +214,43 @@ export function OrderEditorDialog({
 
           <div className="flex flex-col gap-2">
             <Label>Productos</Label>
+            {/* Encabezado de columnas: con el subtotal a la derecha, la fila deja de ser
+                «un select y dos cosas» y se lee como una tabla. */}
+            <div className="hidden items-center gap-2 px-0.5 text-[0.7rem] text-muted-foreground sm:flex">
+              <span className="flex-1">Producto</span>
+              <span className="w-20 text-center">Cantidad</span>
+              <span className="w-28 text-right">Subtotal</span>
+              <span className="w-6" aria-hidden />
+            </div>
             {rows.map((row, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <div className="flex-1">
+              <div key={idx} className="flex flex-wrap items-center gap-2">
+                {/* `min-w-0` es la otra mitad del arreglo del desborde: deja que este item
+                    baje del min-content de su contenido (ver SelectValue). */}
+                <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                   <Select
                     items={options}
                     value={row.product_id}
                     onValueChange={(v) => updateRow(idx, { product_id: v ?? "" })}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Seleccionar producto" />
+                    {/* `min-w-0` también en el trigger: tiene `whitespace-nowrap`, así que su
+                        propio min-content es el texto completo de la opción y ese mínimo
+                        empujaba la columna del grid del diálogo a 392px dentro de 343 en
+                        móvil. Con esto el texto se recorta (line-clamp-1) en vez de estirar
+                        la caja. */}
+                    <SelectTrigger className="w-full min-w-0">
+                      {/* El trigger muestra solo el NOMBRE; el precio vive en las opciones
+                          del desplegable (donde hay espacio y sirve para elegir) y en la
+                          columna Subtotal. Con «nombre · precio» en el trigger el texto no
+                          cabía y se cortaba a mitad del número («$17.00(»), que se lee como
+                          un dato corrupto — y la elipsis no es opción acá: el trigger le
+                          aplica `line-clamp-1` al valor, o sea `display:-webkit-box`, donde
+                          `text-overflow` no tiene efecto. */}
+                      <SelectValue placeholder="Seleccionar producto">
+                        {(value) =>
+                          products.find((p) => p.id === value)?.name ??
+                          "Seleccionar producto"
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {options.map((o) => (
@@ -213,6 +269,9 @@ export function OrderEditorDialog({
                   aria-label="Cantidad"
                   className="w-20 tabular-nums"
                 />
+                <span className="w-28 shrink-0 text-right text-sm text-muted-foreground tabular-nums">
+                  {rowSubtotal(row) === null ? "—" : money(rowSubtotal(row) as number)}
+                </span>
                 <Button
                   variant="ghost"
                   size="icon-xs"
@@ -238,6 +297,12 @@ export function OrderEditorDialog({
                 {errors._items}
               </p>
             )}
+            {/* Total: el operador está armando un pedido con plata; no verla mientras lo
+                construye es la parte incómoda de este formulario, no solo el ancho. */}
+            <div className="mt-1 flex items-center justify-between border-t border-border/60 pt-2">
+              <span className="text-sm font-medium">Total</span>
+              <span className="text-sm font-semibold tabular-nums">{money(total)}</span>
+            </div>
           </div>
 
           {errors._form && (

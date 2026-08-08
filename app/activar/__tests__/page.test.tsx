@@ -70,10 +70,13 @@ describe("/activar page", () => {
     it("shows the set-password form after token validation succeeds", async () => {
       renderPage();
 
-      // After validation, the form must appear.
-      // CardTitle renders as a <div>, so use getByText, not getByRole("heading").
+      // After validation, the form must appear. Asserted by ROLE: CardTitle renders a real
+      // heading now, and `as="h1"` here because it is this page's only one — a screen
+      // reader used to find no heading at all (QA 2026-07-30).
       await waitFor(() =>
-        expect(screen.getByText(/crea tu contraseña/i)).toBeInTheDocument(),
+        expect(
+          screen.getByRole("heading", { level: 1, name: /crea tu contraseña/i }),
+        ).toBeInTheDocument(),
       );
 
       expect(screen.getByLabelText(/^contraseña$/i)).toBeInTheDocument();

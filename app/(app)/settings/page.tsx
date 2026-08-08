@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, MessageSquare, Save } from "lucide-react";
 
+import { NotificationSounds } from "./_components/notification-sounds";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -105,6 +107,38 @@ const TEMPLATE_STATUS: Record<
   rejected: { label: "Rechazada", variant: "destructive" },
 };
 
+/** The caps the backend enforces (apps/businesses/api.py: MAX_MESSAGE_LEN /
+ * MAX_CONTEXT_LEN). Single-sourced here because the same numbers gate the save. */
+const MAX_MESSAGE = 1000;
+const MAX_CONTEXT = 4000;
+
+/**
+ * The config fields the "Mensajes de tu negocio" card OWNS, with each one's cap.
+ *
+ * `tone` and `welcome_message` are deliberately absent: they belong to the Asistente
+ * card above and travel through `PATCH /businesses/me/`. Both cards write the same
+ * config row, so sending the whole object from here wrote back the values loaded at
+ * mount — silently undoing a tone change saved seconds earlier, two buttons apart in
+ * the same tab (review 2026-07-27).
+ *
+ * It is also what keeps the PATCH body to what the tenant may write at all: the GET
+ * returns the whole config row, and most of it is staff-only.
+ */
+const VOICE_MAX = {
+  business_context: MAX_CONTEXT,
+  fallback_message: MAX_MESSAGE,
+  off_topic_message: MAX_MESSAGE,
+  out_of_hours_message: MAX_MESSAGE,
+  out_of_hours_ack_message: MAX_MESSAGE,
+  human_handoff_message: MAX_MESSAGE,
+  handoff_waiting_ack_message: MAX_MESSAGE,
+  handoff_timeout_revert_message: MAX_MESSAGE,
+} as const satisfies Partial<Record<keyof BusinessConfig, number>>;
+
+type VoiceField = keyof typeof VOICE_MAX;
+
+const VOICE_FIELDS = Object.keys(VOICE_MAX) as VoiceField[];
+
 /** Labelled textarea with its hint and a live character counter.
  *
  * The label/hint/counter trio is repeated for every message the business writes,
@@ -129,12 +163,15 @@ function MessageField({
   rows?: number;
   placeholder?: string;
 }) {
+  // Only reachable with text that was already stored past the cap (staff can write
+  // longer through the admin): typing is stopped by maxLength below.
   const over = value.length > max;
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between gap-3">
         <Label htmlFor={id}>{label}</Label>
         <span
+          id={`${id}-count`}
           className={cn(
             "text-[0.7rem] tabular-nums",
             over ? "text-destructive" : "text-muted-foreground",
@@ -143,14 +180,21 @@ function MessageField({
           {value.length}/{max}
         </span>
       </div>
-      <p className="text-[0.7rem] text-muted-foreground">{hint}</p>
+      <p id={`${id}-hint`} className="text-[0.7rem] text-muted-foreground">
+        {hint}
+      </p>
       <Textarea
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
         placeholder={placeholder}
+        // Native cap, so the operator cannot type into a 422 whose message would
+        // arrive as pydantic's English "String should have at most 1000 characters".
+        maxLength={max}
         aria-invalid={over}
+        // Hint and counter are announced with the field instead of only being visible.
+        aria-describedby={`${id}-hint ${id}-count`}
       />
     </div>
   );
@@ -341,16 +385,30 @@ export default function SettingsPage() {
     setCfg((prev) => (prev ? { ...prev, [field]: value } : prev));
   }, []);
 
-  const cfgDirty =
-    cfg !== null && cfgLoaded !== null && JSON.stringify(cfg) !== JSON.stringify(cfgLoaded);
+  // Only the fields this card owns, and only the ones that actually changed. A whole-
+  // object PATCH also wrote back `tone`/`welcome_message` from mount time, undoing the
+  // Asistente card's save (see VOICE_MAX).
+  const cfgChanges: Partial<BusinessConfig> =
+    cfg === null || cfgLoaded === null
+      ? {}
+      : Object.fromEntries(
+          VOICE_FIELDS.filter((key) => cfg[key] !== cfgLoaded[key]).map((key) => [key, cfg[key]]),
+        );
+  const cfgDirty = Object.keys(cfgChanges).length > 0;
+  // Only what is actually being SENT: text already stored past its cap (written from the
+  // admin) would 422, but a field the PATCH does not carry cannot 422 — scanning all eight
+  // locked the whole card over an untouched one.
+  const cfgOverLimit = Object.entries(cfgChanges).some(
+    ([key, value]) => (value ?? "").length > VOICE_MAX[key as VoiceField],
+  );
 
   const saveCfg = async () => {
-    if (!cfg) return;
+    if (!cfg || !cfgDirty) return;
     setCfgSaving(true);
     setCfgSaved(false);
     setCfgError(null);
     try {
-      const saved = await updateBusinessConfig(cfg);
+      const saved = await updateBusinessConfig(cfgChanges);
       setCfg(saved);
       setCfgLoaded(saved);
       setCfgSaved(true);
@@ -517,6 +575,7 @@ export default function SettingsPage() {
           <TabsTrigger value="asistente">Asistente</TabsTrigger>
           <TabsTrigger value="horario">Horario</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
         </TabsList>
 
         {/* ── Negocio ─────────────────────────────────────────────── */}
@@ -766,7 +825,7 @@ export default function SettingsPage() {
                     hint="Qué ofreces, qué te diferencia y los detalles que tus clientes suelen preguntar. Lo usamos para responderles mejor."
                     value={cfg.business_context}
                     onChange={(v) => patchCfg("business_context", v)}
-                    max={4000}
+                    max={MAX_CONTEXT}
                     rows={6}
                     placeholder="Somos una barbería en el centro. Atendemos sin reserva de lunes a viernes…"
                   />
@@ -779,7 +838,7 @@ export default function SettingsPage() {
                     hint="Se envía si el asistente no puede resolver la consulta."
                     value={cfg.fallback_message}
                     onChange={(v) => patchCfg("fallback_message", v)}
-                    max={1000}
+                    max={MAX_MESSAGE}
                   />
                   <MessageField
                     id="cfg-off-topic"
@@ -787,7 +846,7 @@ export default function SettingsPage() {
                     hint="Cuando te preguntan algo que tu negocio no hace."
                     value={cfg.off_topic_message}
                     onChange={(v) => patchCfg("off_topic_message", v)}
-                    max={1000}
+                    max={MAX_MESSAGE}
                   />
                   <MessageField
                     id="cfg-ooh"
@@ -795,7 +854,7 @@ export default function SettingsPage() {
                     hint="Aviso cuando te escriben con el local cerrado."
                     value={cfg.out_of_hours_message}
                     onChange={(v) => patchCfg("out_of_hours_message", v)}
-                    max={1000}
+                    max={MAX_MESSAGE}
                   />
                   <MessageField
                     id="cfg-ooh-ack"
@@ -803,7 +862,7 @@ export default function SettingsPage() {
                     hint="Respuesta breve si te siguen escribiendo mientras está cerrado."
                     value={cfg.out_of_hours_ack_message}
                     onChange={(v) => patchCfg("out_of_hours_ack_message", v)}
-                    max={1000}
+                    max={MAX_MESSAGE}
                   />
                   <MessageField
                     id="cfg-handoff"
@@ -811,7 +870,7 @@ export default function SettingsPage() {
                     hint="Se envía en el momento en que la conversación queda en manos de tu equipo."
                     value={cfg.human_handoff_message}
                     onChange={(v) => patchCfg("human_handoff_message", v)}
-                    max={1000}
+                    max={MAX_MESSAGE}
                   />
                   <MessageField
                     id="cfg-waiting"
@@ -819,7 +878,7 @@ export default function SettingsPage() {
                     hint="Si el cliente insiste antes de que alguien tome la conversación."
                     value={cfg.handoff_waiting_ack_message}
                     onChange={(v) => patchCfg("handoff_waiting_ack_message", v)}
-                    max={1000}
+                    max={MAX_MESSAGE}
                   />
                   <MessageField
                     id="cfg-revert"
@@ -827,7 +886,7 @@ export default function SettingsPage() {
                     hint="Si nadie de tu equipo respondió, el asistente vuelve a atender y lo avisa."
                     value={cfg.handoff_timeout_revert_message}
                     onChange={(v) => patchCfg("handoff_timeout_revert_message", v)}
-                    max={1000}
+                    max={MAX_MESSAGE}
                   />
 
                   <SaveBar
@@ -836,7 +895,7 @@ export default function SettingsPage() {
                     saving={cfgSaving}
                     saved={cfgSaved}
                     error={cfgError}
-                    disabled={!cfgDirty}
+                    disabled={!cfgDirty || cfgOverLimit}
                   />
                 </>
               )}
@@ -976,6 +1035,22 @@ export default function SettingsPage() {
                   )}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Notificaciones ──────────────────────────────────────── */}
+        <TabsContent value="notificaciones" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Sonidos de notificación</CardTitle>
+              <CardDescription>
+                Un sonido distinto para cada aviso, para reconocerlos sin mirar la
+                pantalla. Se guarda en este navegador.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <NotificationSounds />
             </CardContent>
           </Card>
         </TabsContent>

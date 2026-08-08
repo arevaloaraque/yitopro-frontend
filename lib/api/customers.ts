@@ -13,6 +13,8 @@ interface BackendCustomer {
   display_name: string;
   email: string;
   created_at: string;
+  rating_avg: number | null;
+  rating_count: number;
 }
 
 interface Page {
@@ -27,10 +29,14 @@ function fromBackend(c: BackendCustomer): Customer {
     phone: c.phone,
     email: c.email ?? "",
     created_at: c.created_at,
+    // `?? null` / `?? 0`: the fields landed later than the rest of the schema, so a stale
+    // cached response (or a mock) without them must read as "not rated", never as 0/5.
+    rating_avg: c.rating_avg ?? null,
+    rating_count: c.rating_count ?? 0,
   };
 }
 
-export interface CustomerSearchParams {
+interface CustomerSearchParams {
   search?: string;
   limit?: number;
   offset?: number;
@@ -54,7 +60,7 @@ export function getCustomer(id: string): Promise<Customer> {
   return api.get<BackendCustomer>(`/customers/${id}/`).then(fromBackend);
 }
 
-export interface CreateCustomerInput {
+interface CreateCustomerInput {
   name: string;
   phone: string;
   email?: string;

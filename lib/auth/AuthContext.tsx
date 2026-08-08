@@ -14,7 +14,7 @@ import { getMe, loginRequest, logoutRequest, refreshRequest } from "@/lib/api/au
 import { acceptInvite as apiAcceptInvite } from "@/lib/api/invite";
 
 /** Authenticated user (the minimum the shell needs). */
-export interface AuthUser {
+interface AuthUser {
   id: string;
   email: string;
   name: string;
@@ -22,7 +22,7 @@ export interface AuthUser {
   role?: "owner" | "staff";
 }
 
-export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
+type AuthStatus = "loading" | "unauthenticated" | "authenticated";
 
 export interface AuthContextValue {
   user: AuthUser | null;

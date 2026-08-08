@@ -44,8 +44,14 @@ const config: BusinessConfig = {
 };
 
 beforeEach(() => {
+  // Call history too, not just the implementations: several cases assert on
+  // `mock.calls[0]`, which leaks between tests without this.
+  vi.clearAllMocks();
   api.getBusinessConfig.mockResolvedValue(config);
-  api.updateBusinessConfig.mockImplementation(async (patch) => ({ ...config, ...patch }));
+  api.updateBusinessConfig.mockImplementation(async (patch) => ({
+    ...config,
+    ...patch,
+  }));
 });
 vi.mock("@/lib/api/whatsapp", () => ({ listTemplates: vi.fn() }));
 vi.mock("@/lib/business", () => ({
@@ -129,6 +135,67 @@ describe("SettingsPage — la voz del negocio", () => {
     expect(context).toHaveValue("Barbería en el centro.");
     // Nothing edited yet: saving would be a pointless write.
     expect(screen.getByRole("button", { name: /Guardar mensajes/i })).toBeDisabled();
+  });
+
+  it("no bloquea el guardado por un campo pasado de largo que no se está mandando", async () => {
+    // Staff can write past the cap from /boss-mode/ (the model columns are plain
+    // TextFields). The guard scanned all eight fields, so one over-cap value locked the
+    // whole card — even though the PATCH would not carry it and therefore could not 422.
+    api.getBusinessConfig.mockResolvedValue({
+      ...config,
+      fallback_message: "x".repeat(1200),
+    });
+
+    const context = await openAsistente();
+    await userEvent.clear(context);
+    await userEvent.type(context, "Cortes clásicos.");
+
+    const save = screen.getByRole("button", { name: /Guardar mensajes/i });
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+
+    expect(api.updateBusinessConfig.mock.calls[0][0]).toEqual({
+      business_context: "Cortes clásicos.",
+    });
+  });
+
+  it("sí bloquea el guardado cuando el campo pasado de largo ES el editado", async () => {
+    // 1002, not 1200: `maxLength` blocks INSERTION, so typing into an over-cap field is a
+    // no-op and the field never becomes dirty — the first version of this test asserted a
+    // disabled button that `!cfgDirty` had already disabled, so it passed with the guard
+    // deleted (review 2026-07-27, round 4). Deleting is the only reachable path, and two
+    // backspaces walk across the boundary.
+    api.getBusinessConfig.mockResolvedValue({
+      ...config,
+      fallback_message: "x".repeat(1002),
+    });
+
+    await openAsistente();
+    const fallback = screen.getByLabelText(/Cuando no logra ayudar/i);
+    const save = screen.getByRole("button", { name: /Guardar mensajes/i });
+
+    await userEvent.click(fallback);
+    await userEvent.keyboard("{Backspace}"); // 1001 — dirty AND still over the cap
+    expect(save).toBeDisabled();
+
+    await userEvent.keyboard("{Backspace}"); // 1000 — dirty and legal
+    expect(save).toBeEnabled();
+  });
+
+  it("no pisa el tono ni la bienvenida que guardó la tarjeta de arriba", async () => {
+    // Both cards write the same config row, and this one used to PATCH the whole object
+    // it loaded at mount — so saving a message reverted a tone change made seconds
+    // earlier, two buttons apart in the same tab (review 2026-07-27).
+    const context = await openAsistente();
+    await userEvent.clear(context);
+    await userEvent.type(context, "Cortes clásicos.");
+    await userEvent.click(screen.getByRole("button", { name: /Guardar mensajes/i }));
+
+    const sent = api.updateBusinessConfig.mock.calls[0][0];
+    expect(sent).not.toHaveProperty("tone");
+    expect(sent).not.toHaveProperty("welcome_message");
+    // Only what actually changed travels.
+    expect(Object.keys(sent)).toEqual(["business_context"]);
   });
 
   it("guarda lo que el operador escribió y manda SOLO campos de la voz del negocio", async () => {

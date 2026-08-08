@@ -6,13 +6,97 @@ import {
   createScheduleBlock,
   deleteScheduleBlock,
   getBusiness,
+  getBusinessConfig,
   getBusinessHours,
   getBusinessSchedule,
   getScheduleBlocks,
   putBusinessHours,
+  updateBusinessConfig,
 } from "@/lib/api/businesses";
 
 const API = "http://localhost:8050/api";
+
+/** The 10 fields the tenant may write — everything else on the row is staff-only. */
+const VOICE_KEYS = [
+  "tone",
+  "welcome_message",
+  "fallback_message",
+  "out_of_hours_message",
+  "out_of_hours_ack_message",
+  "human_handoff_message",
+  "handoff_waiting_ack_message",
+  "handoff_timeout_revert_message",
+  "off_topic_message",
+  "business_context",
+];
+
+/** What `GET /businesses/me/config/` really returns: the whole config row. */
+const FULL_ROW = {
+  tone: "casual",
+  welcome_message: "Hola",
+  fallback_message: "",
+  out_of_hours_message: "",
+  out_of_hours_ack_message: "",
+  human_handoff_message: "",
+  handoff_waiting_ack_message: "",
+  handoff_timeout_revert_message: "",
+  off_topic_message: "",
+  business_context: "Barbería",
+  // …plus everything that decides how the assistant BEHAVES, which is Yitopro's.
+  llm_provider: "openai",
+  llm_model: "gpt-4o-mini",
+  identity_message: "Soy un asistente",
+  payment_redirect_message: "",
+  appointment_created_template: "{weekday} {date}",
+  human_handoff_enabled: true,
+  available_agents: ["scheduling"],
+  settings: { menu: {} },
+};
+
+describe("business config api", () => {
+  it("narrows the GET to the tenant's own voice, so a PATCH built from it cannot carry staff fields", async () => {
+    // The type used to claim 10 fields while the endpoint returned ~25, and the settings
+    // page sent back what it received — the server ignored the extras, so the guarantee
+    // rested on the server's goodwill (review 2026-07-27).
+    server.use(
+      http.get(`${API}/businesses/me/config/`, () => HttpResponse.json(FULL_ROW)),
+    );
+
+    const config = await getBusinessConfig();
+
+    expect(Object.keys(config).sort()).toEqual([...VOICE_KEYS].sort());
+    expect(config).not.toHaveProperty("llm_model");
+    expect(config).not.toHaveProperty("settings");
+    expect(config).not.toHaveProperty("appointment_created_template");
+    expect(config.business_context).toBe("Barbería");
+  });
+
+  it("narrows the PATCH response too (the page feeds it straight back into state)", async () => {
+    let sent: unknown;
+    server.use(
+      http.patch(`${API}/businesses/me/config/`, async ({ request }) => {
+        sent = await request.json();
+        return HttpResponse.json(FULL_ROW);
+      }),
+    );
+
+    const saved = await updateBusinessConfig({
+      fallback_message: "Perdón, no entendí.",
+    });
+
+    expect(sent).toEqual({ fallback_message: "Perdón, no entendí." });
+    expect(Object.keys(saved).sort()).toEqual([...VOICE_KEYS].sort());
+  });
+
+  it("defaults a missing tone instead of minting an invalid one", async () => {
+    const { tone: _dropped, ...withoutTone } = FULL_ROW;
+    server.use(
+      http.get(`${API}/businesses/me/config/`, () => HttpResponse.json(withoutTone)),
+    );
+
+    expect((await getBusinessConfig()).tone).toBe("friendly");
+  });
+});
 
 describe("businesses api", () => {
   it("getBusiness maps the WhatsApp connection fields from the backend", async () => {

@@ -11,11 +11,12 @@ import {
   deleteService,
 } from "@/lib/api";
 import { subscribeToEvents } from "@/lib/sse";
-import { formatPrice } from "@/lib/utils";
+import { useMoney } from "@/lib/business";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { CharCountInput } from "@/components/ui/char-count-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -71,6 +72,7 @@ function serviceToForm(s: Service): FormData {
 }
 
 export default function ServicesPage() {
+  const money = useMoney();
   const [services, setServices] = useState<Service[]>([]);
   const [count, setCount] = useState(0);
   const [search, setSearch] = useState("");
@@ -345,7 +347,7 @@ export default function ServicesPage() {
                     {formatDuration(s.duration_minutes)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatPrice(s.price)}
+                    {money(s.price)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -424,13 +426,14 @@ export default function ServicesPage() {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="svc-name">Nombre</Label>
-              <Input
+              <CharCountInput
                 id="svc-name"
+                max={255}
                 value={form.name}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                onChange={(name) => setForm((prev) => ({ ...prev, name }))}
                 placeholder="Ej. Consulta inicial"
                 aria-invalid={formErrors.name ? true : undefined}
-                aria-describedby={formErrors.name ? "svc-name-error" : undefined}
+                describedBy={formErrors.name ? "svc-name-error" : undefined}
               />
               {formErrors.name && (
                 <p id="svc-name-error" role="alert" className="text-xs text-destructive">

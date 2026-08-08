@@ -22,7 +22,14 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={cn("flex flex-1 text-left", className)}
+      // `min-w-0` es lo que permite que el trigger se ENCOJA. Sin él, un flex item conserva
+      // `min-width: auto`, o sea su ancho de min-content: el texto completo de la opción
+      // seleccionada. El `line-clamp-1` del trigger recorta lo que se VE, pero no reduce ese
+      // mínimo, así que un select con opciones largas empuja a su contenedor y se sale.
+      // Encontrado en el editor de pedidos (2026-07-31): con «Cera y Pomada - Volumen Powder
+      // (Inmortal) · $17.000» la fila medía 512px dentro de un diálogo de 382 y la cantidad y
+      // el botón de quitar se dibujaban FUERA de la caja, sobre la página.
+      className={cn("flex min-w-0 flex-1 text-left", className)}
       {...props}
     />
   );

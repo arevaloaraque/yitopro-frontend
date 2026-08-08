@@ -23,6 +23,12 @@ interface RescheduleDialogProps {
   onReschedule: (id: string, next: { start: string; end: string }) => Promise<void>;
 }
 
+// Same one-liner as create-dialog: the min date for the picker.
+function todayStr(): string {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
 export function RescheduleDialog({
   open,
   onOpenChange,
@@ -45,6 +51,16 @@ export function RescheduleDialog({
     const e: Record<string, string> = {};
     if (!date) e.date = "Requerido";
     if (!time) e.time = "Requerido";
+    // The dialog can sit open past midnight or be opened for a cita that
+    // started while it was on screen, so the slot itself is validated here
+    // and not only by hiding the action that opens this dialog.
+    if (date && date < todayStr()) e.date = "La fecha no puede ser pasada";
+    else if (date === todayStr() && time) {
+      const now = new Date();
+      const [h, m] = time.split(":").map(Number);
+      const selected = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+      if (selected <= now) e.time = "La hora no puede ser pasada";
+    }
     return e;
   }
 
@@ -96,6 +112,7 @@ export function RescheduleDialog({
               <Input
                 id="reschedule-date"
                 type="date"
+                min={todayStr()}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />

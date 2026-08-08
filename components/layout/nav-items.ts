@@ -1,6 +1,7 @@
 import {
   Bot,
   Calendar,
+  CreditCard,
   LayoutDashboard,
   MessageSquare,
   Receipt,
@@ -25,6 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Servicios", href: "/services", icon: Sparkles },
   { label: "Productos", href: "/products", icon: ShoppingBag },
   { label: "Pedidos", href: "/orders", icon: Receipt },
+  { label: "Pagos", href: "/payments", icon: CreditCard },
   { label: "Clientes", href: "/customers", icon: Users },
   { label: "Agentes", href: "/agents", icon: Bot },
   { label: "Configuración", href: "/settings", icon: Settings },

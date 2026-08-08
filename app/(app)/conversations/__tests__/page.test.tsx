@@ -69,6 +69,13 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
     assignee_id: null,
     last_message_at: "2026-06-30T10:00:00Z",
     unread: 0,
+    customer_rating: null,
+    rating_status: "pending",
+    customer_rating_avg: null,
+    customer_rating_count: 0,
+    last_message_preview: "",
+    last_message_direction: "",
+    last_message_sender_kind: "",
     ...over,
   };
 }
@@ -92,6 +99,12 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/");
   // jsdom doesn't implement scrollIntoView (used by the message thread).
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  // Default para `getConversation`: la página la llama en CADA evento de mensaje para
+  // refrescar el preview de esa fila (el evento no puede traer el texto — es PII). Sin un
+  // valor por defecto, los tests de SSE explotan con `undefined.then`, que se lee como un
+  // bug de la página y no como un mock sin configurar. Los tests que sí les importa el
+  // resultado lo sobrescriben.
+  vi.mocked(getConversation).mockResolvedValue(makeConversation());
 });
 
 describe("ConversationsPage — message loading", () => {
@@ -267,5 +280,68 @@ describe("ConversationsPage — URL selection (CONV-02) & search (CONV-01)", () 
 
     expect(screen.queryByRole("button", { name: /Ana/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Bruno/ })).toBeInTheDocument();
+  });
+});
+
+describe("ConversationsPage — el preview no se queda viejo", () => {
+  it("refresca la fila cuando entra un mensaje, y conserva los no leídos", async () => {
+    vi.mocked(listConversations).mockResolvedValue([
+      makeConversation({ last_message_preview: "hola, tienen hora?", last_message_direction: "in" }),
+    ]);
+    vi.mocked(listMessages).mockResolvedValue([]);
+    // Lo que el servidor devolverá al re-pedir la fila.
+    vi.mocked(getConversation).mockResolvedValue(
+      makeConversation({
+        last_message_preview: "y para el sabado?",
+        last_message_direction: "in",
+        last_message_at: "2026-06-30T11:00:00Z",
+      }),
+    );
+
+    render(<ConversationsPage />);
+    expect(await screen.findByText("hola, tienen hora?")).toBeInTheDocument();
+
+    emitSse({
+      id: "e1",
+      type: "mensaje_recibido",
+      emitted_at: "2026-06-30T11:00:00Z",
+      data: { conversation_id: "conv-1", customer_id: "cust-1", message_id: "m2" },
+    } as SSEEvent);
+
+    // El evento NO trae el texto (es PII), así que la página re-pide esa conversación. Sin
+    // eso la fila salta a «Ahora» mostrando el mensaje ANTERIOR: hora nueva, texto viejo.
+    expect(await screen.findByText("y para el sabado?")).toBeInTheDocument();
+    expect(getConversation).toHaveBeenCalledWith("conv-1");
+    // Y el contador de no leídos que el parche local subió no se pierde en el refetch
+    // (el backend no expone `unread`: el mapper devuelve 0).
+    expect(await screen.findByText("1")).toBeInTheDocument();
+  });
+
+  it("también refresca cuando el que escribe es el motor de automatizaciones", async () => {
+    vi.mocked(listConversations).mockResolvedValue([
+      makeConversation({ last_message_preview: "hola", last_message_direction: "in" }),
+    ]);
+    vi.mocked(listMessages).mockResolvedValue([]);
+    vi.mocked(getConversation).mockResolvedValue(
+      makeConversation({
+        last_message_preview: "Te recordamos tu cita de mañana",
+        last_message_direction: "out",
+        last_message_sender_kind: "system",
+      }),
+    );
+
+    render(<ConversationsPage />);
+    expect(await screen.findByText("hola")).toBeInTheDocument();
+
+    emitSse({
+      id: "e2",
+      type: "mensaje_automatico_enviado",
+      emitted_at: "2026-06-30T11:00:00Z",
+      data: { conversation_id: "conv-1", customer_id: "cust-1", rule_code: "appointment_reminder" },
+    } as SSEEvent);
+
+    expect(await screen.findByText("Te recordamos tu cita de mañana")).toBeInTheDocument();
+    // El prefijo «Automático:» lo cubre conversation-list.test.tsx sobre el texto de la
+    // fila completa: como elemento suelto es frágil (vive en su propio span, pegado al texto).
   });
 });

@@ -27,6 +27,13 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
     assignee_id: null,
     last_message_at: "2026-06-30T10:00:00Z",
     unread: 0,
+    customer_rating: null,
+    rating_status: "pending",
+    customer_rating_avg: null,
+    customer_rating_count: 0,
+    last_message_preview: "",
+    last_message_direction: "",
+    last_message_sender_kind: "",
     ...over,
   };
 }

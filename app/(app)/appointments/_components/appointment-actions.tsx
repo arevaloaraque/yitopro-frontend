@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Appointment } from "@/lib/types";
 
+import { isPastAppointment } from "./types";
+
 interface AppointmentActionsProps {
   appointment: Appointment;
   onCancel: (appointment: Appointment) => void;
@@ -24,8 +26,11 @@ export function AppointmentActions({
   onReschedule,
   onHistory,
 }: AppointmentActionsProps) {
-  const canCancel = appointment.status === "scheduled";
-  const canReschedule = appointment.status === "scheduled";
+  // A started appointment is read-only: history stays, changes go.
+  const canChange =
+    appointment.status === "scheduled" && !isPastAppointment(appointment);
+  const canCancel = canChange;
+  const canReschedule = canChange;
 
   if (!canCancel && !canReschedule) {
     return (

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Eye, EyeOff, Pencil, Save } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronDown, ChevronRight, Eye, EyeOff, Pencil, Save } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorState, Loading } from "@/components/states";
 import { listConversations } from "@/lib/api/conversations";
+import { CustomerRating, ThreadRating } from "@/components/customers/rating";
 import {
   addCustomerNote,
   getCustomer,
@@ -240,6 +242,11 @@ export function CustomerDrawer({
   const [recordError, setRecordError] = useState<string | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Agregado del evaluador (promedio + cuántas conversaciones lo componen).
+  const [rating, setRating] = useState<{ avg: number | null; count: number }>({
+    avg: null,
+    count: 0,
+  });
 
   // Notes (the staff log about this customer)
   const [notes, setNotes] = useState<Note[]>([]);
@@ -303,16 +310,18 @@ export function CustomerDrawer({
         const [c, r, convs, ns] = await Promise.all([
           getCustomer(customerId),
           getRecord(customerId),
-          listConversations(),
+          // Server-side: antes bajaba TODAS las conversaciones del negocio y filtraba acá.
+          listConversations({ customerId }),
           getCustomerNotes(customerId),
         ]);
         if (reqId !== reqRef.current) return;
         setCustName(c.name);
         setCustEmail(c.email);
         setCustPhone(c.phone);
+        setRating({ avg: c.rating_avg, count: c.rating_count });
         setRecord(r);
         setValues({ ...r.values });
-        setConversations(convs.filter((cv) => cv.customer_id === customerId));
+        setConversations(convs);
         setNotes(ns);
         loadedRef.current = { name: c.name, email: c.email, values: { ...r.values } };
         setState("ready");
@@ -472,7 +481,17 @@ export function CustomerDrawer({
           <SheetTitle>
             {state === "ready" ? custName || "Cliente" : "Cliente"}
           </SheetTitle>
-          <SheetDescription>{custPhone || "—"}</SheetDescription>
+          <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>{custPhone || "—"}</span>
+            {state === "ready" && (
+              <>
+                <span aria-hidden className="text-muted-foreground/50">
+                  ·
+                </span>
+                <CustomerRating avg={rating.avg} count={rating.count} />
+              </>
+            )}
+          </SheetDescription>
         </SheetHeader>
 
         {state === "loading" && (
@@ -620,30 +639,48 @@ export function CustomerDrawer({
             </Section>
 
             {/* Conversaciones */}
-            <Section title="Conversaciones" count={conversations.length}>
+            {/* Historial de conversaciones de este cliente. La lista viene filtrada por el
+                servidor (`listConversations({ customerId })`); antes se bajaba la tabla
+                completa del negocio y se filtraba en el navegador. Cada fila es navegable:
+                el inbox acepta `?id=` y abre ese hilo. */}
+            <Section title="Conversaciones" count={conversations.length} defaultOpen>
               {conversations.length === 0 ? (
                 <p className="text-xs text-muted-foreground">Sin conversaciones.</p>
               ) : (
-                <div className="space-y-1.5">
+                <ul className="space-y-1.5">
                   {conversations.map((conv) => {
                     const s = convStatusBadge(conv.status);
                     return (
-                      <div
-                        key={conv.id}
-                        className="flex items-center justify-between rounded-lg border border-border/30 px-3 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[0.65rem] text-muted-foreground">
-                            {relativeTime(conv.last_message_at)}
-                          </p>
-                        </div>
-                        <Badge variant={s.variant} className="text-[0.65rem]">
-                          {s.label}
-                        </Badge>
-                      </div>
+                      <li key={conv.id}>
+                        <Link
+                          href={`/conversations?id=${conv.id}`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border/30 px-3 py-2 transition-colors hover:border-border hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs text-foreground">
+                              {formatDateTime(conv.last_message_at)}
+                            </span>
+                            <span className="block text-[0.65rem] text-muted-foreground">
+                              {relativeTime(conv.last_message_at)}
+                            </span>
+                          </span>
+                          <ThreadRating
+                            value={conv.customer_rating}
+                            status={conv.rating_status}
+                            className="shrink-0"
+                          />
+                          <Badge variant={s.variant} className="shrink-0 text-[0.65rem]">
+                            {s.label}
+                          </Badge>
+                          <ChevronRight
+                            className="size-4 shrink-0 text-muted-foreground"
+                            aria-hidden
+                          />
+                        </Link>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               )}
             </Section>
 

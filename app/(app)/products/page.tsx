@@ -5,11 +5,12 @@ import { Pencil, Plus, Search, ShoppingBag } from "lucide-react";
 import type { Product, SSEEvent } from "@/lib/types";
 import { searchProducts, createProduct, updateProduct } from "@/lib/api";
 import { subscribeToEvents } from "@/lib/sse";
-import { formatPrice } from "@/lib/utils";
+import { useMoney } from "@/lib/business";
 import { Loading, EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { CharCountInput } from "@/components/ui/char-count-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,6 +56,7 @@ function productToForm(p: Product): FormData {
 const PAGE_SIZE = 20;
 
 export default function ProductsPage() {
+  const money = useMoney();
   const [products, setProducts] = useState<Product[]>([]);
   const [count, setCount] = useState(0);
   const [search, setSearch] = useState("");
@@ -348,7 +350,7 @@ export default function ProductsPage() {
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatPrice(p.price)}
+                      {money(p.price)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <span className={p.stock === 0 ? "text-destructive" : ""}>
@@ -443,11 +445,11 @@ export default function ProductsPage() {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="prod-name">Nombre</Label>
-              <Input
+              <CharCountInput
                 id="prod-name"
+                max={255}
                 value={form.name}
-                maxLength={255}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                onChange={(name) => setForm((prev) => ({ ...prev, name }))}
                 placeholder="Ej. Shampoo hipoalergénico"
               />
               {formErrors.name && (
