@@ -103,39 +103,102 @@ interface ListConversationsParams {
   status?: ConversationStatus;
   /** One customer's history, filtered server-side (see the customer drawer). */
   customerId?: string;
+  /**
+   * Nombre o teléfono del cliente, por CONTIENE. Va tal como lo tecleó el operador: el
+   * backend compara el teléfono en DÍGITOS en los dos lados, así que limpiarlo aquí sería
+   * trabajo repetido (y una limpieza distinta a la del servidor encontraría otras filas).
+   */
+  search?: string;
+}
+
+/**
+ * Una página de la bandeja. Sin `count` a propósito (`ConversationPageOut` del backend lo
+ * dice por escrito): un `COUNT(*)` sobre el recorte filtrado relee todas las filas que
+ * coinciden, en cada página, para un número sobre el que nadie actúa — y la bandeja es la
+ * tabla que crece para siempre, porque cada mensaje de WhatsApp cae aquí y nadie la poda.
+ */
+export interface ConversationPage {
+  items: Conversation[];
+  /** OPACO: se devuelve tal cual para pedir la siguiente. No se construye ni se parsea. */
+  next_cursor: string;
+  has_more: boolean;
+}
+
+/**
+ * El estado del panel al vocabulario del backend.
+ *
+ * `ai_active` lo expande el SERVIDOR a sus tres estados (open + waiting_customer +
+ * waiting_business). Antes se pedía la lista completa y se recortaba en el navegador; con la
+ * lista paginada eso pasaría a significar «las IA activas de las 25 que bajé», que es un
+ * filtro que miente.
+ */
+function toBackendStatus(status: ConversationStatus): string {
+  return status === "human_handoff" ? "assigned_to_human" : status;
 }
 
 export async function listConversations(
   params: ListConversationsParams = {},
-): Promise<Conversation[]> {
-  // The backend filters by its own status. "human_handoff"/"closed" map 1:1;
-  // "ai_active" spans several states → we fetch everything and filter client-side.
-  const backendStatus =
-    params.status === "human_handoff"
-      ? "assigned_to_human"
-      : params.status === "closed"
-        ? "closed"
-        : undefined;
-  const query: Record<string, string> = {};
-  if (backendStatus) query.status = backendStatus;
-  // Ids travel as strings in the UI and as integers on the wire (see convFromBackend).
-  if (params.customerId) query.customer_id = params.customerId;
-  const res = await api.get<BackendConversation[]>("/conversations/", { query });
-  const mapped = res.map(convFromBackend);
-  return params.status === "ai_active"
-    ? mapped.filter((c) => c.status === "ai_active")
-    : mapped;
+  opts: { cursor?: string; limit?: number } = {},
+): Promise<ConversationPage> {
+  const res = await api.get<{
+    items: BackendConversation[];
+    next_cursor: string;
+    has_more: boolean;
+  }>("/conversations/", {
+    query: {
+      ...(params.status ? { status: toBackendStatus(params.status) } : {}),
+      // Ids travel as strings in the UI and as integers on the wire (see convFromBackend).
+      ...(params.customerId ? { customer_id: params.customerId } : {}),
+      ...(params.search ? { search: params.search } : {}),
+      ...(opts.cursor ? { cursor: opts.cursor } : {}),
+      ...(opts.limit ? { limit: opts.limit } : {}),
+    },
+  });
+  return {
+    items: res.items.map(convFromBackend),
+    next_cursor: res.next_cursor,
+    has_more: res.has_more,
+  };
 }
 
 export function getConversation(id: string): Promise<Conversation> {
   return api.get<BackendConversation>(`/conversations/${id}/`).then(convFromBackend);
 }
 
-export async function listMessages(conversationId: string): Promise<Message[]> {
-  const res = await api.get<BackendMessage[]>(
+/**
+ * Una página del hilo, cargando HACIA ARRIBA.
+ *
+ * `items` viene ASCENDENTE (viejo → nuevo) dentro de la página, aunque la página elegida sea
+ * la más nueva: es el orden en que se pinta el chat, así que anteponer historia es
+ * `[...masViejos, ...actual]` y no hay nada que invertir.
+ *
+ * `has_more` significa «hay historia MÁS VIEJA arriba», no «faltan mensajes nuevos».
+ */
+export interface MessagePage {
+  items: Message[];
+  has_more: boolean;
+}
+
+export async function listMessages(
+  conversationId: string,
+  opts: { before?: string; limit?: number } = {},
+): Promise<MessagePage> {
+  const res = await api.get<{ items: BackendMessage[]; has_more: boolean }>(
     `/conversations/${conversationId}/messages/`,
+    {
+      query: {
+        // El id del PRIMER mensaje que ya se tiene. Un id desconocido o de otro hilo
+        // devuelve `{items: [], has_more: false}` — nunca la página más nueva otra vez,
+        // que pegaría mensajes duplicados arriba del chat.
+        ...(opts.before ? { before: opts.before } : {}),
+        ...(opts.limit ? { limit: opts.limit } : {}),
+      },
+    },
   );
-  return res.map((m) => msgFromBackend(m, conversationId));
+  return {
+    items: res.items.map((m) => msgFromBackend(m, conversationId)),
+    has_more: res.has_more,
+  };
 }
 
 /** Replies as a human operator. The backend requires that the conversation be

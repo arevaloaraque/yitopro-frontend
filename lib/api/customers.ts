@@ -36,19 +36,80 @@ function fromBackend(c: BackendCustomer): Customer {
   };
 }
 
-interface CustomerSearchParams {
+/**
+ * El orden que sabe servir el backend, enum CERRADO: un valor que no esté en
+ * esta lista responde **422**, así que lo que llegue por la URL se sanea contra
+ * ella en vez de reenviarse a ciegas (un `?sort=lol` escrito a mano dejaría la
+ * pantalla en estado de error).
+ *
+ * Orden de la lista = orden del desplegable, no del enum del backend: el default
+ * va primero.
+ */
+export const CUSTOMER_ORDERINGS = [
+  "-created_at",
+  "created_at",
+  "display_name",
+  "-display_name",
+  "-rating_avg",
+  "rating_avg",
+] as const;
+
+export type CustomerOrdering = (typeof CUSTOMER_ORDERINGS)[number];
+
+/** El mismo default que aplica el backend si no se manda `ordering`. */
+export const DEFAULT_CUSTOMER_ORDERING: CustomerOrdering = "-created_at";
+
+/**
+ * Día de calendario (`YYYY-MM-DD`, lo que produce un `<input type="date">`) →
+ * instante ISO, desplazado `plusDays`.
+ *
+ * Tres cosas que este helper existe para no repetir en la pantalla:
+ *
+ * 1. **Medianoche LOCAL, no UTC.** `new Date("2026-08-08")` a secas es
+ *    medianoche UTC; en Chile eso es el 7 a las 20:00, así que «desde el 8»
+ *    arrastraba clientes del día anterior. La `T00:00:00` sin zona es lo que
+ *    fuerza la lectura local. Mismo criterio que la ventana de `/payments`.
+ * 2. **La cota superior del backend es EXCLUSIVA**, por eso «hasta el 8
+ *    inclusive» se pide con `plusDays: 1` (el 9 a las 00:00). Mandando el 8 se
+ *    perdía todo lo creado ese mismo día — justo el día que el operador eligió.
+ * 3. **Un día imposible no rompe la pantalla.** El valor viene de la URL y
+ *    `toISOString()` de un `Invalid Date` LANZA: sin la guarda, `?from=lol`
+ *    reventaba el render en vez de leerse como «sin filtro».
+ */
+function dayIso(day: string | undefined, plusDays: number): string | undefined {
+  if (!day) return undefined;
+  const d = new Date(`${day}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return undefined;
+  d.setDate(d.getDate() + plusDays);
+  return d.toISOString();
+}
+
+export interface CustomerSearchParams {
   search?: string;
   limit?: number;
   offset?: number;
+  ordering?: CustomerOrdering;
+  /**
+   * Días de calendario `YYYY-MM-DD`, **los dos inclusivos** — se nombran así, y
+   * no como los `created_from`/`created_to` del backend, porque ahí son
+   * `date-time` y la cota de arriba es exclusiva. La conversión es de esta capa:
+   * un componente que tuviera que acordarse de sumar un día es el componente que
+   * un día se olvida.
+   */
+  createdFrom?: string;
+  createdTo?: string;
 }
 
-/** Server-side search/pagination (customer combobox and Customers table). */
+/** Server-side search/ordering/pagination (customer combobox and Customers table). */
 export async function searchCustomers(
   params: CustomerSearchParams = {},
 ): Promise<Paginated<Customer>> {
   const res = await api.get<Page>("/customers/", {
     query: {
       search: params.search,
+      ordering: params.ordering,
+      created_from: dayIso(params.createdFrom, 0),
+      created_to: dayIso(params.createdTo, 1),
       limit: params.limit ?? 20,
       offset: params.offset ?? 0,
     },

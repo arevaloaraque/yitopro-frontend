@@ -1,3 +1,5 @@
+import type { Paginated } from "@/lib/types";
+
 import { api } from "./client";
 
 export type OrderStatus = "draft" | "confirmed" | "cancelled";
@@ -90,15 +92,36 @@ function fromBackend(o: BackendOrder): Order {
   };
 }
 
-/** List of the business's orders (created by the sales agent or the panel). */
+interface Page {
+  items: BackendOrder[];
+  count: number;
+}
+
+/**
+ * List of the business's orders (created by the sales agent or the panel).
+ *
+ * Devuelve el sobre paginado del backend (`@paginate`: `{items, count}`, NO un
+ * array) tal cual, con `limit`/`offset` reales. Antes pedía `limit: 500` fijo y
+ * el panel recortaba en memoria: el pie decía «Mostrando 20 de 500» y ese 500
+ * era el tope que inventaba esta función, no lo que tiene el tenant — o sea que
+ * el número mentía, y a partir de la fila 501 los pedidos no existían.
+ *
+ * `limit` va explícito porque el default del servidor es 100: callarlo trunca en
+ * silencio, y una lista cortada se lee como completa.
+ */
 export async function listOrders(
   status?: OrderStatus,
-  opts: { customer_id?: string } = {},
-): Promise<Order[]> {
-  const res = await api.get<BackendOrder[]>("/orders/", {
-    query: { status, customer_id: opts.customer_id },
+  opts: { customer_id?: string; limit?: number; offset?: number } = {},
+): Promise<Paginated<Order>> {
+  const res = await api.get<Page>("/orders/", {
+    query: {
+      status,
+      customer_id: opts.customer_id,
+      limit: opts.limit ?? 20,
+      offset: opts.offset ?? 0,
+    },
   });
-  return res.map(fromBackend);
+  return { items: res.items.map(fromBackend), count: res.count };
 }
 
 /** A line to send when creating/replacing an order's items. */

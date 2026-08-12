@@ -112,7 +112,8 @@ export function PaymentLinkDialog({
   const money = useMoney();
   const [concept, setConcept] = useState(
     preset
-      ? preset.appointment.service_name || `Cita ${formatDateTime(preset.appointment.start)}`
+      ? preset.appointment.service_name ||
+          `Cita ${formatDateTime(preset.appointment.start)}`
       : "",
   );
   const [amount, setAmount] = useState(
@@ -152,9 +153,18 @@ export function PaymentLinkDialog({
         }
         return;
       }
+      // Las dos listas devuelven el sobre paginado `{items, count}`, no un array,
+      // y las dos llevan `limit` explícito: este Select no tiene «cargar más»,
+      // así que lo que no venga en esta página no se puede cobrar. Sin el límite
+      // a la vista quedaba el default del servidor (100 en citas) decidiendo en
+      // silencio qué se podía cobrar y qué no.
       const [appts, ords] = await Promise.all([
-        listAppointments({ customer_id: customer.id }).catch(() => []),
-        listOrders(undefined, { customer_id: customer.id }).catch(() => []),
+        listAppointments({ customer_id: customer.id, limit: 50 })
+          .then((res) => res.items)
+          .catch(() => []),
+        listOrders(undefined, { customer_id: customer.id, limit: 50 })
+          .then((res) => res.items)
+          .catch(() => []),
       ]);
       if (cancelled) return;
       setAppointments(appts.filter((a) => a.status !== "cancelled"));
@@ -295,8 +305,8 @@ export function PaymentLinkDialog({
                   </>
                 ) : (
                   <>
-                    Compártelo con {minted.customer_id ? customer?.name : "tu cliente"} por
-                    WhatsApp. Es de un solo uso.
+                    Compártelo con {minted.customer_id ? customer?.name : "tu cliente"}{" "}
+                    por WhatsApp. Es de un solo uso.
                   </>
                 )}
               </DialogDescription>
@@ -440,7 +450,8 @@ export function PaymentLinkDialog({
                   aria-describedby="paylink-amount-hint"
                 />
                 <p id="paylink-amount-hint" className="text-xs text-muted-foreground">
-                  El monto queda fijado en el enlace: un cambio de precio posterior no altera lo cotizado.
+                  El monto queda fijado en el enlace: un cambio de precio posterior no
+                  altera lo cotizado.
                 </p>
                 {errors.amount && (
                   <p

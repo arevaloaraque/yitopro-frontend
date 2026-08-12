@@ -70,6 +70,8 @@ export interface Business {
   whatsapp_number: string;
   onboarding_status: OnboardingStatus;
   assistant_config: AssistantConfig;
+  /** Sign-up instant (ISO 8601). Anchor of the reports' "en tus N días con yitopro". */
+  created_at: string;
 }
 
 /** A step in the onboarding flow. */

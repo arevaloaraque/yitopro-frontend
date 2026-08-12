@@ -29,6 +29,10 @@ interface ConversationDetailProps {
    *  of misreporting the thread as genuinely empty. */
   messagesError: string | null;
   onRetryMessages: () => void;
+  /** Hay historia MÁS VIEJA arriba de lo que se está viendo (el hilo llega paginado). */
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  onLoadOlder: () => void;
   sendingMessage: boolean;
   actionError: string | null;
   onDismissError: () => void;
@@ -71,6 +75,9 @@ export function ConversationDetail({
   loadingMessages,
   messagesError,
   onRetryMessages,
+  hasOlder,
+  loadingOlder,
+  onLoadOlder,
   sendingMessage,
   actionError,
   onDismissError,
@@ -78,9 +85,13 @@ export function ConversationDetail({
 }: ConversationDetailProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Se baja al fondo cuando cambia el ÚLTIMO mensaje, no con cualquier cambio del array:
+  // «Ver mensajes anteriores» antepone una página, y con `[messages]` el chat saltaba al
+  // fondo justo al pedir la historia que el operador quería leer.
+  const lastMessageId = messages[messages.length - 1]?.id;
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [lastMessageId]);
 
   const isHandoff = conversation.status === "human_handoff";
   const isClosed = conversation.status === "closed";
@@ -181,6 +192,20 @@ export function ConversationDetail({
           />
         ) : (
           <div className="space-y-0.5">
+            {/* Arriba, porque es donde está la historia: el hilo abre en su página más
+                nueva y se sube a pedir lo anterior. */}
+            {hasOlder ? (
+              <div className="flex justify-center pb-2">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={onLoadOlder}
+                  disabled={loadingOlder}
+                >
+                  {loadingOlder ? "Cargando…" : "Ver mensajes anteriores"}
+                </Button>
+              </div>
+            ) : null}
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}

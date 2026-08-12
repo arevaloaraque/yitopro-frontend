@@ -36,11 +36,22 @@ export function AssistantStatus() {
       <Bot />
       <span>
         {business.assistant_config.display_name}{" "}
-        {/* Fixed-width status word so toggling active/paused keeps the badge a
-            constant width and doesn't shift the rest of the topbar. */}
-        <span className="inline-block min-w-[3.75rem] text-left">
-          {isActive ? "activa" : "en pausa"}
-        </span>
+        {/* Sin ancho reservado: el hueco fijo que había (`min-w-[3.75rem]`) más
+            `text-left` dejaba todo el sobrante a la derecha, y el badge salía
+            descentrado — medido: 35,6 px de margen derecho contra 11 del
+            izquierdo con «activa», porque la palabra ocupa 35,4 de los 60 px
+            reservados. Ahora el ancho lo da el contenido y los márgenes son los
+            del propio Badge, iguales a los dos lados.
+
+            Se reservaba para que el badge no cambiara de ancho al alternar
+            activa/pausa, pero el contenedor del topbar es `ml-auto flex`: está
+            anclado a la derecha, así que el badge crece hacia la IZQUIERDA y
+            ni el tema, ni la campana, ni el avatar se mueven. La estabilidad que
+            el hueco protegía ya la daba el layout.
+
+            El <span> se queda —aunque no lleve clases— porque envuelve solo la
+            palabra de estado y cuatro tests la buscan por texto exacto. */}
+        <span>{isActive ? "activa" : "en pausa"}</span>
       </span>
     </Badge>
   );

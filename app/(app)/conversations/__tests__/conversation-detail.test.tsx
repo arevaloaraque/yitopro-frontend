@@ -7,10 +7,12 @@
  * must disappear once the current operator owns it — otherwise it looks like
  * taking never finishes. The reply box follows the same ownership rule.
  */
+import type { ComponentProps } from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Conversation } from "@/lib/types";
+import type { Conversation, Message } from "@/lib/types";
 
 import { ConversationDetail } from "../_components/conversation-detail";
 
@@ -40,27 +42,51 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
 
 const noop = async () => {};
 
-function renderDetail(conversation: Conversation, currentUserId: string | null = ME) {
-  return render(
-    <ConversationDetail
-      conversation={conversation}
-      currentUserId={currentUserId}
-      messages={[]}
-      customerName="Ana"
-      agentName={null}
-      onSendMessage={noop}
-      onTake={noop}
-      onClose={noop}
-      onReactivate={noop}
-      loadingMessages={false}
-      messagesError={null}
-      onRetryMessages={() => {}}
-      sendingMessage={false}
-      actionError={null}
-      onDismissError={() => {}}
-      onBack={() => {}}
-    />,
-  );
+function renderDetail(
+  conversation: Conversation,
+  currentUserId: string | null = ME,
+  over: Partial<ComponentProps<typeof ConversationDetail>> = {},
+) {
+  const props: ComponentProps<typeof ConversationDetail> = {
+    conversation,
+    currentUserId,
+    messages: [],
+    customerName: "Ana",
+    agentName: null,
+    onSendMessage: noop,
+    onTake: noop,
+    onClose: noop,
+    onReactivate: noop,
+    loadingMessages: false,
+    messagesError: null,
+    onRetryMessages: () => {},
+    hasOlder: false,
+    loadingOlder: false,
+    onLoadOlder: () => {},
+    sendingMessage: false,
+    actionError: null,
+    onDismissError: () => {},
+    onBack: () => {},
+    ...over,
+  };
+  const utils = render(<ConversationDetail {...props} />);
+  return {
+    ...utils,
+    /** Re-renderiza con props nuevas, como haría la página al llegar más mensajes. */
+    update: (next: Partial<ComponentProps<typeof ConversationDetail>>) =>
+      utils.rerender(<ConversationDetail {...props} {...next} />),
+  };
+}
+
+function makeMessage(id: string, text = id): Message {
+  return {
+    id,
+    conversation_id: "1",
+    direction: "inbound",
+    sender: "customer",
+    text,
+    created_at: "2026-06-30T10:00:00Z",
+  };
 }
 
 const takeButton = () => screen.queryByRole("button", { name: /Tomar/ });
@@ -104,5 +130,39 @@ describe("ConversationDetail — take controls", () => {
   it("keeps the reply box disabled while the conversation is unclaimed", () => {
     renderDetail(makeConversation({ status: "human_handoff", assignee_id: null }));
     expect(screen.getByRole("textbox")).toBeDisabled();
+  });
+});
+
+describe("ConversationDetail — historia del hilo", () => {
+  it("ofrece «Ver mensajes anteriores» solo cuando hay historia arriba", async () => {
+    const onLoadOlder = vi.fn();
+    const { unmount } = renderDetail(makeConversation(), ME, {
+      messages: [makeMessage("m2")],
+      hasOlder: true,
+      onLoadOlder,
+    });
+    // Arriba, porque es de donde se tira la historia: el hilo abre en su página más nueva.
+    await userEvent.click(screen.getByRole("button", { name: /mensajes anteriores/i }));
+    expect(onLoadOlder).toHaveBeenCalled();
+
+    unmount();
+    renderDetail(makeConversation(), ME, { messages: [makeMessage("m2")] });
+    expect(screen.queryByRole("button", { name: /mensajes anteriores/i })).toBeNull();
+  });
+
+  it("no baja al fondo al ANTEPONER historia, y sí cuando llega un mensaje nuevo", () => {
+    const scroll = vi.mocked(window.HTMLElement.prototype.scrollIntoView);
+    const nuevo = makeMessage("m2");
+    const { update } = renderDetail(makeConversation(), ME, { messages: [nuevo] });
+    const alAbrir = scroll.mock.calls.length;
+
+    // Página de historia antepuesta: con `[messages]` como dependencia, el chat saltaba al
+    // fondo justo al pedir lo que el operador quería leer.
+    update({ messages: [makeMessage("m1"), nuevo] });
+    expect(scroll.mock.calls.length).toBe(alAbrir);
+
+    // Un mensaje nuevo al final sí baja: es el caso para el que existe el autoscroll.
+    update({ messages: [makeMessage("m1"), nuevo, makeMessage("m3")] });
+    expect(scroll.mock.calls.length).toBeGreaterThan(alAbrir);
   });
 });

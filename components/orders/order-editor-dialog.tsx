@@ -85,7 +85,7 @@ export function OrderEditorDialog({
   const [saving, setSaving] = useState(false);
 
   // Load the sellable catalogue when the dialog opens (async setState only).
-  // ponytail: first 100 active products, filtered to WhatsApp-sellable (what
+  // First 100 active products, filtered to WhatsApp-sellable (what
   // the backend accepts on an order). Swap for a ProductCombobox if a tenant
   // ever has >100 sellable products.
   useEffect(() => {

@@ -73,8 +73,9 @@ async function pickCustomer(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(listAppointments).mockResolvedValue([appointment()]);
-  vi.mocked(listOrders).mockResolvedValue([order()]);
+  // Las dos listas devuelven el sobre paginado del backend, no un array.
+  vi.mocked(listAppointments).mockResolvedValue({ items: [appointment()], count: 1 });
+  vi.mocked(listOrders).mockResolvedValue({ items: [order()], count: 1 });
   vi.mocked(createPaymentLink).mockResolvedValue({
     public_id: "abc",
     url: "https://app.test/pagar/abc/?t=secret",
@@ -94,10 +95,15 @@ describe("PaymentLinkDialog", () => {
 
     // Both lists are asked for BY CUSTOMER. Unscoped, the operator could attach
     // a stranger's cita to this charge.
+    // Y con `limit` explícito: este Select no tiene «cargar más», así que el
+    // default del servidor (100 en citas) decidía en silencio qué se podía cobrar.
     await waitFor(() =>
-      expect(listAppointments).toHaveBeenCalledWith({ customer_id: "7" }),
+      expect(listAppointments).toHaveBeenCalledWith({ customer_id: "7", limit: 50 }),
     );
-    expect(listOrders).toHaveBeenCalledWith(undefined, { customer_id: "7" });
+    expect(listOrders).toHaveBeenCalledWith(undefined, {
+      customer_id: "7",
+      limit: 50,
+    });
 
     await user.click(screen.getByLabelText(/cita o pedido/i));
     expect(await screen.findByRole("option", { name: /^Cita/ })).toBeInTheDocument();

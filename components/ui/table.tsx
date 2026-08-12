@@ -9,7 +9,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   // Overflow affordance: fade on the right edge while columns are hidden past it.
-  // ponytail: solo borde derecho (tablas LTR); agregar el izquierdo si algún día importa.
+  // Solo borde derecho (tablas LTR); agregar el izquierdo si algún día importa.
   const updateOverflow = React.useCallback(() => {
     const scroller = scrollRef.current;
     if (!scroller || !containerRef.current) return;

@@ -1,6 +1,7 @@
 import {
   Bot,
   Calendar,
+  ChartColumn,
   CreditCard,
   LayoutDashboard,
   MessageSquare,
@@ -16,6 +17,8 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Hidden for staff sessions (the backend still enforces it with a 403). */
+  ownerOnly?: true;
 }
 
 /** Authenticated panel navigation, in order. */
@@ -29,5 +32,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Pagos", href: "/payments", icon: CreditCard },
   { label: "Clientes", href: "/customers", icon: Users },
   { label: "Agentes", href: "/agents", icon: Bot },
+  { label: "Reportes", href: "/reports", icon: ChartColumn, ownerOnly: true },
   { label: "Configuración", href: "/settings", icon: Settings },
 ];

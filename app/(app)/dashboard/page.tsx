@@ -8,12 +8,10 @@ import {
   Bot,
   Calendar,
   MessageSquare,
-  Minus,
-  TrendingDown,
-  TrendingUp,
   Users,
 } from "lucide-react";
 
+import { MetricCard } from "@/components/metric-card";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,6 +38,13 @@ interface AlertItem {
   at: string;
 }
 
+/**
+ * El día de HOY en la zona horaria del negocio, como `YYYY-MM-DD`, que es
+ * exactamente lo que `GET /appointments/?date=` espera (el backend también
+ * interpreta ese día en la zona del negocio). Antes se armaba un rango
+ * `T00:00:00Z`–`T23:59:59Z` que la capa de API colapsaba a este mismo día: el
+ * rango era decorativo y el `Z` mentía sobre el huso.
+ */
 function todayYmd(timezone?: string): string {
   // en-CA formats as YYYY-MM-DD, so it doubles as the ISO date directly.
   if (timezone) {
@@ -56,15 +61,6 @@ function todayYmd(timezone?: string): string {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
-}
-
-/** Today's date range in the business's own timezone (falls back to the browser's local date). */
-function todayRange(timezone?: string): { from: string; to: string } {
-  const ymd = todayYmd(timezone);
-  return {
-    from: `${ymd}T00:00:00.000Z`,
-    to: `${ymd}T23:59:59.999Z`,
-  };
 }
 
 function formatTime(iso: string): string {
@@ -172,73 +168,6 @@ function DashboardSkeleton() {
         </Card>
       </div>
     </div>
-  );
-}
-
-interface MetricCardProps {
-  label: string;
-  value: string | number;
-  subValue?: string;
-  icon: React.ReactNode;
-  trend?: "up" | "down" | "neutral";
-  variant?: "default" | "accent" | "warning";
-}
-
-function MetricCard({
-  label,
-  value,
-  subValue,
-  icon,
-  trend,
-  variant = "default",
-}: MetricCardProps) {
-  return (
-    <Card className="group/card">
-      <CardHeader className="flex flex-row items-center justify-between pb-0">
-        <CardDescription className="text-[0.75rem]">{label}</CardDescription>
-        <span
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-200",
-            variant === "accent" && "bg-accent/10 text-accent ring-1 ring-accent/20",
-            variant === "warning" &&
-              "bg-warning/10 text-warning ring-1 ring-warning/20",
-            variant === "default" && "bg-muted text-muted-foreground",
-          )}
-        >
-          {icon}
-        </span>
-      </CardHeader>
-      <CardContent className="pb-1">
-        <div className="flex items-baseline gap-2.5">
-          <span className="text-[1.75rem] leading-none font-semibold tracking-tight text-foreground tabular-nums">
-            {value}
-          </span>
-          {trend ? (
-            <span
-              className={cn(
-                "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.65rem] font-semibold",
-                trend === "up" && "bg-success/10 text-success",
-                trend === "down" && "bg-destructive/10 text-destructive",
-                trend === "neutral" && "bg-muted text-muted-foreground",
-              )}
-            >
-              {trend === "up" ? (
-                <TrendingUp className="size-2.5" />
-              ) : trend === "down" ? (
-                <TrendingDown className="size-2.5" />
-              ) : (
-                <Minus className="size-2.5" />
-              )}
-            </span>
-          ) : null}
-        </div>
-        {subValue ? (
-          <p className="mt-1.5 text-[0.7rem] leading-relaxed text-muted-foreground">
-            {subValue}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -392,13 +321,18 @@ export default function DashboardPage() {
   const loadedRef = useRef(false);
 
   const loadData = useCallback(async (timezone?: string) => {
-    const { from, to } = todayRange(timezone);
+    // Las dos listas llegan en sobre paginado (`{items, …}`), no como array: la
+    // tarjeta se queda con `items`.
     const [conversations, appointments, services] = await Promise.all([
       listConversations(),
-      listAppointments({ from, to }),
+      listAppointments({ date: todayYmd(timezone) }),
       listServices(),
     ]);
-    return { conversations, appointments, services };
+    return {
+      conversations: conversations.items,
+      appointments: appointments.items,
+      services,
+    };
   }, []);
 
   useEffect(() => {
@@ -444,8 +378,8 @@ export default function DashboardPage() {
         case "conversacion_cerrada":
         case "conversacion_asignada":
           listConversations()
-            .then((conversations) => {
-              setData((prev) => (prev ? { ...prev, conversations } : prev));
+            .then((page) => {
+              setData((prev) => (prev ? { ...prev, conversations: page.items } : prev));
             })
             .catch(() => {});
           break;
@@ -461,10 +395,9 @@ export default function DashboardPage() {
         case "nueva_cita":
         case "cita_cancelada":
         case "cita_reagendada": {
-          const { from, to } = todayRange(businessTimezoneRef.current);
-          listAppointments({ from, to })
-            .then((appointments) => {
-              setData((prev) => (prev ? { ...prev, appointments } : prev));
+          listAppointments({ date: todayYmd(businessTimezoneRef.current) })
+            .then((page) => {
+              setData((prev) => (prev ? { ...prev, appointments: page.items } : prev));
             })
             .catch(() => {});
           break;

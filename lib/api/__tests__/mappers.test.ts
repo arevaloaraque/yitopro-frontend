@@ -167,34 +167,41 @@ describe("customers mapper", () => {
 describe("conversations mapper", () => {
   it("maps status + nested customer; sendMessage posts {content} as a human reply", async () => {
     server.use(
+      // `/conversations/` pagina por CURSOR: `{items, next_cursor, has_more}` y
+      // sin `count` (contar un recorte de la historia del tenant cuesta una
+      // lectura completa por página, para un número sobre el que nadie actúa).
       http.get(`${BASE}/conversations/`, () =>
-        HttpResponse.json([
-          {
-            id: 1,
-            status: "assigned_to_human",
-            channel_type: "whatsapp",
-            active_agent: "",
-            customer: {
-              id: 7,
-              display_name: "Ana",
-              phone: "569",
-              rating_avg: 4.5,
-              rating_count: 2,
+        HttpResponse.json({
+          items: [
+            {
+              id: 1,
+              status: "assigned_to_human",
+              channel_type: "whatsapp",
+              active_agent: "",
+              customer: {
+                id: 7,
+                display_name: "Ana",
+                phone: "569",
+                rating_avg: 4.5,
+                rating_count: 2,
+              },
+              assignee_id: 2,
+              last_message_at: "2026-06-01T00:00:00Z",
+              created_at: "2026-06-01T00:00:00Z",
+              updated_at: "2026-06-01T00:00:00Z",
+              customer_rating: 3,
+              rating_status: "rated",
+              last_message_preview: "hola, tienen hora?",
+              last_message_direction: "in",
+              last_message_sender_kind: "",
             },
-            assignee_id: 2,
-            last_message_at: "2026-06-01T00:00:00Z",
-            created_at: "2026-06-01T00:00:00Z",
-            updated_at: "2026-06-01T00:00:00Z",
-            customer_rating: 3,
-            rating_status: "rated",
-            last_message_preview: "hola, tienen hora?",
-            last_message_direction: "in",
-            last_message_sender_kind: "",
-          },
-        ]),
+          ],
+          next_cursor: "",
+          has_more: false,
+        }),
       ),
     );
-    expect((await listConversations())[0]).toMatchObject({
+    expect((await listConversations()).items[0]).toMatchObject({
       id: "1",
       customer_id: "7",
       customer_name: "Ana",
@@ -236,41 +243,46 @@ describe("conversations mapper", () => {
 
   it("listMessages derives sender from sender_kind: operator->human, system->system, ai/''->ai/customer", async () => {
     server.use(
+      // Los mensajes también llegan en sobre: `{items, has_more}`, donde
+      // `has_more` significa «hay historia más vieja arriba».
       http.get(`${BASE}/conversations/1/messages/`, () =>
-        HttpResponse.json([
-          {
-            id: 1,
-            direction: "in",
-            sender_kind: "",
-            content: "hola",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-          {
-            id: 2,
-            direction: "out",
-            sender_kind: "operator",
-            content: "hola humano",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-          {
-            id: 3,
-            direction: "out",
-            sender_kind: "system",
-            content: "recordatorio",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-          {
-            id: 4,
-            direction: "out",
-            sender_kind: "ai",
-            content: "hola IA",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-        ]),
+        HttpResponse.json({
+          items: [
+            {
+              id: 1,
+              direction: "in",
+              sender_kind: "",
+              content: "hola",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+            {
+              id: 2,
+              direction: "out",
+              sender_kind: "operator",
+              content: "hola humano",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+            {
+              id: 3,
+              direction: "out",
+              sender_kind: "system",
+              content: "recordatorio",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+            {
+              id: 4,
+              direction: "out",
+              sender_kind: "ai",
+              content: "hola IA",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+          ],
+          has_more: false,
+        }),
       ),
     );
     const messages = await listMessages("1");
-    expect(messages.map((m) => m.sender)).toEqual([
+    expect(messages.items.map((m) => m.sender)).toEqual([
       "customer",
       "human",
       "system",
@@ -294,20 +306,17 @@ describe("appointments mapper", () => {
     cancellation_reason: "",
   };
 
-  it("list maps origin->created_by + start_datetime->start and filters by date", async () => {
-    let url = "";
+  it("lee el sobre paginado {items, count} y mapea origin->created_by + start_datetime->start", async () => {
     server.use(
-      http.get(`${BASE}/appointments/`, ({ request }) => {
-        url = request.url;
-        return HttpResponse.json([appt]);
-      }),
+      http.get(`${BASE}/appointments/`, () =>
+        HttpResponse.json({ items: [appt], count: 137 }),
+      ),
     );
-    const list = await listAppointments({
-      from: "2026-06-29T00:00:00.000Z",
-      to: "2026-06-29T23:59:59Z",
-    });
-    expect(url).toContain("date=2026-06-29");
-    expect(list[0]).toMatchObject({
+    const page = await listAppointments();
+    // El `count` es del servidor: es lo único que sabe cuántas citas hay detrás
+    // de la página que se está mostrando.
+    expect(page.count).toBe(137);
+    expect(page.items[0]).toMatchObject({
       id: "1",
       service_id: "2",
       professional_id: "3",
@@ -319,17 +328,56 @@ describe("appointments mapper", () => {
     });
   });
 
-  it("list forwards professional_id and service_id as query params", async () => {
+  it("manda date_from/date_to de verdad, no un día suelto", async () => {
     let url = "";
     server.use(
       http.get(`${BASE}/appointments/`, ({ request }) => {
         url = request.url;
-        return HttpResponse.json([appt]);
+        return HttpResponse.json({ items: [appt], count: 1 });
       }),
     );
-    await listAppointments({ professional_id: "3", service_id: "2" });
+    // Antes el rango se colapsaba a `date=<día de from>` y `to` se tiraba en
+    // silencio: pedir una semana devolvía un día y el calendario dibujaba la
+    // semana con esa jornada.
+    await listAppointments({ date_from: "2026-06-29", date_to: "2026-07-05" });
+    expect(url).toContain("date_from=2026-06-29");
+    expect(url).toContain("date_to=2026-07-05");
+    expect(url).not.toContain("date=");
+  });
+
+  it("con `date` no manda el rango: el backend le da prioridad al día suelto", async () => {
+    let url = "";
+    server.use(
+      http.get(`${BASE}/appointments/`, ({ request }) => {
+        url = request.url;
+        return HttpResponse.json({ items: [appt], count: 1 });
+      }),
+    );
+    await listAppointments({
+      date: "2026-06-29",
+      date_from: "2026-06-01",
+      date_to: "2026-06-30",
+    });
+    expect(url).toContain("date=2026-06-29");
+    expect(url).not.toContain("date_from");
+    expect(url).not.toContain("date_to");
+  });
+
+  it("list forwards professional_id, service_id, limit y offset como query params", async () => {
+    let url = "";
+    server.use(
+      http.get(`${BASE}/appointments/`, ({ request }) => {
+        url = request.url;
+        return HttpResponse.json({ items: [appt], count: 1 });
+      }),
+    );
+    await listAppointments({ professional_id: "3", service_id: "2", offset: 25 });
     expect(url).toContain("professional_id=3");
     expect(url).toContain("service_id=2");
+    expect(url).toContain("offset=25");
+    // `limit` viaja SIEMPRE, aunque quien llama no lo pase: el default del
+    // servidor es 100 y un recorte callado se lee como una agenda completa.
+    expect(url).toContain("limit=100");
   });
 
   it("create posts start_datetime (no end); reschedule posts new_start_datetime; cancel posts reason", async () => {
@@ -466,19 +514,23 @@ describe("rating fields that landed later than the rest of the schema", () => {
     // `?? 0` existen para que eso no se pinte como la peor calificación posible.
     server.use(
       http.get(`${BASE}/conversations/`, () =>
-        HttpResponse.json([
-          {
-            id: 5,
-            status: "closed",
-            channel_type: "whatsapp",
-            active_agent: "",
-            customer: { id: 7, display_name: "Ana", phone: "569" },
-            assignee_id: null,
-            last_message_at: "2026-06-01T00:00:00Z",
-            created_at: "2026-06-01T00:00:00Z",
-            updated_at: "2026-06-01T00:00:00Z",
-          },
-        ]),
+        HttpResponse.json({
+          items: [
+            {
+              id: 5,
+              status: "closed",
+              channel_type: "whatsapp",
+              active_agent: "",
+              customer: { id: 7, display_name: "Ana", phone: "569" },
+              assignee_id: null,
+              last_message_at: "2026-06-01T00:00:00Z",
+              created_at: "2026-06-01T00:00:00Z",
+              updated_at: "2026-06-01T00:00:00Z",
+            },
+          ],
+          next_cursor: "",
+          has_more: false,
+        }),
       ),
       http.get(`${BASE}/customers/8/`, () =>
         HttpResponse.json({
@@ -490,7 +542,7 @@ describe("rating fields that landed later than the rest of the schema", () => {
         }),
       ),
     );
-    const conv = (await listConversations())[0];
+    const conv = (await listConversations()).items[0];
     expect(conv.customer_rating).toBeNull();
     expect(conv.rating_status).toBe("");
 
@@ -504,7 +556,7 @@ describe("rating fields that landed later than the rest of the schema", () => {
     server.use(
       http.get(`${BASE}/conversations/`, ({ request }) => {
         seen = new URL(request.url).searchParams.get("customer_id");
-        return HttpResponse.json([]);
+        return HttpResponse.json({ items: [], next_cursor: "", has_more: false });
       }),
     );
     await listConversations({ customerId: "42" });

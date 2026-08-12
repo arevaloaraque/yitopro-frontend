@@ -16,14 +16,20 @@ import type { EnrichedAppointment } from "../types";
 
 vi.mock("@/lib/api/payments");
 
+// Relativas al reloj, no fijas: `canChange` depende de `isPastAppointment()`, así
+// que una fecha literal "futura" caduca sola y el día que pasa se lleva por delante
+// los botones de Reagendar y Cancelar — un fallo que se lee como regresión y no lo
+// es. El test de «cita pasada» sí pasa su par explícito, porque una fecha del
+// pasado no caduca.
+const HOUR = 60 * 60 * 1000;
 const appointment: EnrichedAppointment = {
   id: "apt-1",
   service_id: "svc-1",
   professional_id: "pro-1",
   customer_id: "cust-1",
   customer_name: "Ana Díaz",
-  start: "2026-08-05T14:00:00-04:00",
-  end: "2026-08-05T15:00:00-04:00",
+  start: new Date(Date.now() + 24 * HOUR).toISOString(),
+  end: new Date(Date.now() + 25 * HOUR).toISOString(),
   status: "scheduled",
   created_by: "ai",
   notes: "Primera visita",

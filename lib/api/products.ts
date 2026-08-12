@@ -1,4 +1,4 @@
-import type { Paginated, Product } from "@/lib/types";
+import type { Paginated, Product, ProductCategory } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -17,6 +17,8 @@ interface BackendProduct {
   active: boolean;
   whatsapp_enabled: boolean;
   category_id: number | null;
+  /** Resuelto por el servidor; `null` en un producto sin categoría. */
+  category_name?: string | null;
 }
 
 interface Page {
@@ -28,11 +30,23 @@ function fromBackend(p: BackendProduct): Product {
   return {
     id: String(p.id),
     name: p.name,
+    description: p.description,
     price: Number(p.price),
     stock: p.stock,
     sellable_via_whatsapp: p.whatsapp_enabled,
     is_active: p.active,
+    category_name: p.category_name ?? null,
   };
+}
+
+/**
+ * Categorías del catálogo: lista PLANA, sin `{items, count}`. Son unas pocas por
+ * negocio, así que el backend no las pagina y aquí no hay bucle que recorrer.
+ * Solo se convierte el `id` a texto, igual que en `fromBackend`.
+ */
+export async function listProductCategories(): Promise<ProductCategory[]> {
+  const res = await api.get<{ id: number; name: string }[]>("/products/categories/");
+  return res.map((c) => ({ id: String(c.id), name: c.name }));
 }
 
 interface ProductSearchParams {
@@ -40,7 +54,19 @@ interface ProductSearchParams {
   limit?: number;
   offset?: number;
   active?: boolean;
-  category_id?: number;
+  /**
+   * Texto y no número: el valor sale del `<Select>` de categoría y de la URL, que
+   * son texto, y el query string vuelve a serializarlo a texto. Convertirlo a
+   * `number` en medio solo añadiría un camino con `NaN` (`Number("abc")`) que
+   * viajaría como `category_id=NaN`.
+   */
+  category_id?: string;
+  /**
+   * Tope INCLUSIVO de stock: `stock_lte=0` devuelve solo los agotados. Texto por
+   * el mismo motivo que `category_id` — y ojo: el "0" no se puede perder por el
+   * camino, que es justo el filtro más útil de los tres.
+   */
+  stock_lte?: string;
 }
 
 /** Server-side search/pagination (Products table). */
@@ -54,6 +80,7 @@ export async function searchProducts(
       offset: params.offset ?? 0,
       active: params.active,
       category_id: params.category_id,
+      stock_lte: params.stock_lte,
     },
   });
   return { items: res.items.map(fromBackend), count: res.count };
@@ -65,6 +92,9 @@ export function createProduct(input: CreateProductInput): Promise<Product> {
   return api
     .post<BackendProduct>("/products/", {
       name: input.name,
+      // `?? ""` y no omitir: es el texto que el agente lee para vender, y el
+      // producto nacía sin él porque este mapeo nunca lo enviaba.
+      description: input.description ?? "",
       price: input.price,
       stock: input.stock,
       whatsapp_enabled: input.sellable_via_whatsapp,
@@ -79,6 +109,7 @@ export function updateProduct(
 ): Promise<Product> {
   const body: Record<string, unknown> = {};
   if (patch.name !== undefined) body.name = patch.name;
+  if (patch.description !== undefined) body.description = patch.description;
   if (patch.price !== undefined) body.price = patch.price;
   if (patch.stock !== undefined) body.stock = patch.stock;
   if (patch.sellable_via_whatsapp !== undefined)

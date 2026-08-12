@@ -151,7 +151,7 @@ export type SoundSlot = "message" | "order" | "appointment";
 export type SoundKind = SoundSlot | "alert";
 
 /** Persisted across reloads so the operator doesn't re-configure every morning. Only
- * the access token is forbidden from web storage (see CLAUDE.md); a preference is fine
+ * the access token is forbidden from web storage (repo security rules); a preference is fine
  * — the same place `next-themes` keeps the theme. */
 const MUTE_KEY = "yitopro:notification-sound-muted";
 const VOLUME_KEY = "yitopro:notification-sound-volume";

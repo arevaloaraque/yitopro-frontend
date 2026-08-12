@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/lib/auth";
 import { usePendingOrders } from "@/lib/orders";
 import { cn } from "@/lib/utils";
 
@@ -23,10 +24,17 @@ function isActive(pathname: string, href: string): boolean {
 export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
   const pathname = usePathname();
   const { pendingCount } = usePendingOrders();
+  const { user } = useAuth();
+  // Oculta los ítems ownerOnly SOLO a una sesión staff confirmada. Con el rol
+  // ausente (el fallback sin rol del login) se muestran: esconderlos ahí le
+  // haría perder Reportes al dueño de forma intermitente, y la seguridad real
+  // es el 403 del backend, no este filtro.
+  const items =
+    user?.role === "staff" ? NAV_ITEMS.filter((item) => !item.ownerOnly) : NAV_ITEMS;
 
   return (
     <nav className="flex flex-1 flex-col gap-1 px-3 py-5">
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         // Only "Pedidos" carries a badge: the number of drafts awaiting action.

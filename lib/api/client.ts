@@ -72,7 +72,12 @@ function buildUrl(path: string, query?: Record<string, QueryValue>): string {
   const url = new URL(`${API_PREFIX}${path}`, API_BASE_URL);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== null) {
+      // La cadena vacía se descarta igual que `undefined`/`null`: en un filtro
+      // de lista, "" significa «sin filtro», y mandarlo produce `?status=&q=`.
+      // Vivía resuelto en un helper privado de `lib/api/payments.ts`, así que
+      // cada dominio nuevo tenía que acordarse por su cuenta. Aquí se acuerda
+      // una vez. Ningún endpoint del backend distingue "" de ausente.
+      if (value !== undefined && value !== null && value !== "") {
         url.searchParams.set(key, String(value));
       }
     }

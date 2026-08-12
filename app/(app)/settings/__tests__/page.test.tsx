@@ -78,6 +78,7 @@ const business: Business = {
   whatsapp_number: "",
   onboarding_status: "completed",
   assistant_config: { display_name: "Maya", tone: "casual", welcome_message: "" },
+  created_at: "2026-01-01T00:00:00Z",
 };
 
 describe("SettingsPage — catálogo de país/moneda", () => {

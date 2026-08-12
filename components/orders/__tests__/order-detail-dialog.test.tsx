@@ -43,7 +43,12 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(listConversations).mockResolvedValue([]);
+  // El inbox se pagina por cursor: el mock devuelve el sobre, no el array.
+  vi.mocked(listConversations).mockResolvedValue({
+    items: [],
+    next_cursor: "",
+    has_more: false,
+  });
 });
 
 function makeOrder(over: Partial<Order> = {}): Order {
@@ -158,9 +163,11 @@ describe("OrderDetailDialog — cómo contactar al cliente", () => {
 
 describe("OrderDetailDialog — conversaciones del cliente", () => {
   it("lista las conversaciones y cada una abre su hilo en el inbox", async () => {
-    vi.mocked(listConversations).mockResolvedValue([
-      makeConversation({ id: "conv-9", status: "closed" }),
-    ]);
+    vi.mocked(listConversations).mockResolvedValue({
+      items: [makeConversation({ id: "conv-9", status: "closed" })],
+      next_cursor: "",
+      has_more: false,
+    });
     renderDrawer();
     const link = await screen.findByRole("link", { name: /Cerrada/ });
     expect(link).toHaveAttribute("href", "/conversations?id=conv-9");

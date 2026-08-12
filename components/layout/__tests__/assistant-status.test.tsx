@@ -42,6 +42,7 @@ function makeBusiness(over: Partial<Business> = {}): Business {
       tone: "friendly",
       welcome_message: "",
     },
+    created_at: "2026-01-01T00:00:00Z",
     ...over,
   };
 }

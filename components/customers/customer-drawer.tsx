@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronRight, Eye, EyeOff, Pencil, Save } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Pencil,
+  Save,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,7 +146,7 @@ function renderFieldInput(
         />
       );
     case "select":
-      // ponytail: sin `items` en el Root — las opciones de ficha son strings
+      // Sin `items` en el Root — las opciones de ficha son strings
       // planos (valor === label), el trigger ya muestra el texto correcto.
       return (
         <Select
@@ -307,7 +315,13 @@ export function CustomerDrawer({
       setNoteError(null);
       setOpenNote(null);
       try {
-        const [c, r, convs, ns] = await Promise.all([
+        // `allSettled`, no `all`: solo el cliente es indispensable. Con `all`, el
+        // 400 que devuelve `/record/` en un negocio SIN `RecordSchema` —el estado
+        // por defecto de un tenant nuevo, porque nada en el panel llama a
+        // `POST /records/schemas/`— rechazaba en bloque y se perdían también
+        // nombre, email, teléfono, conversaciones y notas. Y como la ficha ya no
+        // es una ruta, no quedaba ninguna vía para ver al cliente.
+        const [c, r, convs, ns] = await Promise.allSettled([
           getCustomer(customerId),
           getRecord(customerId),
           // Server-side: antes bajaba TODAS las conversaciones del negocio y filtraba acá.
@@ -315,15 +329,33 @@ export function CustomerDrawer({
           getCustomerNotes(customerId),
         ]);
         if (reqId !== reqRef.current) return;
-        setCustName(c.name);
-        setCustEmail(c.email);
-        setCustPhone(c.phone);
-        setRating({ avg: c.rating_avg, count: c.rating_count });
-        setRecord(r);
-        setValues({ ...r.values });
-        setConversations(convs);
-        setNotes(ns);
-        loadedRef.current = { name: c.name, email: c.email, values: { ...r.values } };
+        if (c.status === "rejected") throw c.reason;
+        const cust = c.value;
+        const rec = r.status === "fulfilled" ? r.value : null;
+        setCustName(cust.name);
+        setCustEmail(cust.email);
+        setCustPhone(cust.phone);
+        setRating({ avg: cust.rating_avg, count: cust.rating_count });
+        setRecord(rec);
+        setValues(rec ? { ...rec.values } : {});
+        // El fallo de la ficha se nombra en SU sección, no como error del drawer.
+        setRecordError(
+          r.status === "rejected"
+            ? r.reason instanceof Error
+              ? r.reason.message
+              : "No se pudo cargar la ficha."
+            : null,
+        );
+        // `.items`: el inbox pasó a paginarse por cursor y la respuesta es un
+        // sobre. Aquí se toma solo la primera página a propósito — es el
+        // historial de UN cliente en un panel lateral, no la bandeja.
+        setConversations(convs.status === "fulfilled" ? convs.value.items : []);
+        setNotes(ns.status === "fulfilled" ? ns.value : []);
+        loadedRef.current = {
+          name: cust.name,
+          email: cust.email,
+          values: rec ? { ...rec.values } : {},
+        };
         setState("ready");
       } catch (e) {
         if (reqId !== reqRef.current) return;
@@ -505,7 +537,9 @@ export function CustomerDrawer({
           </div>
         )}
 
-        {state === "ready" && record && (
+        {/* Sin `&& record`: la ficha es UNA sección del drawer, no su condición de
+            existencia. Ver el `allSettled` de la carga. */}
+        {state === "ready" && (
           <div className="flex flex-col gap-3 overflow-y-auto p-4 pt-0">
             {/* Datos del cliente */}
             <div className="space-y-3 rounded-xl border border-border/40 p-3">
@@ -564,8 +598,18 @@ export function CustomerDrawer({
             </div>
 
             {/* Datos adicionales (dynamic schema) */}
-            <Section title="Datos adicionales" count={record.schema.length} defaultOpen>
-              {record.schema.length === 0 ? (
+            <Section
+              title="Datos adicionales"
+              count={record?.schema.length ?? 0}
+              defaultOpen
+            >
+              {!record ? (
+                <p className="text-xs text-destructive">
+                  No se pudo cargar la ficha
+                  {recordError ? `: ${recordError}` : "."} El resto de los datos del
+                  cliente sí está disponible.
+                </p>
+              ) : record.schema.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Sin campos adicionales configurados.
                 </p>
@@ -669,7 +713,10 @@ export function CustomerDrawer({
                             status={conv.rating_status}
                             className="shrink-0"
                           />
-                          <Badge variant={s.variant} className="shrink-0 text-[0.65rem]">
+                          <Badge
+                            variant={s.variant}
+                            className="shrink-0 text-[0.65rem]"
+                          >
                             {s.label}
                           </Badge>
                           <ChevronRight

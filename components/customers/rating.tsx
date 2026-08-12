@@ -26,6 +26,55 @@ const plural = (n: number) => (n === 1 ? "conversación" : "conversaciones");
 const PROVENANCE =
   "Calificación del comportamiento del cliente (1 a 5), calculada automáticamente sobre sus conversaciones cerradas.";
 
+const SLOTS = [0, 1, 2, 3, 4];
+
+/**
+ * Las 5 estrellas, con la última rellenada en PROPORCIÓN.
+ *
+ * Dos decisiones que no son cosméticas:
+ *
+ * 1. **Relleno parcial, no redondeo.** El promedio del evaluador es fraccionario (4,5) y
+ *    redondear a 5 estrellas exagera el juicio sobre una persona en la dirección que más
+ *    daño hace. Se dibujan dos filas idénticas superpuestas y la de arriba se recorta al
+ *    `value/5` — así media estrella es media estrella.
+ * 2. **Sin `gap`.** Las estrellas van pegadas a propósito: cualquier separación entra en el
+ *    ancho del recorte y la frontera del relleno deja de caer donde dice el número. El propio
+ *    icono de lucide ya trae aire dentro de su viewBox.
+ *
+ * El número no desaparece, cambia de canal: vive en `aria-label` y en el `title`. Sustituir
+ * un dígito legible por cinco iconos sin eso dejaría la calificación fuera del alcance de un
+ * lector de pantalla.
+ */
+function Stars({
+  value,
+  label,
+  starClass,
+}: {
+  value: number;
+  label: string;
+  starClass: string;
+}) {
+  const pct = Math.max(0, Math.min(100, (value / 5) * 100));
+  return (
+    <span className="relative inline-flex shrink-0" role="img" aria-label={label}>
+      <span className="inline-flex" aria-hidden>
+        {SLOTS.map((i) => (
+          <Star key={i} className={cn(starClass, "shrink-0 text-muted-foreground/40")} />
+        ))}
+      </span>
+      <span
+        className="absolute inset-y-0 left-0 inline-flex overflow-hidden"
+        style={{ width: `${pct}%` }}
+        aria-hidden
+      >
+        {SLOTS.map((i) => (
+          <Star key={i} className={cn(starClass, "shrink-0 fill-warning text-warning")} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export function CustomerRating({
   avg,
   count,
@@ -53,18 +102,19 @@ export function CustomerRating({
       </span>
     );
   }
+  const formatted = avg.toLocaleString("es-CL");
   return (
     <span
-      className={cn("inline-flex items-center gap-1 text-xs text-foreground", className)}
+      className={cn("inline-flex items-center gap-1.5 text-xs text-foreground", className)}
       title={`${PROVENANCE} Promedio de ${count} ${plural(count)}.`}
     >
-      <Star className="size-3.5 shrink-0" aria-hidden />
-      <span className="font-medium tabular-nums">{avg.toLocaleString("es-CL")}</span>
+      <Stars value={avg} label={`${formatted} de 5`} starClass="size-3.5" />
       {/* Un solo nodo de texto: interpolar por partes lo fragmenta y un lector de pantalla
-          (o un test) lo recibe en pedazos. */}
-      <span className="text-muted-foreground">
-        {compact ? "/ 5" : `/ 5 · ${count} ${plural(count)}`}
-      </span>
+          (o un test) lo recibe en pedazos. El «/ 5» se fue con el dígito: contarlo es para
+          lo que están las cinco estrellas. */}
+      {!compact && (
+        <span className="text-muted-foreground">{`· ${count} ${plural(count)}`}</span>
+      )}
     </span>
   );
 }
@@ -97,12 +147,10 @@ export function ThreadRating({
   }
   return (
     <span
-      className={cn("inline-flex items-center gap-0.5 text-[0.65rem] text-foreground", className)}
+      className={cn("inline-flex items-center text-[0.65rem] text-foreground", className)}
       title={`${PROVENANCE} Esta conversación: ${value} de 5.`}
     >
-      <Star className="size-3 shrink-0" aria-hidden />
-      <span className="font-medium tabular-nums">{value}</span>
-      <span className="text-muted-foreground">/5</span>
+      <Stars value={value} label={`${value} de 5`} starClass="size-3" />
     </span>
   );
 }

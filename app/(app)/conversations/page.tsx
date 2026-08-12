@@ -12,11 +12,15 @@ import {
   reactivateAI,
   sendMessage,
   takeConversation,
+  type MessagePage,
 } from "@/lib/api/conversations";
 import { subscribeToEvents } from "@/lib/sse";
 import { useAgents } from "@/lib/agents";
 import { useAuth } from "@/lib/auth";
+import { useDebounced } from "@/lib/hooks/use-debounced";
+import { useUrlFilters } from "@/lib/hooks/use-url-filters";
 import { formatNumber } from "@/lib/utils";
+import type { CustomerSelection } from "@/components/customers/customer-combobox";
 import type {
   Conversation,
   ConversationStatus,
@@ -32,7 +36,70 @@ import { EmptyState } from "@/components/states/empty-state";
 import { cn } from "@/lib/utils";
 
 import { ConversationDetail } from "./_components/conversation-detail";
-import { ConversationList } from "./_components/conversation-list";
+import { ConversationList, type InboxView } from "./_components/conversation-list";
+
+/** Lo que viaja en la URL. Lo que vale el default no se escribe (ver `useUrlFilters`). */
+const FILTER_DEFAULTS = { status: "all", q: "", view: "thread" };
+
+/**
+ * La URL la escribe cualquiera. Un `?status=lol` pegado a mano no debe dejar la bandeja sin
+ * ninguna pestaña marcada ni mandarle al backend un estado que no existe: lo desconocido cae
+ * al default.
+ */
+function asStatusFilter(raw: string): ConversationStatus | "all" {
+  return raw === "ai_active" || raw === "human_handoff" || raw === "closed"
+    ? raw
+    : "all";
+}
+
+function asView(raw: string): InboxView {
+  return raw === "number" ? "number" : "thread";
+}
+
+/** Escribe (o borra, con `null`) UNA clave de la query sin tocar las demás. */
+function setSearchParam(key: string, value: string | null) {
+  const params = new URLSearchParams(window.location.search);
+  if (value === null) params.delete(key);
+  else params.set(key, value);
+  const qs = params.toString();
+  window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+}
+
+/**
+ * Coalescing de los refetch que dispara el SSE.
+ *
+ * Un cliente que escribe cinco líneas seguidas emite cinco `mensaje_recibido`, y cada uno
+ * volvía a bajar el hilo más la fila. Ahora el hilo viene paginado (la página más nueva),
+ * así que el refetch está acotado; lo que sigue haciendo falta es que una ráfaga cueste una
+ * request y no N. Pedir SOLO los mensajes nuevos necesitaría un `after=` que el backend no
+ * expone: `before=` sirve para subir a la historia, no para completar la cola.
+ */
+const SSE_COALESCE_MS = 250;
+
+/**
+ * DECISIÓN: el refetch del SSE MERGEA la cola, no reemplaza el hilo.
+ *
+ * Ese refetch trae la página MÁS NUEVA. Si el operador había pulsado «Ver mensajes
+ * anteriores» para leer historia, reemplazar el hilo le tira las páginas que pidió y el chat
+ * salta al fondo justo mientras lee — y basta un mensaje entrante para que pase. Mergear
+ * conserva lo que hay y añade solo lo que no se tenía.
+ *
+ * El caso raro está cubierto: si la página nueva no solapa con NINGÚN mensaje en pantalla,
+ * entraron más mensajes que el tamaño de página y mergear dejaría un hueco invisible en
+ * medio del chat; ahí sí se reemplaza, y `has_more` vuelve a describir el hilo. Se compara
+ * por id, no por posición ni por id mayor: los ids no van en orden de tiempo para filas
+ * insertadas con fecha atrasada (lo dice el propio backend al resolver `before`).
+ */
+function mergeNewMessages(
+  prev: Message[],
+  page: MessagePage,
+): { messages: Message[]; replaced: boolean } {
+  const known = new Set(prev.map((m) => m.id));
+  if (!page.items.some((m) => known.has(m.id)))
+    return { messages: page.items, replaced: true };
+  const nuevos = page.items.filter((m) => !known.has(m.id));
+  return { messages: nuevos.length ? [...prev, ...nuevos] : prev, replaced: false };
+}
 
 function ConversationsInner() {
   const { user } = useAuth();
@@ -42,11 +109,40 @@ function ConversationsInner() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [statusFilter, setStatusFilter] = useState<ConversationStatus | "all">("all");
   const [retryKey, setRetryKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     searchParams.get("id"),
   );
+
+  // Estado, término y vista viven en la URL: una bandeja filtrada se comparte y sobrevive un
+  // F5. El hook preserva las claves que no gestiona, así que el `?id=` del hilo abierto no se
+  // pierde al filtrar.
+  const [filters, setFilters] = useUrlFilters(FILTER_DEFAULTS);
+  const statusFilter = asStatusFilter(filters.status);
+  const view = asView(filters.view);
+
+  // El input va sin retraso; lo retrasado es el término con el que se CONSULTA (y con el que
+  // se escribe la URL, que era un `replaceState` por pulsación). Ahora el buscador es de
+  // servidor: `filters.q` es la única copia del término, así que la petición se deriva de él
+  // y no puede desincronizarse de lo que dice la URL.
+  const [search, setSearch] = useState(() => filters.q);
+  const debouncedSearch = useDebounced(search);
+  useEffect(() => {
+    setFilters({ q: debouncedSearch.trim() });
+  }, [debouncedSearch, setFilters]);
+  const searchTerm = filters.q;
+
+  // Filtro de SERVIDOR (`?customer_id=`): a diferencia del buscador, sí alcanza el historial
+  // completo de esa persona. No va a la URL porque el combobox necesita el nombre para
+  // dibujarse y el id solo no lo trae.
+  const [customer, setCustomer] = useState<CustomerSelection>(null);
+  const customerId = customer?.id ?? null;
+
+  // Paginación por cursor. El cursor es OPACO: se guarda y se devuelve tal cual.
+  const [cursor, setCursor] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   // Which conversation `messages` belongs to. Loading is *derived* from this vs
@@ -54,6 +150,9 @@ function ConversationsInner() {
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [messagesRetryKey, setMessagesRetryKey] = useState(0);
+  // «Hay historia MÁS VIEJA arriba» — no «faltan mensajes nuevos».
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -65,6 +164,14 @@ function ConversationsInner() {
 
   const selectedIdRef = useRef(selectedId);
   const conversationsRef = useRef(conversations);
+  const customerIdRef = useRef(customerId);
+  // El merge del refetch necesita leer el hilo vigente FUERA de un updater de estado (un
+  // updater tiene que ser puro, y aquí hay que decidir además si `hasOlder` cambia).
+  const messagesRef = useRef(messages);
+  // Coalescing del SSE: una ráfaga de eventos se cobra una request, no N.
+  const pendingRowsRef = useRef<Set<string>>(new Set());
+  const rowsTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const threadTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -75,12 +182,36 @@ function ConversationsInner() {
   });
 
   useEffect(() => {
+    customerIdRef.current = customerId;
+  });
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  });
+
+  /**
+   * Los tres filtros van al SERVIDOR. El buscador incluido: recortar en el navegador sobre
+   * una lista paginada mostraría «lo que coincide de las 25 filas que bajé», que es un
+   * filtro que miente.
+   */
+  const listParams = useMemo(
+    () => ({
+      ...(statusFilter === "all" ? {} : { status: statusFilter }),
+      ...(customerId ? { customerId } : {}),
+      ...(searchTerm ? { search: searchTerm } : {}),
+    }),
+    [statusFilter, customerId, searchTerm],
+  );
+
+  useEffect(() => {
     let cancelled = false;
     const t = setTimeout(() => {
-      listConversations(statusFilter === "all" ? {} : { status: statusFilter })
-        .then((data) => {
+      listConversations(listParams)
+        .then((page) => {
           if (cancelled) return;
-          setConversations(data);
+          setConversations(page.items);
+          setCursor(page.next_cursor);
+          setHasMore(page.has_more);
           setError(null);
           setLoading(false);
         })
@@ -97,7 +228,31 @@ function ConversationsInner() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [statusFilter, retryKey]);
+  }, [listParams, retryKey]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    listConversations(listParams, { cursor })
+      .then((page) => {
+        // Se descartan los ids que ya están: el SSE pudo haber insertado arriba una fila que
+        // también viene en esta página, y dos filas con la misma key es un React key duplicado.
+        setConversations((prev) => {
+          const known = new Set(prev.map((c) => c.id));
+          return [...prev, ...page.items.filter((c) => !known.has(c.id))];
+        });
+        setCursor(page.next_cursor);
+        setHasMore(page.has_more);
+      })
+      .catch(() => {
+        // NO va a `error`: ese estado dibuja el `ErrorState` en lugar de la lista, así que
+        // fallar al pedir la página 2 borraría de la pantalla la página 1 que el operador
+        // estaba leyendo. Va al pie, junto al botón con el que se reintenta.
+        setMoreError("No se pudo cargar la página siguiente.");
+      })
+      .finally(() => setLoadingMore(false));
+  }, [cursor, listParams, loadingMore]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -105,9 +260,10 @@ function ConversationsInner() {
     let cancelled = false;
     const t = setTimeout(() => {
       listMessages(selectedId)
-        .then((data) => {
+        .then((page) => {
           if (cancelled) return;
-          setMessages(data);
+          setMessages(page.items);
+          setHasOlder(page.has_more);
           setMessagesError(null);
           setLoadedId(selectedId);
         })
@@ -117,6 +273,7 @@ function ConversationsInner() {
           // clears even on error, rather than spinning forever; the error is
           // surfaced separately so it isn't confused with a genuinely empty thread.
           setMessages([]);
+          setHasOlder(false);
           setMessagesError(
             err instanceof Error ? err.message : "Error al cargar mensajes",
           );
@@ -130,6 +287,27 @@ function ConversationsInner() {
     };
   }, [selectedId, messagesRetryKey]);
 
+  /** Sube una página de historia y la ANTEPONE: el hilo se lee de arriba abajo. */
+  const handleLoadOlder = useCallback(() => {
+    const oldest = messages[0]?.id;
+    if (!selectedId || !oldest || loadingOlder) return;
+    setLoadingOlder(true);
+    listMessages(selectedId, { before: oldest })
+      .then((page) => {
+        // Cambiar de hilo mientras cargaba dejaría los mensajes de otra conversación
+        // pegados arriba de esta.
+        if (selectedIdRef.current !== selectedId) return;
+        setMessages((prev) => [...page.items, ...prev]);
+        setHasOlder(page.has_more);
+      })
+      .catch(() => {
+        // Va al aviso descartable de la cabecera y NO al `ErrorState` del hilo: ese
+        // reemplaza todo el panel, y aquí los mensajes que ya se leen siguen siendo válidos.
+        setActionError("No se pudo cargar el historial anterior.");
+      })
+      .finally(() => setLoadingOlder(false));
+  }, [selectedId, messages, loadingOlder]);
+
   const handleRetry = useCallback(() => {
     setRetryKey((k) => k + 1);
   }, []);
@@ -140,6 +318,22 @@ function ConversationsInner() {
     setMessagesRetryKey((k) => k + 1);
   }, []);
 
+  const handleStatusFilterChange = useCallback(
+    (status: ConversationStatus | "all") => setFilters({ status }),
+    [setFilters],
+  );
+
+  const handleViewChange = useCallback(
+    (next: InboxView) => setFilters({ view: next }),
+    [setFilters],
+  );
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setCustomer(null);
+    setFilters({ status: "all" });
+  }, [setFilters]);
+
   const handleSelect = useCallback((id: string) => {
     // Re-clicking the already-open conversation is a no-op: its messages are
     // already loaded (and kept live by SSE), so re-selecting would only risk
@@ -148,7 +342,9 @@ function ConversationsInner() {
     setSelectedId(id);
     // Mirror the selection into the URL (deep-linkable, survives F5) without a
     // navigation/refetch — replaceState keeps the list and thread state intact.
-    window.history.replaceState(null, "", `?id=${id}`);
+    // Se PARCHEA la query vigente en vez de reescribirla: ahora los filtros también viven
+    // ahí, y un `?id=…` a secas los borraba al abrir un hilo.
+    setSearchParam("id", id);
     setActionError(null);
     setConversations((prev) =>
       prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)),
@@ -168,15 +364,52 @@ function ConversationsInner() {
    * así que un refetch a secas borraría el contador que este mismo handler acaba de subir.
    */
   const refreshRow = useCallback((conversationId: string) => {
-    getConversation(conversationId)
-      .then((fresh) =>
-        setConversations((prev) =>
-          prev
-            .map((c) => (c.id === conversationId ? { ...fresh, unread: c.unread } : c))
-            .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
-        ),
-      )
-      .catch(() => {});
+    pendingRowsRef.current.add(conversationId);
+    clearTimeout(rowsTimerRef.current);
+    rowsTimerRef.current = setTimeout(() => {
+      const ids = [...pendingRowsRef.current];
+      pendingRowsRef.current.clear();
+      for (const id of ids) {
+        getConversation(id)
+          .then((fresh) =>
+            setConversations((prev) =>
+              prev
+                .map((c) => (c.id === id ? { ...fresh, unread: c.unread } : c))
+                .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
+            ),
+          )
+          .catch(() => {});
+      }
+    }, SSE_COALESCE_MS);
+  }, []);
+
+  /**
+   * Re-baja la página más nueva del hilo abierto. Solo el abierto: estando en otra
+   * conversación (o en el dashboard) no hay nada en pantalla que mostrar y la request es puro
+   * gasto. El evento no puede traer el mensaje: viaja sin texto (política de PII, solo ids).
+   *
+   * Lo que llega se MERGEA por la cola (ver `mergeNewMessages`), así que la historia que el
+   * operador subió a leer no se descarta.
+   */
+  const reloadOpenThread = useCallback((conversationId: string) => {
+    if (selectedIdRef.current !== conversationId) return;
+    clearTimeout(threadTimerRef.current);
+    threadTimerRef.current = setTimeout(() => {
+      if (selectedIdRef.current !== conversationId) return;
+      listMessages(conversationId)
+        .then((page) => {
+          if (selectedIdRef.current !== conversationId) return;
+          const { messages: merged, replaced } = mergeNewMessages(
+            messagesRef.current,
+            page,
+          );
+          setMessages(merged);
+          // Solo al reemplazar: el `has_more` de la página más nueva habla de lo que hay
+          // arriba de ESA página, no de lo que ya se cargó por encima.
+          if (replaced) setHasOlder(page.has_more);
+        })
+        .catch(() => {});
+    }, SSE_COALESCE_MS);
   }, []);
 
   useEffect(() => {
@@ -208,8 +441,17 @@ function ConversationsInner() {
             // silently dropping the event.
             getConversation(conversation_id)
               .then((conv) => {
+                // Con el filtro de cliente puesto, la bandeja es el historial de UNA
+                // persona: insertar aquí la conversación de otra convierte el filtro en
+                // mentira. El evento no trae `customer_id`, pero la conversación sí.
+                if (customerIdRef.current && conv.customer_id !== customerIdRef.current)
+                  return;
+                // Se deduplica por el id de lo que VOLVIÓ, no por el del evento: si el
+                // servidor devuelve otra fila (una redirección de hilo, un id reciclado en
+                // un test), comparar contra el evento la inserta duplicada y React se queda
+                // con dos hijos con la misma key.
                 setConversations((prev) =>
-                  prev.some((c) => c.id === conversation_id)
+                  prev.some((c) => c.id === conv.id)
                     ? prev
                     : [...prev, conv].sort((a, b) =>
                         b.last_message_at.localeCompare(a.last_message_at),
@@ -218,11 +460,7 @@ function ConversationsInner() {
               })
               .catch(() => {});
           }
-          if (selectedIdRef.current === conversation_id) {
-            listMessages(conversation_id)
-              .then(setMessages)
-              .catch(() => {});
-          }
+          reloadOpenThread(conversation_id);
           break;
         }
         case "conversacion_asignada": {
@@ -294,18 +532,21 @@ function ConversationsInner() {
               .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
           });
           refreshRow(conversation_id);
-          if (selectedIdRef.current === conversation_id) {
-            listMessages(conversation_id)
-              .then(setMessages)
-              .catch(() => {});
-          }
+          reloadOpenThread(conversation_id);
           break;
         }
       }
     });
-    return unsub;
-    // `refreshRow` es estable (useCallback sin deps): no re-suscribe el stream.
-  }, [refreshRow]);
+    return () => {
+      unsub();
+      // Un refetch coalescido en vuelo al desmontar escribiría estado sobre un componente
+      // que ya no está.
+      clearTimeout(rowsTimerRef.current);
+      clearTimeout(threadTimerRef.current);
+    };
+    // `refreshRow` y `reloadOpenThread` son estables (useCallback sin deps): no re-suscriben
+    // el stream.
+  }, [refreshRow, reloadOpenThread]);
 
   const handleSendMessage = useCallback(
     async (text: string) => {
@@ -394,11 +635,22 @@ function ConversationsInner() {
           selectedId={selectedId}
           onSelect={handleSelect}
           statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
+          onStatusFilterChange={handleStatusFilterChange}
+          view={view}
+          onViewChange={handleViewChange}
+          search={search}
+          onSearchChange={setSearch}
+          customer={customer}
+          onCustomerChange={setCustomer}
+          onClearFilters={handleClearFilters}
           loading={loading}
           error={error}
           onRetry={handleRetry}
           agentNames={agentNames}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={handleLoadMore}
+          moreError={moreError}
         />
       </div>
 
@@ -416,7 +668,9 @@ function ConversationsInner() {
             currentUserId={user?.id ?? null}
             onBack={() => {
               setSelectedId(null);
-              window.history.replaceState(null, "", window.location.pathname);
+              // Solo se cierra el hilo: los filtros de la bandeja siguen puestos, así que su
+              // parte de la query se queda.
+              setSearchParam("id", null);
             }}
             messages={messages}
             customerName={
@@ -436,6 +690,9 @@ function ConversationsInner() {
             loadingMessages={loadingMessages}
             messagesError={messagesError}
             onRetryMessages={handleRetryMessages}
+            hasOlder={hasOlder}
+            loadingOlder={loadingOlder}
+            onLoadOlder={handleLoadOlder}
             sendingMessage={sendingMessage}
             actionError={actionError}
             onDismissError={() => setActionError(null)}

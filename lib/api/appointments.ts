@@ -1,4 +1,4 @@
-import type { Appointment, AppointmentAuditEntry } from "@/lib/types";
+import type { Appointment, AppointmentAuditEntry, Paginated } from "@/lib/types";
 
 import { api } from "./client";
 
@@ -43,31 +43,75 @@ function fromBackend(a: BackendAppointment): Appointment {
   };
 }
 
-interface ListAppointmentsParams {
+/** El sobre paginado del backend (`@paginate`): `{items, count}`, NO un array. */
+interface Page {
+  items: BackendAppointment[];
+  count: number;
+}
+
+export interface ListAppointmentsParams {
   status?: Appointment["status"];
-  /** Range (ISO 8601) — the backend only filters by date; the day of `from` is used. */
-  from?: string;
-  to?: string;
+  /**
+   * Un día suelto de calendario (`YYYY-MM-DD`) en la zona horaria del NEGOCIO.
+   * El backend le da PRIORIDAD sobre el rango, así que esta función manda uno o
+   * el otro, nunca los dos: pedir «hoy» junto a una semana devolvía el día
+   * suelto y el panel dibujaba la semana con los datos de una sola jornada.
+   */
+  date?: string;
+  /**
+   * Rango de días de calendario INCLUSIVO (`YYYY-MM-DD`), también en la zona
+   * horaria del negocio. El backend rechaza rangos de más de 366 días.
+   */
+  date_from?: string;
+  date_to?: string;
   customer_id?: string;
   /** Filter by assigned professional / service (server-side). */
   professional_id?: string;
   service_id?: string;
+  limit?: number;
+  offset?: number;
+  /**
+   * Orden del SERVIDOR, conjunto cerrado. Existe para la vista Lista: con el
+   * ascendente por defecto, mostrar «lo último primero» obligaba a invertir cada
+   * página en el navegador, y entonces «Cargar más» insertaba citas más nuevas
+   * ENCIMA de las que ya estaban y movía la fila que se estaba leyendo. El orden
+   * tiene que venir del servidor o no es compatible con paginar.
+   */
+  ordering?: "start_datetime" | "-start_datetime" | "created_at" | "-created_at";
 }
 
+/**
+ * Citas del negocio. Devuelve el sobre paginado `{items, count}` tal cual, con
+ * `limit`/`offset` reales.
+ *
+ * `limit` va EXPLÍCITO porque el default del servidor es 100: callarlo trunca en
+ * silencio, y una agenda cortada se lee como completa — que es peor que un
+ * error, porque nadie va a buscar la cita que falta. Quien llama decide cuánto
+ * puede mostrar y compara `items.length` con `count` para saber si se quedó
+ * corto.
+ */
 export async function listAppointments(
   params: ListAppointmentsParams = {},
-): Promise<Appointment[]> {
-  // The backend filters by `date` (a single day, mapped from `from`), `status`,
-  // `professional_id`, `service_id` and `customer_id`. `to` still has no
-  // equivalent and is omitted.
-  const query: Record<string, string> = {};
-  if (params.from) query.date = params.from.slice(0, 10);
-  if (params.status) query.status = params.status;
-  if (params.professional_id) query.professional_id = params.professional_id;
-  if (params.service_id) query.service_id = params.service_id;
-  if (params.customer_id) query.customer_id = params.customer_id;
-  const res = await api.get<BackendAppointment[]>("/appointments/", { query });
-  return res.map(fromBackend);
+): Promise<Paginated<Appointment>> {
+  const res = await api.get<Page>("/appointments/", {
+    query: {
+      // `date` gana en el servidor; mandar los dos deja a la UI diciendo una
+      // ventana y al backend contestando otra.
+      ...(params.date
+        ? { date: params.date }
+        : { date_from: params.date_from, date_to: params.date_to }),
+      status: params.status,
+      professional_id: params.professional_id,
+      service_id: params.service_id,
+      customer_id: params.customer_id,
+      // Se omite cuando no se pide: el default del servidor es `start_datetime` y
+      // mandarlo explícitamente solo ensucia la URL de la petición.
+      ordering: params.ordering,
+      limit: params.limit ?? 100,
+      offset: params.offset ?? 0,
+    },
+  });
+  return { items: res.items.map(fromBackend), count: res.count };
 }
 
 interface CreateAppointmentInput {

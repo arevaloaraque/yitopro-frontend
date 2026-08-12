@@ -149,16 +149,6 @@ export interface PaymentFilters {
   search?: string;
 }
 
-/** Strips empties so the query string stays the cache key it looks like. */
-function toQuery(filters: PaymentFilters): Record<string, string> {
-  const query: Record<string, string> = {};
-  for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== null && value !== "")
-      query[key] = String(value);
-  }
-  return query;
-}
-
 export async function listPayments(
   filters: PaymentFilters = {},
   opts: { cursor?: string; limit?: number } = {},
@@ -168,8 +158,10 @@ export async function listPayments(
     next_cursor: string;
     has_more: boolean;
   }>("/payments/", {
+    // Los filtros van tal cual: `buildUrl` descarta la cadena vacía igual que
+    // `undefined`, así que un filtro sin poner ya no llega como `?status=`.
     query: {
-      ...toQuery(filters),
+      ...filters,
       ...(opts.cursor ? { cursor: opts.cursor } : {}),
       limit: String(opts.limit ?? 25),
     },

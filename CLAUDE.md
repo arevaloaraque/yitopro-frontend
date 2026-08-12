@@ -86,11 +86,13 @@ Después de cualquier cambio, antes de dar una tarea por terminada: `npm run lin
 ```
 app/                  # rutas (App Router): login, activar (set-password de invitación),
                       #   (onboarding)/onboarding (wizard de 8 pasos), (app)/dashboard, conversations,
-                      #   appointments, services, products, orders, payments, customers (drawer de
-                      #   ficha/notas), agents, settings, _design   (la ficha ya no es una ruta:
-                      #   vive en el drawer)
+                      #   appointments, services, products, orders, payments, reports, customers
+                      #   (drawer de ficha/notas), agents, settings, _design   (la ficha ya no
+                      #   es una ruta: vive en el drawer)
 components/           # UI: ui/ (shadcn), states/ (loading/empty/error), schedule/ (editor semanal
-                      #   de horarios), orders/, customers/ y componentes compartidos
+                      #   de horarios), orders/, customers/, reports/ (bloques de /reports:
+                      #   core-strip, appointments/orders/payments-block, revenue-chart,
+                      #   csv-export-button) y componentes compartidos
                       # orders/: la LISTA identifica el pedido (N.º, cliente, total, estado,
                       #   origen, fecha) y NO lleva ítems — el contenido se lee en el
                       #   detalle. `order-detail-dialog.tsx` es un MODAL (misma distribución
@@ -127,7 +129,9 @@ components/           # UI: ui/ (shadcn), states/ (loading/empty/error), schedul
                       #   móvil porque es el único acceso por teclado al detalle.
 lib/
   types/              # tipos de dominio (reflejo del backend)
-  api/                # client.ts + servicios tipados por dominio (única capa de red)
+  api/                # client.ts + servicios tipados por dominio (única capa de red);
+                      #   reports.ts es la de /reports (ventana obligatoria, Decimales
+                      #   string→number, moneda por fila)
   sse/                # abstracción de eventos en tiempo real (interfaz estable)
   auth/               # AuthContext (login/refresh/logout + acceptInvite), useAuth
   business/           # BusinessProvider/useBusiness (perfil + config del negocio)
@@ -252,6 +256,228 @@ más filas de las que se pueden contar barato, y el contrato lo refleja:
   selector de servicio: lo que se cobra es una cita o un pedido.
 - `pago_recibido` es el evento SSE que refresca la pantalla sola: es la única
   transición que un operador se queda esperando.
+
+## Reportes (`/reports`) — la pantalla de valor, solo para el dueño
+
+Lo que yitopro hizo por el negocio en una ventana. Backend: `apps/reports`
+(`GET /api/reports/value-summary/` + `GET /api/reports/export.csv`, agregación
+read-only con ventana obligatoria); frontend: `app/(app)/reports/page.tsx` +
+`components/reports/` + `lib/api/reports.ts`.
+
+- **El guard solo redirige a `role === "staff"`.** Con el rol ausente (el fallback
+  sin rol del login) NO se redirige: el backend contesta 403 y se muestra el error
+  real — esconder la sección por un rol que aún no cargaba le ocultaba los reportes
+  al dueño de forma intermitente. Un 403 no ofrece reintentar: el mensaje ES la
+  respuesta.
+- **Los bloques de dominio gatean por actividad DE POR VIDA**, no por feature flags
+  ni por rubro: el backend devuelve cada bloque en `null` cuando el negocio nunca
+  tuvo esa actividad, y `null` aquí significa NADA — ni la tarjeta ni su título. Un
+  gate más laxo dibujaría tarjetas que solo pueden decir cero.
+  **La regla es que el gate sea el MISMO predicado que el contador**, y por eso el
+  bloque de agenda tiene DOS: `ai_active_count` mide al asistente (gate: alguna cita
+  `origin=ai` vigente) y los dos rankings miden la operación del negocio (gate:
+  cualquier cita no cancelada). Cada clave viaja `null` por separado. Sin el segundo
+  gate, un negocio que agenda solo desde el panel (`origin='admin'`) no vería nunca
+  su propio reparto — medido en vivo: el tenant demo devuelve `ai_active_count: null`
+  con los dos rankings poblados.
+- **PROHIBIDO ramificar por industria** (`industry`, `applied_templates`,
+  `settings["industry_template"]`): la pantalla es UNA para todos los negocios; lo
+  que cambia entre rubros son los gates de actividad, nunca el layout.
+- **Los rankings de agenda dicen «agendadas», NUNCA «atendidas»**, y cuentan por
+  VOLUMEN, nunca por ingresos. Dos razones medidas, no de estilo: (1) nadie escribe
+  `completed`/`no_show`, así que «atender» no es medible — solo «tener citas
+  agendadas»; y excluir canceladas cambia la respuesta, no la matiza: en el único
+  negocio con datos, por citas totales el top es Anyelo con 4, excluyendo canceladas
+  es Yitzon con 1. (2) `Payment.service` está poblado en 2 de 8 cobros = 8,8% del
+  dinero, así que un «servicio más rentable» vería menos de una décima parte.
+  Tampoco hay superlativos («tu profesional estrella»): lista rankeada con el conteo
+  al lado, porque con una sola cita coronar a alguien dice más de lo que el dato
+  aguanta.
+- **El selector de profesional vive DENTRO del bloque de agenda**, no en la barra
+  global (`?prof=`). Es el único sitio donde cambia algo: `Payment` no tiene FK a
+  profesional y `Conversation`/`Message` tampoco. En la barra dejaría 4 de 6 tarjetas
+  inmóviles, que se lee como un filtro roto. Acota `by_service` y `ai_active_count`;
+  **`by_professional` lo ignora a propósito** — si se auto-filtrara a una fila
+  dejaría de ser un ranking. Con un solo profesional el desplegable no se dibuja.
+- **Con `replies` en cero no se muestra ninguna tarjeta en cero**, pero los bloques
+  de dominio SIGUEN: un período sin mensajes puede tener dinero cobrado, y
+  esconderlo porque nadie escribió es perder el dato que sí existe.
+  **La frase «Tu asistente todavía no ha atendido a nadie» solo aparece si la ventana
+  cubre la vida entera del negocio** (`p=inicio` y `days >= daysSinceSignup`). Ancla
+  en la vida del negocio y el cero es de la ventana: a un negocio de 120 días que
+  elige «Últimos 7 días» tras una semana tranquila le decía, a un clic, que nunca
+  había atendido a nadie. Cualquier otra ventana vacía → `EmptyState` del período.
+- **La moneda es POR FILA, nunca asumida**: cada serie, total y porción del donut
+  trae su `currency` y se formatea con `formatPrice(amount, currency)`. **Prohibido
+  `useMoney` aquí**: no hay una sola moneda del negocio que valga para todas las
+  filas (sumar CLP con PEN es mentir en las dos).
+- **El MoM tiene piso** (`MIN_COMPARABLE_PAYMENTS = 3`, `payments-block.tsx`): con
+  1-2 cobros en la ventana previa el porcentaje es ruido aritmético (un solo cobro da
+  «+4.000%»), así que debajo del piso la línea dice «Sin período comparable» y
+  declara la base.
+- **El tiempo de respuesta se muestra CON su recorte**: el backend solo mide
+  respuestas dentro de `cutoff_s` (300 s — una más lenta es de ritmo humano y
+  contarla haría propaganda de la métrica), y la tarjeta nombra el recorte y el `n`
+  sobreviviente («p90 Ys · base: X de Y respuestas bajo <5 min»). El número grande YA
+  es la mediana: el subtítulo no la repite. `response_time` null → la tarjeta no
+  existe.
+- **El gráfico rellena los días sin cobro con 0** (`revenue-chart.tsx`): el backend
+  omite esos días y recharts espacia los puntos de forma uniforme, así que un salto
+  de dos semanas se dibujaba igual que uno de un día — la pendiente contaba un ritmo
+  que no ocurrió. La rejilla se recorre con `Date` local, no sumando 86.400.000 ms,
+  para que un cambio de horario de verano no salte ni repita una fecha.
+- **Dos tarjetas más, cada una con su gate**: «Cómo te escriben tus clientes»
+  (`customers-block.tsx`) y «Lo más vendido» (`products-block.tsx`). La primera mide
+  **CONDUCTA DEL CLIENTE, NO satisfacción** —el evaluador puntúa 1 = hostil … 5 =
+  excelente y no juzga al negocio—, así que el título y el subtítulo están obligados a
+  decirlo: presentarla como «calificación» a secas haría leer un 2,3 como servicio malo,
+  que es lo contrario del dato. Muestra los CINCO escalones aunque valgan cero (la forma
+  ES el dato) con la etiqueta textual de cada uno. La segunda cuenta UNIDADES, nunca
+  dinero, por lo mismo que el contador de pedidos.
+- **Los rankings colapsan en 5 filas y ofrecen el resto** (`rank-list.tsx`, compartida
+  por agenda y tienda). El backend manda hasta `RANK_LIMIT=20`: con cinco no había forma
+  de llegar a la sexta fila, así que un negocio de quince profesionales veía un tercio de
+  su agenda sin ninguna pista de que faltaba algo. El tope se nombra en pantalla — una
+  lista recortada que no lo declara se lee como completa.
+- **UNA anatomía de tarjeta, en `report-card.tsx`**, y es estructura, no estilo. Medido con
+  Playwright: las siete tarjetas de bloque tenían CUATRO cabeceras de alto distinto, así que
+  el contenido arrancaba en 89 / 109 / 127 / 135 px — tres gráficos de la misma fila
+  empezando a tres alturas, con los pies cuadrados y la fila leyéndose desordenada. Tres de
+  siete tenían subtítulo, seis de siete icono, y una traía un desplegable donde las demás
+  tenían el icono. Reglas: **subtítulo OBLIGATORIO de dos líneas con `h` fija y
+  `line-clamp-2`** (`min-h` no bastaba: tres líneas empujaban el contenido 18 px), **icono
+  siempre** arriba a la derecha (ningún control ocupa su sitio: un filtro va en el
+  contenido), y **pie anclado con `mt-auto`**. Resultado: título e inicio de contenido en un
+  ÚNICO offset en las siete.
+- **Layout: «Cobros» a ancho completo en su propia franja + las SEIS del detalle todas del
+  mismo tamaño** en dos filas de tres (`lg:auto-rows-fr`). El `auto-rows-fr` va SOLO desde
+  `lg`, que es donde hay tres columnas: sin breakpoint, en móvil —una columna, seis filas—
+  igualaba las seis a la más alta y la página pasaba de 3.821 a 5.758 px. Cobros va FUERA de
+  esa grilla porque metido dentro su fila entraba en el reparto y arrastraba a las otras
+  seis. Ya no hay `items-start`: con la anatomía única, estirar reparte aire entre contenido
+  y pie en vez de crear cajones vacíos — que era el defecto original («Pedidos», una frase,
+  dibujado tan alto como la agenda entera).
+- **`COLLAPSED_ROWS = 3` es una decisión de LAYOUT, no de contenido**: la agenda apila dos
+  rankings y es la que fija la altura común de las seis. Con cinco filas cada lista medía
+  819 px y las demás —una de 196— quedaban con más de 600 px de aire.
+- **El período vive en la URL** (`?p=`, `useUrlFilters`: una vista se comparte y sobrevive
+  un reload) y la ventana es obligatoria — días LOCALES inclusivos — porque sin ella cada
+  agregación sería un scan del historial completo del tenant.
+- **UN solo tope, 90 días, y el MISMO en los dos lados** (`MAX_RANGE_DAYS` en
+  `lib/api/reports.ts` y en `apps/reports/api.py`). **No existe «desde el inicio»**: anclaba
+  en el alta del negocio y podía llegar a 366 días, que es justo la consulta que este
+  endpoint no debe permitir — cada llamada abre media docena de agregaciones (respuestas,
+  derivaciones, la LATERAL del tiempo de respuesta, citas, pedidos, líneas de pedido,
+  calificaciones, cobros, enlaces). Ese preset era además la puerta trasera: podía pedir un
+  año mientras el rango escrito a mano se quedaba en un trimestre. Ojo: el
+  `MAX_RANGE_DAYS=366` de `apps/appointments/api.py` NO se toca — una pantalla de calendario
+  sí puede preguntar por un año.
+  El default es `90`, el preset más largo: antes era «desde el inicio» precisamente porque
+  los presets cortos están vacíos el primer mes de un negocio, y 90 conserva esa intención.
+  Verificado en vivo: 90 días → 200, 91 y 366 → 400 en value-summary Y en export.csv;
+  `?p=inicio` escrito a mano cae al default y pide 90, no 366.
+  **Consecuencia a no descubrir por sorpresa**: en un negocio de más de 90 días la frase
+  «tu asistente todavía no ha atendido a nadie» ya no puede aparecer, y es correcto — con una
+  ventana de 90 días no se puede afirmar nada sobre toda la vida de un tenant más viejo. Por
+  eso `isLifetimeWindow` es ahora solo `range.days >= daysSinceSignup`, sin preset
+  privilegiado.
+  Además de los presets hay **rango personalizado** (`?p=custom&from=&to=`), con el tope
+  aplicado DOS veces: el `max` del campo «hasta» impide elegir la fecha inválida, y
+  `customRangeError` cubre la URL escrita a mano. Un par a medio escribir, invertido o pasado
+  de tope **no dispara petición**: se muestra el motivo junto a los campos y en pantalla se
+  queda la última ventana buena.
+- **Los controles de la cabecera miden todos lo mismo** (36 px en desktop, 44 en móvil por
+  el mínimo táctil): «Exportar cobros» va con `size="lg"`, no `sm`. Medido: con `sm` el
+  botón quedaba en 28 px y su borde superior 8 px por debajo del selector y de los campos
+  de fecha —alineados por la base pero visiblemente descolgado—.
+- **recharts se carga solo aquí** (`next/dynamic`, `ssr: false`): el resto del panel
+  no paga el peso de la librería de gráficos. El CSV lo descarga `csv-export-button`
+  envolviendo en un Blob el TEXTO que devuelve `exportValueCsv` — ningún componente
+  habla con la red. El botón se llama «Exportar cobros» y **desaparece con el bloque
+  de pagos en `null`**: prometía el reporte entero y bajaba solo los cobros, y sin
+  cobros el archivo era la fila de encabezados.
+- **BARRAS, no línea, y agrupadas por ventana** (`revenue-chart.tsx`): una línea
+  afirma continuidad entre puntos y el cobro es un hecho discreto. Con la serie
+  diaria rellenada a cero, 121 días con 7 de cobro salían como siete agujas — y un
+  negocio con un solo cobro, como un pico entre 120 ceros. `grainFor()` agrupa por
+  día (≤31), semana (≤120) o mes, lo que deja siempre entre 5 y ~31 barras. La
+  rejilla avanza por CAMPO de fecha, nunca sumando 86.400.000 ms (test de mutación:
+  con ms se salta el 2026-09-06, la noche que Chile adelanta el reloj; el test fija
+  `TZ` porque en CI el proceso corre en UTC y pasaría sin probar nada). El mejor
+  período va en `accent` y **el pie lo nombra con su fecha y su monto**: el color no
+  es el único portador. Una moneda con menos de dos períodos con cobro no dibuja
+  gráfico. El compacto del eje es propio, no `Intl` con `notation:"compact"`, que en
+  `es-CL` mezcla «3,5 K» con «80 k» y aplasta 1.031.000 a «1 M».
+- **El color de una categoría va por CLAVE, nunca por índice de array**
+  (`KIND_COLORS`): por índice, «Cobros sueltos» salía verde en el donut de CLP —donde
+  es el tercero— y morado en el de USD, donde es el único.
+- **Layout: UNA grilla para todos los bloques**, `items-start` + `grid-flow-row-dense`
+  (`page.tsx`). Sin `items-start` las celdas de una fila se estiran a la altura de la
+  más alta, que era por qué «Pedidos» —una frase— se dibujaba como una caja vacía tan
+  alta que la agenda entera cabía dentro. El dinero va PRIMERO y ocupa dos columnas;
+  antes empezaba bajo el fold, detrás de cinco contadores de proceso. `PaymentsBlock`
+  devuelve un FRAGMENTO con tres tarjetas (cobros / composición / enlaces) para que
+  sean hijas directas de esa grilla y se puedan repartir.
+- **La cabecera se dibuja siempre, también mientras carga.** Antes la página entera se
+  reemplazaba por el cargador, así que cambiar de período desmontaba el desplegable
+  recién usado y el foco de teclado caía al `body`.
+- **Movimiento (`lib/motion.ts`, anime.js v4 importado dinámicamente).** Tres reglas:
+  el contenido es VISIBLE por defecto y quien oculta es el módulo, solo cuando va a
+  animar (un `opacity-0` en CSS deja la pantalla en blanco si el JS falla); el
+  ocultado es SÍNCRONO antes del paint porque el import es asíncrono; y hay red de
+  seguridad —si el chunk no carga, el contenido se restaura solo (verificado en
+  navegador abortando el chunk)—. La entrada corre **una sola vez**: cambiar de
+  período remonta el contenido y sin el interruptor `entrance` la coreografía se
+  repetiría en cada clic, justo cuando se quiere comparar dos números. Se anima solo
+  `opacity`/`transform` y `scaleX` en las barras (nunca `width`: reflow por frame).
+  Cuatro capas, las cuatro verificadas en navegador real (14 comprobaciones, incluida la
+  del chunk abortado): entrada escalonada de tarjetas (`translateY 18px` + `scale .985`,
+  560 ms, stagger 70 — con 10 px y sin escala el movimiento existía pero no se notaba),
+  **pop de los iconos** con `outBack` (`data-card-icon`), **crecimiento de las barras** por
+  `scaleX` (nunca `width`: reflow por frame) y **trazado del donut** por `stroke-dasharray`
+  y NO por `dashoffset`, que está ocupado colocando cada porción en su ángulo.
+  Y capas que siguen vivas después de la carga (`useAmbient`), con **dos grupos de fase y
+  ritmo distintos** — si todo respirara al mismo compás la pantalla pulsaría como un bloque,
+  que es justo lo invasivo: `[data-card-glow]` (halo detrás del icono, opacidad + escala,
+  4,6 s, desfase 320 ms) y `[data-card-icon]` (escala 1→1.06, 3,2 s, desfase 240 ms). Hay uno
+  de cada POR TARJETA, así que la vista entera respira sin que se mueva nada del contenido.
+  Más el **levantado de 3 px al pasar el puntero**, que es finito. Todo **se pausa con la
+  pestaña oculta** (`visibilitychange`): un bucle infinito en una pestaña de fondo gasta
+  batería para nadie, y el observador purga del registro las tarjetas que un filtro
+  desconectó, para no dejar tickers sobre nodos huérfanos.
+  **TRES cosas que NUNCA se animan en bucle, las tres por medición:** (1) ningún DATO — un
+  número o una barra a media animación es un valor falso y un bucle no termina, así que no
+  habría un instante en el que fuese cierto; (2) ninguna CAJA CLICABLE — una versión
+  flotaba la tarjeta entera ±2 px y Playwright se negó a hacer hover con «element is not
+  stable». No era cosa del test: cada tarjeta lleva enlaces «Ver…», y un blanco en
+  movimiento perpetuo es difícil de apuntar con el ratón y hostil para quien tenga temblor o
+  control motor reducido. De ahí que el ambiente viva en elementos DECORATIVOS
+  (`aria-hidden`, `pointer-events-none`) dentro de cada tarjeta; (3) NADA DENTRO DEL
+  GRÁFICO — hubo un latido sobre el punto del mejor período y se quitó: un elemento en
+  movimiento encima de los datos compite con su lectura. El punto sigue destacado (`accent`,
+  radio mayor) y el pie lo nombra con su fecha y su monto, que es lo que de verdad lo señala.
+  Dos trampas que costaron una medición cada una, y las dos por lo mismo — el hook corre
+  ANTES de que exista lo que busca: el punto del gráfico llega por `next/dynamic` y recharts
+  lo pinta después (se resuelve con un `MutationObserver`, que además cubre el repintado al
+  filtrar), y en el primer render la página devuelve el cargador SIN el contenedor, así que
+  `ref.current` era `null` y el efecto salía para no volver (se resuelve con la dependencia
+  `enabled`). El hover va por DELEGACIÓN en el contenedor, no con un listener por tarjeta,
+  para que dé igual cuándo aparezcan y sobreviva a que los bloques cambien.
+  Los tres hooks de nivel de página RECIBEN la ref en vez de crearla: operan sobre el mismo
+  contenedor y un nodo del DOM no admite tres refs.
+  `prefers-reduced-motion` se respeta en los SEIS sitios donde puede nacer una animación —
+  los cinco hooks del módulo, `useCountUp` y el `isAnimationActive` de recharts, que no
+  consulta la preferencia por su cuenta.
+- **Ninguna tarjeta del núcleo lleva chip de variación**: el backend solo devuelve
+  ventana previa para cobros. Un «+31% vs la semana pasada» en cada tarjeta, como el
+  de cualquier plantilla, aquí sería inventado. El chip del MoM lleva flecha además
+  de color.
+- **`by_trigger` es `Record<string, number>`** en el tipo del front, como el
+  `dict[str, int]` del backend: declararlo con las cuatro claves de hoy hacía que un
+  quinto motivo viajara en la respuesta y desapareciera del tipo. En la tarjeta de
+  derivaciones se nombra el motivo dominante **solo si no hay empate** —con empate,
+  «el principal» sería el que el backend serializó primero— y el número que manda es
+  el de las que **siguen esperando**, no el de las atendidas.
 
 ## Caso de dominio para tests
 

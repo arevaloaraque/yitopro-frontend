@@ -27,6 +27,7 @@ interface BackendBusiness {
   whatsapp_number: string;
   onboarding_status: Business["onboarding_status"];
   assistant_config: Business["assistant_config"];
+  created_at: string;
 }
 
 function toBusiness(b: BackendBusiness): Business {
@@ -44,6 +45,7 @@ function toBusiness(b: BackendBusiness): Business {
     whatsapp_number: b.whatsapp_number,
     onboarding_status: b.onboarding_status,
     assistant_config: b.assistant_config,
+    created_at: b.created_at,
   };
 }
 

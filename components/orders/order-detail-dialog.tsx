@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, Loader2, MessageSquare, Pencil } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  Loader2,
+  MessageSquare,
+  Pencil,
+} from "lucide-react";
 
 import type { Order } from "@/lib/api";
 import { listConversations } from "@/lib/api/conversations";
@@ -46,9 +52,13 @@ const CONV_STATUS_LABELS: Record<Conversation["status"], string> = {
 /**
  * Read-only detail of one order.
  *
- * Purely presentational and fetch-free: `GET /api/orders/` already returns every order
- * with its lines and isn't paginated, so the row hands over the object it already has.
- * That is also why this works for a CONFIRMED order — before this drawer existed the
+ * Purely presentational as far as the order goes: `GET /api/orders/` returns every order
+ * WITH its lines, so the row hands over the object it already has and this dialog never
+ * refetches it. (It IS paginated — the old comment here claimed otherwise and that was
+ * how a `res.map is not a function` shipped: the envelope changed and the docs did not.
+ * Pagination is irrelevant to this dialog, which is handed one row, but it is not
+ * irrelevant to whoever reads this next.)
+ * Being handed the row is also why this works for a CONFIRMED order — before this drawer existed the
  * structured lines lived only in the edit dialog, which opens for drafts only, so
  * confirming an order made its own contents permanently unreachable.
  */
@@ -77,8 +87,11 @@ export function OrderDetailDialog({
     if (!customerId) return;
     const reqId = ++reqRef.current;
     listConversations({ customerId })
-      .then((rows) => {
-        if (reqId === reqRef.current) setConvRows({ customerId, rows });
+      // `.items`: el inbox pasó a paginarse por cursor. Basta la primera página:
+      // esto rotula «las conversaciones DEL CLIENTE», no el hilo que originó el
+      // pedido — esa relación no existe en el modelo.
+      .then((page) => {
+        if (reqId === reqRef.current) setConvRows({ customerId, rows: page.items });
       })
       .catch(() => {
         if (reqId === reqRef.current) setConvFailedFor(customerId);

@@ -26,15 +26,37 @@ describe("CustomerRating", () => {
     expect(screen.getByText("Sin calificar")).toBeTruthy();
   });
 
-  it("shows the average out of 5 with how many conversations back it", () => {
+  it("shows the average as stars, with how many conversations back it", () => {
     render(<CustomerRating avg={4.5} count={2} />);
-    expect(screen.getByText("4,5")).toBeTruthy(); // es-CL decimal comma
-    expect(screen.getByText(/\/ 5 · 2 conversaciones/)).toBeTruthy();
+    // El dígito ya no se pinta: vive en el nombre accesible (coma decimal es-CL).
+    expect(screen.getByLabelText("4,5 de 5")).toBeTruthy();
+    expect(screen.queryByText("4,5")).toBeNull();
+    expect(screen.getByText(/· 2 conversaciones/)).toBeTruthy();
   });
 
   it("agrees in number for a single conversation", () => {
     render(<CustomerRating avg={3} count={1} />);
-    expect(screen.getByText(/\/ 5 · 1 conversación$/)).toBeTruthy();
+    expect(screen.getByText(/· 1 conversación$/)).toBeTruthy();
+  });
+
+  it("rellena las estrellas EN PROPORCIÓN, sin redondear al alza", () => {
+    // 4,5 sobre 5 = 90 % del ancho. Redondear a 5 estrellas exageraría el juicio
+    // sobre una persona, que es justo lo que este componente existe para no hacer.
+    const { container } = render(<CustomerRating avg={4.5} count={2} />);
+    const fill = container.querySelector<HTMLElement>("[style*='width']");
+    expect(fill?.style.width).toBe("90%");
+  });
+
+  it("no pinta relleno cuando el promedio es el mínimo posible", () => {
+    const { container } = render(<CustomerRating avg={1} count={1} />);
+    const fill = container.querySelector<HTMLElement>("[style*='width']");
+    expect(fill?.style.width).toBe("20%");
+  });
+
+  it("oculta la cola de conversaciones en modo compacto", () => {
+    render(<CustomerRating avg={4} count={2} compact />);
+    expect(screen.getByLabelText("4 de 5")).toBeTruthy();
+    expect(screen.queryByText(/conversaciones/)).toBeNull();
   });
 
   it("states WHOSE behaviour the number describes", () => {
@@ -61,9 +83,12 @@ describe("ThreadRating", () => {
     expect(screen.getByText("Sin calificar")).toBeTruthy();
   });
 
-  it("shows the thread's own score", () => {
-    render(<ThreadRating value={2} status="rated" />);
-    expect(screen.getByText("2")).toBeTruthy();
-    expect(screen.getByText("/5")).toBeTruthy();
+  it("shows the thread's own score as stars", () => {
+    const { container } = render(<ThreadRating value={2} status="rated" />);
+    expect(screen.getByLabelText("2 de 5")).toBeTruthy();
+    expect(screen.queryByText("/5")).toBeNull();
+    expect(container.querySelector<HTMLElement>("[style*='width']")?.style.width).toBe(
+      "40%",
+    );
   });
 });

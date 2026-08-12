@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { ListFooter } from "@/components/ui/list-footer";
+import { RowOpenButton } from "@/components/ui/row-open-button";
 import {
   Table,
   TableBody,
@@ -14,12 +16,15 @@ import type { Appointment } from "@/lib/types";
 
 import { AppointmentActions } from "./appointment-actions";
 import { AppointmentDetailPopover } from "./appointment-detail-popover";
-import { statusLabel, type StatusFilter } from "./status-tabs";
 import type { EnrichedAppointment } from "./types";
 
 interface AppointmentListViewProps {
+  /** Ya filtradas en el servidor: aquí no se vuelve a filtrar por estado. */
   appointments: EnrichedAppointment[];
-  statusFilter: StatusFilter;
+  /** `count` del servidor: cuántas citas tiene el filtro, no cuántas se bajaron. */
+  total: number;
+  loading: boolean;
+  onLoadMore: () => void;
   onCancel: (a: Appointment) => void;
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
@@ -57,7 +62,9 @@ function statusBadge(status: Appointment["status"]) {
 
 export function AppointmentListView({
   appointments,
-  statusFilter,
+  total,
+  loading,
+  onLoadMore,
   onCancel,
   onReschedule,
   onHistory,
@@ -72,92 +79,137 @@ export function AppointmentListView({
     anchor: HTMLElement;
   } | null>(null);
 
-  const filtered = useMemo(() => {
-    if (statusFilter === "all") return appointments;
-    return appointments.filter((a) => a.status === statusFilter);
-  }, [appointments, statusFilter]);
+  // La tarjeta se ancla a la FILA, no al botón que la abre: centrada bajo la
+  // fila entera es donde ya aparecía al hacer click, y anclarla al botón la
+  // pegaría al borde izquierdo. `RowOpenButton` no entrega el evento (a
+  // propósito: quien la use no debería depender del DOM), así que cada fila
+  // deja aquí su elemento.
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+
+  const openDetail = useCallback((apt: EnrichedAppointment) => {
+    const row = rowRefs.current.get(apt.id);
+    if (row) setSelected({ apt, anchor: row });
+  }, []);
+
+  // CITAS-09 revisado: se muestra el orden que manda el servidor
+  // (`start_datetime, id` ascendente) y NO se reordena en el navegador. El
+  // reorden descendente existía para que la primera pantalla no fuera el
+  // historial más viejo, pero con paginación real es incompatible: «Cargar más»
+  // trae citas MÁS NUEVAS, que al reordenar saltan arriba de las que ya estaban
+  // y mueven la fila que el operador está leyendo. Mostrar lo último primero
+  // necesita que el backend acepte un `ordering` (como ya hace `/customers/`);
+  // hasta entonces el filtro «Agendadas» deja la lista en el orden útil: las
+  // próximas, en orden cronológico.
+  // RESUELTO: `/api/appointments/` ya acepta `ordering`, y la página pide
+  // `-start_datetime` para esta vista. La tabla sigue pintando el orden que llega
+  // sin reordenar nada, que es la única forma compatible con paginar.
 
   return (
     <>
       <Table>
         <TableHeader>
+          {/* Las columnas se caen por breakpoint en vez de sobrevivir tras un
+              scroll horizontal: a 375px el scroll dejaba «Servicio | Cliente»
+              en pantalla y empujaba fuera Estado y las acciones, que es justo
+              para lo que se abre la tabla. Servicio no se va nunca porque lleva
+              el único acceso por teclado al detalle; Estado tampoco, porque es
+              lo que la fila existe para comunicar. */}
           <TableRow>
             <TableHead>Servicio</TableHead>
             <TableHead>Cliente</TableHead>
-            <TableHead>Profesional</TableHead>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Hora</TableHead>
-            <TableHead>Estado</TableHead>
-            <TableHead>Origen</TableHead>
+            <TableHead className="hidden lg:table-cell">Profesional</TableHead>
+            <TableHead className="hidden w-36 sm:table-cell">Fecha</TableHead>
+            <TableHead className="hidden w-32 md:table-cell">Hora</TableHead>
+            <TableHead className="w-28">Estado</TableHead>
+            <TableHead className="hidden w-20 xl:table-cell">Origen</TableHead>
             <TableHead className="w-10" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filtered.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                Sin citas
-                {statusFilter !== "all" ? ` en estado "${statusLabel(statusFilter)}"` : ""}
-              </TableCell>
-            </TableRow>
-          ) : (
-            filtered.map((apt) => {
-              const s = statusBadge(apt.status);
-              return (
-                <TableRow
-                  key={apt.id}
-                  className="cursor-pointer"
-                  tabIndex={0}
-                  onClick={(e) => setSelected({ apt, anchor: e.currentTarget })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelected({ apt, anchor: e.currentTarget });
-                    }
-                  }}
-                >
-                  <TableCell className="font-medium">{apt.serviceName}</TableCell>
-                  <TableCell>{apt.customerName}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {apt.professionalName}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground tabular-nums">
-                    {formatDate(apt.start)}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatTime(apt.start)} – {formatTime(apt.end)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={s.variant}>{s.label}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {apt.created_by === "ai" ? (
-                      <Badge
-                        variant="outline"
-                        className="border-accent/30 bg-accent/10 text-accent"
-                      >
-                        IA
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Manual</span>
-                    )}
-                  </TableCell>
-                  {/* The row opens the popover; the "…" menu must not, so its
-                      clicks stop here. */}
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <AppointmentActions
-                      appointment={apt}
-                      onCancel={onCancel}
-                      onReschedule={onReschedule}
-                      onHistory={onHistory}
-                    />
-                  </TableCell>
-                </TableRow>
-              );
-            })
-          )}
+          {appointments.map((apt) => {
+            const s = statusBadge(apt.status);
+            return (
+              <TableRow
+                key={apt.id}
+                ref={(el) => {
+                  if (el) rowRefs.current.set(apt.id, el);
+                  else rowRefs.current.delete(apt.id);
+                }}
+                className="cursor-pointer"
+                // Sin `tabIndex` ni `onKeyDown`: la fila que escuchaba el
+                // teclado hacía `preventDefault()` y mataba el click nativo que
+                // Enter dispara sobre los botones de dentro — se tabulaba hasta
+                // «Ver historial», se pulsaba Enter y se abría el detalle.
+                // Queda solo el click, como comodidad de ratón.
+                onClick={() => openDetail(apt)}
+              >
+                <TableCell className="font-medium">
+                  <RowOpenButton
+                    label={`Ver detalle de la cita de ${apt.customerName}: ${apt.serviceName}`}
+                    onOpen={() => openDetail(apt)}
+                  >
+                    {apt.serviceName}
+                  </RowOpenButton>
+                  {/* Fecha y hora tienen columna propia desde `sm`; por debajo
+                      se leen aquí, porque una cita sin cuándo no es una cita. */}
+                  <span className="block text-xs whitespace-normal text-muted-foreground tabular-nums sm:hidden">
+                    {formatDate(apt.start)} · {formatTime(apt.start)}
+                  </span>
+                </TableCell>
+                <TableCell>{apt.customerName}</TableCell>
+                <TableCell className="hidden text-muted-foreground lg:table-cell">
+                  {apt.professionalName}
+                </TableCell>
+                <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">
+                  {formatDate(apt.start)}
+                </TableCell>
+                <TableCell className="hidden tabular-nums md:table-cell">
+                  {formatTime(apt.start)} – {formatTime(apt.end)}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={s.variant}>{s.label}</Badge>
+                </TableCell>
+                <TableCell className="hidden xl:table-cell">
+                  {apt.created_by === "ai" ? (
+                    <Badge
+                      variant="outline"
+                      className="border-accent/30 bg-accent/10 text-accent"
+                    >
+                      IA
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Manual</span>
+                  )}
+                </TableCell>
+                {/* The row opens the popover; the "…" menu must not, so its
+                    clicks stop here. */}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <AppointmentActions
+                    appointment={apt}
+                    onCancel={onCancel}
+                    onReschedule={onReschedule}
+                    onHistory={onHistory}
+                  />
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
+
+      {/* El pie dice «Mostrando 25 de 4.312» con el `count` del servidor: antes
+          la lista bajaba lo que cupiera en una respuesta y no había forma de
+          saber que faltaban citas. */}
+      <div className="mt-4">
+        <ListFooter
+          shown={appointments.length}
+          total={total}
+          loading={loading}
+          onLoadMore={onLoadMore}
+          noun="cita"
+          nounPlural="citas"
+        />
+      </div>
 
       {selected && (
         <AppointmentDetailPopover
