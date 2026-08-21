@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { customRangeError, dayISO } from "@/lib/format/date";
 
 /**
  * Reportes de valor (`/api/reports/`), solo para el dueño (el backend responde
@@ -222,41 +223,10 @@ function fromBackend(raw: BackendValueSummary): ValueSummary {
   };
 }
 
-/** El día `YYYY-MM-DD` en la zona LOCAL del navegador — `toISOString()` daría
- *  el día UTC y la ventana se correría una fecha (criterio de `customWindow`
- *  de payments: medianoche local, no UTC). */
-function ymdLocal(d: Date): string {
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
 /** Medianoche LOCAL del día que contiene `iso` (un `created_at` ISO 8601). */
 function localDayStart(iso: string): Date {
   const d = new Date(iso);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-/** «Hoy» en la zona del operador. `toISOString().slice(0,10)` daría el día UTC:
- *  en Chile, pasadas las 20:00 el campo «hasta» arrancaría en mañana y su propio
- *  `max` lo daría por inválido. `sv-SE` es el locale que formatea `YYYY-MM-DD`,
- *  que es justo lo que acepta un `<input type="date">`. */
-export function todayISO(): string {
-  return new Date().toLocaleDateString("sv-SE");
-}
-
-/**
- * Cadena vacía cuando el par de fechas sirve; el motivo, cuando no.
- *
- * El tope es el MISMO `MAX_WINDOW_DAYS` que el backend valida, así que un rango
- * aceptado aquí no puede devolver 400 allá: una sola fuente para el límite.
- */
-export function customRangeError(from: string, to: string): string {
-  if (!from || !to) return "Selecciona las dos fechas.";
-  if (to < from) return "La fecha final es anterior a la inicial.";
-  const days = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1;
-  if (days > MAX_RANGE_DAYS) return `El rango no puede superar ${MAX_RANGE_DAYS} días.`;
-  return "";
 }
 
 /**
@@ -275,7 +245,11 @@ export function customRangeError(from: string, to: string): string {
 export function reportWindow(period: ReportPeriod, custom?: CustomRange): ReportWindow {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (period === "custom" && custom && !customRangeError(custom.from, custom.to)) {
+  if (
+    period === "custom" &&
+    custom &&
+    !customRangeError(custom.from, custom.to, MAX_RANGE_DAYS)
+  ) {
     const [fy, fm, fd] = custom.from.split("-").map(Number);
     const [ty, tm, td] = custom.to.split("-").map(Number);
     const days =
@@ -288,7 +262,7 @@ export function reportWindow(period: ReportPeriod, custom?: CustomRange): Report
   const span = period === "custom" ? MAX_RANGE_DAYS : Number(period);
   const start = new Date(end);
   start.setDate(start.getDate() - (span - 1));
-  return { date_from: ymdLocal(start), date_to: ymdLocal(end), days: span };
+  return { date_from: dayISO(start), date_to: dayISO(end), days: span };
 }
 
 /** «En tus N días con yitopro»: días locales desde el alta hasta hoy, mínimo 1. */

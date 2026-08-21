@@ -23,8 +23,10 @@ interface BackendBusiness {
   timezone: string;
   active: boolean;
   is_operative: boolean;
+  is_blocked: boolean;
   whatsapp_connected: boolean;
   whatsapp_number: string;
+  entitlements: Business["entitlements"];
   onboarding_status: Business["onboarding_status"];
   assistant_config: Business["assistant_config"];
   created_at: string;
@@ -41,8 +43,10 @@ function toBusiness(b: BackendBusiness): Business {
     timezone: b.timezone,
     is_active: b.active,
     is_operative: b.is_operative,
+    is_blocked: b.is_blocked,
     whatsapp_connected: b.whatsapp_connected,
     whatsapp_number: b.whatsapp_number,
+    entitlements: b.entitlements,
     onboarding_status: b.onboarding_status,
     assistant_config: b.assistant_config,
     created_at: b.created_at,
@@ -99,7 +103,20 @@ const CONFIG_FIELDS: (keyof BusinessConfig)[] = [
   "handoff_timeout_revert_message",
   "off_topic_message",
   "business_context",
+  "flexible_scheduling",
+  "closing_grace_minutes",
 ];
+
+/**
+ * Defaults for fields where "" (the meaningful empty for every message) would be a
+ * lie: `tone` is a closed enum, and the scheduling pair is a bool/int — "" typed as
+ * boolean survives by accident and breaks a number input.
+ */
+const CONFIG_DEFAULTS: Partial<BusinessConfig> = {
+  tone: "friendly",
+  flexible_scheduling: false,
+  closing_grace_minutes: 0,
+};
 
 /**
  * `GET /businesses/me/config/` returns the WHOLE config row — ~25 fields, including the
@@ -112,9 +129,9 @@ const CONFIG_FIELDS: (keyof BusinessConfig)[] = [
 function pickConfig(raw: Record<string, unknown>): BusinessConfig {
   return Object.fromEntries(
     // "" is the meaningful empty for every message (the backend falls back to its
-    // per-language default), but not for `tone`, which is a closed enum — an absent one
-    // would mint an invalid AssistantTone through the cast below.
-    CONFIG_FIELDS.map((key) => [key, raw[key] ?? (key === "tone" ? "friendly" : "")]),
+    // per-language default); the non-string fields get their own default from
+    // CONFIG_DEFAULTS instead of minting an invalid value through the cast below.
+    CONFIG_FIELDS.map((key) => [key, raw[key] ?? CONFIG_DEFAULTS[key] ?? ""]),
   ) as unknown as BusinessConfig;
 }
 

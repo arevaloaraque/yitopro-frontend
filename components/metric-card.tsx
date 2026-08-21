@@ -1,5 +1,3 @@
-import { Minus, TrendingDown, TrendingUp } from "lucide-react";
-
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +6,6 @@ export interface MetricCardProps {
   value: string | number;
   subValue?: string;
   icon: React.ReactNode;
-  trend?: "up" | "down" | "neutral";
   variant?: "default" | "accent" | "warning";
 }
 
@@ -17,7 +14,6 @@ export function MetricCard({
   value,
   subValue,
   icon,
-  trend,
   variant = "default",
 }: MetricCardProps) {
   return (
@@ -37,28 +33,10 @@ export function MetricCard({
         </span>
       </CardHeader>
       <CardContent className="pb-1">
-        <div className="flex items-baseline gap-2.5">
+        <div>
           <span className="text-[1.75rem] leading-none font-semibold tracking-tight text-foreground tabular-nums">
             {value}
           </span>
-          {trend ? (
-            <span
-              className={cn(
-                "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.65rem] font-semibold",
-                trend === "up" && "bg-success/10 text-success",
-                trend === "down" && "bg-destructive/10 text-destructive",
-                trend === "neutral" && "bg-muted text-muted-foreground",
-              )}
-            >
-              {trend === "up" ? (
-                <TrendingUp className="size-2.5" />
-              ) : trend === "down" ? (
-                <TrendingDown className="size-2.5" />
-              ) : (
-                <Minus className="size-2.5" />
-              )}
-            </span>
-          ) : null}
         </div>
         {subValue ? (
           <p className="mt-1.5 text-[0.7rem] leading-relaxed text-muted-foreground">

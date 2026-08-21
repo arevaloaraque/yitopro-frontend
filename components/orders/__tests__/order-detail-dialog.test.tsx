@@ -29,6 +29,7 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
     active_agent: null,
     assignee_id: null,
     last_message_at: "2026-07-31T09:00:00Z",
+    created_at: "2026-07-30T09:00:00Z",
     unread: 0,
     customer_rating: null,
     rating_status: "pending",
@@ -170,7 +171,7 @@ describe("OrderDetailDialog — conversaciones del cliente", () => {
     });
     renderDrawer();
     const link = await screen.findByRole("link", { name: /Cerrada/ });
-    expect(link).toHaveAttribute("href", "/conversations?id=conv-9");
+    expect(link).toHaveAttribute("href", "/conversations?chat=c1&id=conv-9");
   });
 
   it("pide solo las conversaciones de ese cliente", async () => {

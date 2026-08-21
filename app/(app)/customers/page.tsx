@@ -46,11 +46,13 @@ import {
   type CustomerSearchParams,
 } from "@/lib/api/customers";
 import { formatDateTime, listDate } from "@/lib/format/date";
+import { useBusinessOptional } from "@/lib/business/business-context";
 import { useDebounced } from "@/lib/hooks/use-debounced";
 import { useUrlFilters } from "@/lib/hooks/use-url-filters";
 import { subscribeToEvents } from "@/lib/sse";
 import { cn } from "@/lib/utils";
 import type { Customer } from "@/lib/types";
+import { todayISO } from "@/lib/format/date";
 
 type PageState = "loading" | "error" | "ready";
 
@@ -104,22 +106,6 @@ const SORTS: { value: CustomerOrdering; label: string }[] = [
   { value: "rating_avg", label: "Peor calificados" },
 ];
 
-/**
- * «Hoy» en la zona horaria del operador, para el `max` de los dos campos.
- *
- * `toISOString().slice(0,10)` daría el día UTC mientras la ventana se interpreta
- * a medianoche LOCAL (ver `dayIso` en `lib/api/customers.ts`): en Chile, pasadas
- * las 20:00, el campo «hasta» tendría un `max` de ayer y el navegador daría por
- * inválido el día en curso. `sv-SE` es el locale que formatea `YYYY-MM-DD`, que
- * es lo que un `<input type="date">` acepta.
- *
- * Copia de la de `/payments`; el hogar compartido de estos helpers de fecha es
- * otra tarea (ver la nota de `lib/format/date.ts`).
- */
-function todayISO(): string {
-  return new Date().toLocaleDateString("sv-SE");
-}
-
 /** Cómo se nombra el periodo puesto, para el vacío «sin resultados». Vacío = sin
  *  periodo. Las fechas se dicen tal como las muestra el control (`YYYY-MM-DD`) a
  *  propósito: el operador tiene que poder reconocer el campo que las contiene. */
@@ -135,6 +121,15 @@ function periodText(from: string, to: string): string {
 type ListQuery = Omit<CustomerSearchParams, "limit" | "offset">;
 
 function CustomersPageContent() {
+  // La calificación de comportamiento la produce el evaluador de conversaciones:
+  // sin asistente en el plan no hay conversaciones que evaluar, así que la
+  // columna y sus dos ordenamientos no describen nada. Solo ante un `false`
+  // explícito, como el resto del panel.
+  const hasAssistant =
+    useBusinessOptional()?.business?.entitlements?.assistant !== false;
+  const sortOptions = hasAssistant
+    ? SORTS
+    : SORTS.filter((s) => !s.value.includes("rating"));
   const searchParams = useSearchParams();
   const [state, setState] = useState<PageState>("loading");
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -380,7 +375,7 @@ function CustomersPageContent() {
 
   if (state === "error") {
     return (
-      <div className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="w-full space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Clientes
@@ -395,7 +390,7 @@ function CustomersPageContent() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -429,7 +424,7 @@ function CustomersPageContent() {
               pinta el valor crudo, o sea que el control se llamaría
               «-created_at». */}
           <Select
-            items={SORTS}
+            items={sortOptions}
             value={sort}
             onValueChange={(v) => setFilters({ sort: (v as string) ?? sort })}
           >
@@ -441,7 +436,7 @@ function CustomersPageContent() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {SORTS.map((s) => (
+              {sortOptions.map((s) => (
                 <SelectItem key={s.value} value={s.value}>
                   {s.label}
                 </SelectItem>
@@ -596,7 +591,7 @@ function CustomersPageContent() {
                 {/* Comportamiento DEL cliente (1-5), del evaluador de conversaciones. El
                     encabezado nombra la dirección: un "Rating" pelado se lee como la
                     calificación que el cliente nos dio. */}
-                <TableHead className="w-32">Comportamiento</TableHead>
+                {hasAssistant && <TableHead className="w-32">Comportamiento</TableHead>}
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
@@ -626,12 +621,18 @@ function CustomersPageContent() {
                   >
                     {listDate(c.created_at)}
                   </TableCell>
-                  <TableCell>
-                    {/* `compact`: la columna es estrecha y la cola «· 3 conversaciones»
-                        la ensanchaba hasta empujar el resto fuera del teléfono. El dato
-                        sigue en el `title` del propio componente. */}
-                    <CustomerRating avg={c.rating_avg} count={c.rating_count} compact />
-                  </TableCell>
+                  {hasAssistant && (
+                    <TableCell>
+                      {/* `compact`: la columna es estrecha y la cola «· 3 conversaciones»
+                          la ensanchaba hasta empujar el resto fuera del teléfono. El dato
+                          sigue en el `title` del propio componente. */}
+                      <CustomerRating
+                        avg={c.rating_avg}
+                        count={c.rating_count}
+                        compact
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>
                     <ChevronRight className="size-4 text-muted-foreground" />
                   </TableCell>

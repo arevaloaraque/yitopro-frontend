@@ -8,17 +8,18 @@ import {
   closeConversation,
   getConversation,
   listConversations,
-  listMessages,
   reactivateAI,
   sendMessage,
   takeConversation,
-  type MessagePage,
 } from "@/lib/api/conversations";
+import { useCustomerThread } from "@/lib/conversations/use-customer-thread";
+import { useRequireAssistant } from "@/lib/business";
 import { subscribeToEvents } from "@/lib/sse";
 import { useAgents } from "@/lib/agents";
 import { useAuth } from "@/lib/auth";
 import { useDebounced } from "@/lib/hooks/use-debounced";
 import { useUrlFilters } from "@/lib/hooks/use-url-filters";
+import { dayISO } from "@/lib/format/date";
 import { formatNumber } from "@/lib/utils";
 import type { CustomerSelection } from "@/components/customers/customer-combobox";
 import type {
@@ -30,16 +31,16 @@ import type {
   ConversacionReactivadaEvent,
   MensajeAutomaticoEnviadoEvent,
   MensajeRecibidoEvent,
-  Message,
 } from "@/lib/types";
 import { EmptyState } from "@/components/states/empty-state";
+import { ErrorState } from "@/components/states/error-state";
 import { cn } from "@/lib/utils";
 
-import { ConversationDetail } from "./_components/conversation-detail";
-import { ConversationList, type InboxView } from "./_components/conversation-list";
+import { ConversationList } from "./_components/conversation-list";
+import { CustomerThread } from "./_components/customer-thread";
 
-/** Lo que viaja en la URL. Lo que vale el default no se escribe (ver `useUrlFilters`). */
-const FILTER_DEFAULTS = { status: "all", q: "", view: "thread" };
+/** Lo que viaja en la URL como FILTRO. La selección va aparte (ver `setSearchParam`). */
+const FILTER_DEFAULTS = { status: "all", q: "" };
 
 /**
  * La URL la escribe cualquiera. Un `?status=lol` pegado a mano no debe dejar la bandeja sin
@@ -50,10 +51,6 @@ function asStatusFilter(raw: string): ConversationStatus | "all" {
   return raw === "ai_active" || raw === "human_handoff" || raw === "closed"
     ? raw
     : "all";
-}
-
-function asView(raw: string): InboxView {
-  return raw === "number" ? "number" : "thread";
 }
 
 /** Escribe (o borra, con `null`) UNA clave de la query sin tocar las demás. */
@@ -69,62 +66,44 @@ function setSearchParam(key: string, value: string | null) {
  * Coalescing de los refetch que dispara el SSE.
  *
  * Un cliente que escribe cinco líneas seguidas emite cinco `mensaje_recibido`, y cada uno
- * volvía a bajar el hilo más la fila. Ahora el hilo viene paginado (la página más nueva),
- * así que el refetch está acotado; lo que sigue haciendo falta es que una ráfaga cueste una
- * request y no N. Pedir SOLO los mensajes nuevos necesitaría un `after=` que el backend no
- * expone: `before=` sirve para subir a la historia, no para completar la cola.
+ * volvía a bajar el hilo más la fila. Lo que hace falta es que una ráfaga cueste una request y
+ * no N. Pedir SOLO los mensajes nuevos necesitaría un `after=` que el backend no expone:
+ * `before=` sirve para subir a la historia, no para completar la cola.
  */
 const SSE_COALESCE_MS = 250;
 
-/**
- * DECISIÓN: el refetch del SSE MERGEA la cola, no reemplaza el hilo.
- *
- * Ese refetch trae la página MÁS NUEVA. Si el operador había pulsado «Ver mensajes
- * anteriores» para leer historia, reemplazar el hilo le tira las páginas que pidió y el chat
- * salta al fondo justo mientras lee — y basta un mensaje entrante para que pase. Mergear
- * conserva lo que hay y añade solo lo que no se tenía.
- *
- * El caso raro está cubierto: si la página nueva no solapa con NINGÚN mensaje en pantalla,
- * entraron más mensajes que el tamaño de página y mergear dejaría un hueco invisible en
- * medio del chat; ahí sí se reemplaza, y `has_more` vuelve a describir el hilo. Se compara
- * por id, no por posición ni por id mayor: los ids no van en orden de tiempo para filas
- * insertadas con fecha atrasada (lo dice el propio backend al resolver `before`).
- */
-function mergeNewMessages(
-  prev: Message[],
-  page: MessagePage,
-): { messages: Message[]; replaced: boolean } {
-  const known = new Set(prev.map((m) => m.id));
-  if (!page.items.some((m) => known.has(m.id)))
-    return { messages: page.items, replaced: true };
-  const nuevos = page.items.filter((m) => !known.has(m.id));
-  return { messages: nuevos.length ? [...prev, ...nuevos] : prev, replaced: false };
-}
+/** El orden de la bandeja. Estaba escrito cinco veces en este archivo. */
+const byRecentActivity = (a: Conversation, b: Conversation) =>
+  b.last_message_at.localeCompare(a.last_message_at);
 
 function ConversationsInner() {
   const { user } = useAuth();
-  // Initial selection comes from the URL (?id=…) so it survives F5 and is
-  // deep-linkable (from the dashboard, a shared link, etc.).
   const searchParams = useSearchParams();
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(() =>
-    searchParams.get("id"),
-  );
 
-  // Estado, término y vista viven en la URL: una bandeja filtrada se comparte y sobrevive un
-  // F5. El hook preserva las claves que no gestiona, así que el `?id=` del hilo abierto no se
-  // pierde al filtrar.
+  /**
+   * Lo que está abierto es un NÚMERO (id de cliente), no una conversación.
+   *
+   * `?chat=` es la clave canónica y la única que esta pantalla lee. `?id=` se
+   * acepta como entrada —lo escribe la campana, cuyo payload SSE no trae el
+   * cliente— y se resuelve a `chat=` una sola vez: no hay ramas que lean `id`.
+   */
+  const [openChat, setOpenChat] = useState<string | null>(() =>
+    searchParams.get("chat"),
+  );
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+
+  // Estado y término viven en la URL: una bandeja filtrada se comparte y sobrevive un F5. El
+  // hook preserva las claves que no gestiona, así que el `?chat=` abierto no se pierde al
+  // filtrar.
   const [filters, setFilters] = useUrlFilters(FILTER_DEFAULTS);
   const statusFilter = asStatusFilter(filters.status);
-  const view = asView(filters.view);
 
-  // El input va sin retraso; lo retrasado es el término con el que se CONSULTA (y con el que
-  // se escribe la URL, que era un `replaceState` por pulsación). Ahora el buscador es de
-  // servidor: `filters.q` es la única copia del término, así que la petición se deriva de él
-  // y no puede desincronizarse de lo que dice la URL.
   const [search, setSearch] = useState(() => filters.q);
   const debouncedSearch = useDebounced(search);
   useEffect(() => {
@@ -132,9 +111,8 @@ function ConversationsInner() {
   }, [debouncedSearch, setFilters]);
   const searchTerm = filters.q;
 
-  // Filtro de SERVIDOR (`?customer_id=`): a diferencia del buscador, sí alcanza el historial
-  // completo de esa persona. No va a la URL porque el combobox necesita el nombre para
-  // dibujarse y el id solo no lo trae.
+  // Filtro de SERVIDOR (`?customer_id=`). No va a la URL porque el combobox necesita el
+  // nombre para dibujarse y el id solo no lo trae.
   const [customer, setCustomer] = useState<CustomerSelection>(null);
   const customerId = customer?.id ?? null;
 
@@ -143,16 +121,8 @@ function ConversationsInner() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
+  const [lastPageAddedNothing, setLastPageAddedNothing] = useState(false);
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  // Which conversation `messages` belongs to. Loading is *derived* from this vs
-  // selectedId, so it can never be left stuck true by a re-selection.
-  const [loadedId, setLoadedId] = useState<string | null>(null);
-  const [messagesError, setMessagesError] = useState<string | null>(null);
-  const [messagesRetryKey, setMessagesRetryKey] = useState(0);
-  // «Hay historia MÁS VIEJA arriba» — no «faltan mensajes nuevos».
-  const [hasOlder, setHasOlder] = useState(false);
-  const [loadingOlder, setLoadingOlder] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -162,37 +132,29 @@ function ConversationsInner() {
     [agents],
   );
 
-  const selectedIdRef = useRef(selectedId);
+  const thread = useCustomerThread(openChat);
+
   const conversationsRef = useRef(conversations);
   const customerIdRef = useRef(customerId);
-  // El merge del refetch necesita leer el hilo vigente FUERA de un updater de estado (un
-  // updater tiene que ser puro, y aquí hay que decidir además si `hasOlder` cambia).
-  const messagesRef = useRef(messages);
-  // Coalescing del SSE: una ráfaga de eventos se cobra una request, no N.
+  const openChatRef = useRef(openChat);
   const pendingRowsRef = useRef<Set<string>>(new Set());
   const rowsTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingThreadRef = useRef<Map<string, Conversation>>(new Map());
   const threadTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    selectedIdRef.current = selectedId;
-  });
 
   useEffect(() => {
     conversationsRef.current = conversations;
   });
-
   useEffect(() => {
     customerIdRef.current = customerId;
   });
-
   useEffect(() => {
-    messagesRef.current = messages;
+    openChatRef.current = openChat;
   });
 
   /**
    * Los tres filtros van al SERVIDOR. El buscador incluido: recortar en el navegador sobre
-   * una lista paginada mostraría «lo que coincide de las 25 filas que bajé», que es un
-   * filtro que miente.
+   * una lista paginada mostraría «lo que coincide de las 25 filas que bajé».
    */
   const listParams = useMemo(
     () => ({
@@ -203,165 +165,139 @@ function ConversationsInner() {
     [statusFilter, customerId, searchTerm],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(() => {
-      listConversations(listParams)
-        .then((page) => {
-          if (cancelled) return;
-          setConversations(page.items);
-          setCursor(page.next_cursor);
-          setHasMore(page.has_more);
-          setError(null);
-          setLoading(false);
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          setError(
-            err instanceof Error ? err : new Error("Error al cargar conversaciones"),
-          );
-          setLoading(false);
-        });
-    }, 0);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [listParams, retryKey]);
-
-  const handleLoadMore = useCallback(() => {
-    if (!cursor || loadingMore) return;
-    setLoadingMore(true);
-    setMoreError(null);
-    listConversations(listParams, { cursor })
+  const loadInbox = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setLastPageAddedNothing(false);
+    let vigente = true;
+    listConversations(listParams)
       .then((page) => {
-        // Se descartan los ids que ya están: el SSE pudo haber insertado arriba una fila que
-        // también viene en esta página, y dos filas con la misma key es un React key duplicado.
-        setConversations((prev) => {
-          const known = new Set(prev.map((c) => c.id));
-          return [...prev, ...page.items.filter((c) => !known.has(c.id))];
-        });
+        if (!vigente) return;
+        setConversations(page.items);
         setCursor(page.next_cursor);
         setHasMore(page.has_more);
       })
-      .catch(() => {
-        // NO va a `error`: ese estado dibuja el `ErrorState` en lugar de la lista, así que
-        // fallar al pedir la página 2 borraría de la pantalla la página 1 que el operador
-        // estaba leyendo. Va al pie, junto al botón con el que se reintenta.
-        setMoreError("No se pudo cargar la página siguiente.");
+      .catch((e) => {
+        if (!vigente) return;
+        setError(e instanceof Error ? e : new Error("Error al cargar conversaciones"));
       })
-      .finally(() => setLoadingMore(false));
-  }, [cursor, listParams, loadingMore]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-
-    let cancelled = false;
-    const t = setTimeout(() => {
-      listMessages(selectedId)
-        .then((page) => {
-          if (cancelled) return;
-          setMessages(page.items);
-          setHasOlder(page.has_more);
-          setMessagesError(null);
-          setLoadedId(selectedId);
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          // Mark the selection as "loaded" (with no messages) so the skeleton
-          // clears even on error, rather than spinning forever; the error is
-          // surfaced separately so it isn't confused with a genuinely empty thread.
-          setMessages([]);
-          setHasOlder(false);
-          setMessagesError(
-            err instanceof Error ? err.message : "Error al cargar mensajes",
-          );
-          setLoadedId(selectedId);
-        });
-    }, 0);
-
+      .finally(() => {
+        if (vigente) setLoading(false);
+      });
     return () => {
-      cancelled = true;
-      clearTimeout(t);
+      vigente = false;
     };
-  }, [selectedId, messagesRetryKey]);
+  }, [listParams]);
 
-  /** Sube una página de historia y la ANTEPONE: el hilo se lee de arriba abajo. */
-  const handleLoadOlder = useCallback(() => {
-    const oldest = messages[0]?.id;
-    if (!selectedId || !oldest || loadingOlder) return;
-    setLoadingOlder(true);
-    listMessages(selectedId, { before: oldest })
-      .then((page) => {
-        // Cambiar de hilo mientras cargaba dejaría los mensajes de otra conversación
-        // pegados arriba de esta.
-        if (selectedIdRef.current !== selectedId) return;
-        setMessages((prev) => [...page.items, ...prev]);
-        setHasOlder(page.has_more);
-      })
-      .catch(() => {
-        // Va al aviso descartable de la cabecera y NO al `ErrorState` del hilo: ese
-        // reemplaza todo el panel, y aquí los mensajes que ya se leen siguen siendo válidos.
-        setActionError("No se pudo cargar el historial anterior.");
-      })
-      .finally(() => setLoadingOlder(false));
-  }, [selectedId, messages, loadingOlder]);
+  // Diferido: poner el estado de forma sincrónica dentro del efecto encadena
+  // renders, y es el patrón que ya usan los contextos del panel.
+  useEffect(() => {
+    let cancelar: (() => void) | undefined;
+    const t = setTimeout(() => {
+      cancelar = loadInbox();
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      cancelar?.();
+    };
+  }, [loadInbox, retryKey]);
 
-  const handleRetry = useCallback(() => {
-    setRetryKey((k) => k + 1);
+  /**
+   * Página siguiente de CONVERSACIONES, que puede no agregar ningún NÚMERO nuevo.
+   * Eso hay que anunciarlo: un botón que no cambia nada se lee como roto.
+   */
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const page = await listConversations(listParams, { cursor });
+      const antes = new Set(conversationsRef.current.map((c) => c.customer_id));
+      const nuevos = page.items.filter((c) => !antes.has(c.customer_id)).length;
+      setConversations((prev) => [...prev, ...page.items].sort(byRecentActivity));
+      setCursor(page.next_cursor);
+      setHasMore(page.has_more);
+      setLastPageAddedNothing(page.items.length > 0 && nuevos === 0);
+    } catch (e) {
+      // Al pie, no al `ErrorState`: derribar la pantalla por la página 2 tira el
+      // trabajo de leer las primeras filas.
+      setMoreError(e instanceof Error ? e.message : "No se pudo cargar más");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [cursor, hasMore, listParams, loadingMore]);
+
+  /** Abre un número y deja la URL en su forma canónica. */
+  const openNumber = useCallback((cid: string) => {
+    setResolveError(null);
+    setOpenChat(cid);
+    openChatRef.current = cid;
+    setSearchParam("chat", cid);
+    setSearchParam("id", null);
   }, []);
 
-  const handleRetryMessages = useCallback(() => {
-    // Forces the skeleton back on (loadedId !== selectedId) while re-fetching.
-    setLoadedId(null);
-    setMessagesRetryKey((k) => k + 1);
-  }, []);
-
-  const handleStatusFilterChange = useCallback(
-    (status: ConversationStatus | "all") => setFilters({ status }),
-    [setFilters],
-  );
-
-  const handleViewChange = useCallback(
-    (next: InboxView) => setFilters({ view: next }),
-    [setFilters],
-  );
-
-  const handleClearFilters = useCallback(() => {
-    setSearch("");
-    setCustomer(null);
-    setFilters({ status: "all" });
-  }, [setFilters]);
-
-  const handleSelect = useCallback((id: string) => {
-    // Re-clicking the already-open conversation is a no-op: its messages are
-    // already loaded (and kept live by SSE), so re-selecting would only risk
-    // wiping them and getting stuck on the skeleton.
-    if (id === selectedIdRef.current) return;
-    setSelectedId(id);
-    // Mirror the selection into the URL (deep-linkable, survives F5) without a
-    // navigation/refetch — replaceState keeps the list and thread state intact.
-    // Se PARCHEA la query vigente en vez de reescribirla: ahora los filtros también viven
-    // ahí, y un `?id=…` a secas los borraba al abrir un hilo.
-    setSearchParam("id", id);
-    setActionError(null);
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)),
-    );
+  const closeNumber = useCallback(() => {
+    setOpenChat(null);
+    openChatRef.current = null;
+    setSearchParam("chat", null);
   }, []);
 
   /**
-   * Re-pide UNA conversación para refrescar su preview.
+   * Resolución del `?id=` entrante.
    *
-   * Los eventos de realtime no traen el texto del mensaje a propósito: `apps/realtime`
-   * publica solo ids y datos operativos, sin PII, y el mensaje de un cliente es PII. Así que
-   * el preview no se puede parchear desde el payload. Sin esto la fila salta a «Ahora» y
-   * sigue mostrando el mensaje ANTERIOR — un preview viejo con hora nueva es peor que no
-   * tener preview.
+   * Repara un defecto que existía: la conversación abierta se derivaba de
+   * `conversations.find(...)`, así que un `?id=` de una conversación fuera de la
+   * primera página dejaba la pantalla en «Selecciona una conversación» **con los
+   * mensajes ya bajados y descartados**. Lo sufren la campana y el drawer de
+   * cliente, que enlazan cualquier id.
    *
-   * `unread` se preserva del estado local: el backend no lo expone (el mapper devuelve 0),
-   * así que un refetch a secas borraría el contador que este mismo handler acaba de subir.
+   * El ancla se resuelve reusando el salto por fecha: llevar la vista al día del
+   * último mensaje de esa conversación es exactamente lo que se quiere, y es código
+   * ya probado.
+   */
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (!id || openChatRef.current) return;
+    const local = conversationsRef.current.find((c) => c.id === id);
+    if (local) {
+      openNumber(local.customer_id);
+      return;
+    }
+    let cancelled = false;
+    setResolving(true);
+    getConversation(id)
+      .then((conv) => {
+        if (cancelled) return;
+        openNumber(conv.customer_id);
+        // El ancla, si no es la conversación más reciente del número.
+        void Promise.resolve().then(() => {
+          if (!cancelled)
+            void thread.jumpToDate(dayISO(new Date(conv.last_message_at)));
+        });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setResolveError(
+          e instanceof Error ? e.message : "No se pudo abrir esa conversación",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setResolving(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `thread` cambia en cada render; la resolución depende del `?id=` y de si ya
+    // hay algo abierto, que se leen por ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, openNumber]);
+
+  /**
+   * Refresca UNA fila de la bandeja desde el servidor, con coalescing.
+   *
+   * El preview no se puede parchear desde el payload (viaja sin texto), y `unread` se preserva
+   * del estado local porque el backend lo devuelve en 0: un refetch a secas borraría el
+   * contador que este mismo handler acaba de subir.
    */
   const refreshRow = useCallback((conversationId: string) => {
     pendingRowsRef.current.add(conversationId);
@@ -375,7 +311,7 @@ function ConversationsInner() {
             setConversations((prev) =>
               prev
                 .map((c) => (c.id === id ? { ...fresh, unread: c.unread } : c))
-                .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
+                .sort(byRecentActivity),
             ),
           )
           .catch(() => {});
@@ -384,33 +320,28 @@ function ConversationsInner() {
   }, []);
 
   /**
-   * Re-baja la página más nueva del hilo abierto. Solo el abierto: estando en otra
-   * conversación (o en el dashboard) no hay nada en pantalla que mostrar y la request es puro
-   * gasto. El evento no puede traer el mensaje: viaja sin texto (política de PII, solo ids).
+   * Recarga del HILO con coalescing, hermana de `refreshRow`.
    *
-   * Lo que llega se MERGEA por la cola (ver `mergeNewMessages`), así que la historia que el
-   * operador subió a leer no se descarta.
+   * Un cliente que escribe cinco líneas emite cinco `mensaje_recibido`; sin agrupar,
+   * cada uno vuelve a bajar la página más nueva del hilo. Recibe la fila ya resuelta
+   * para no repetir el `getConversation` que esta misma pantalla acaba de hacer.
    */
-  const reloadOpenThread = useCallback((conversationId: string) => {
-    if (selectedIdRef.current !== conversationId) return;
-    clearTimeout(threadTimerRef.current);
-    threadTimerRef.current = setTimeout(() => {
-      if (selectedIdRef.current !== conversationId) return;
-      listMessages(conversationId)
-        .then((page) => {
-          if (selectedIdRef.current !== conversationId) return;
-          const { messages: merged, replaced } = mergeNewMessages(
-            messagesRef.current,
-            page,
-          );
-          setMessages(merged);
-          // Solo al reemplazar: el `has_more` de la página más nueva habla de lo que hay
-          // arriba de ESA página, no de lo que ya se cargó por encima.
-          if (replaced) setHasOlder(page.has_more);
-        })
-        .catch(() => {});
-    }, SSE_COALESCE_MS);
-  }, []);
+  const reloadThread = useCallback(
+    (conv: Conversation) => {
+      pendingThreadRef.current.set(conv.id, conv);
+      clearTimeout(threadTimerRef.current);
+      threadTimerRef.current = setTimeout(() => {
+        const filas = [...pendingThreadRef.current.values()];
+        pendingThreadRef.current.clear();
+        for (const fila of filas) void thread.applyIncoming(fila);
+      }, SSE_COALESCE_MS);
+    },
+    [thread],
+  );
+  const reloadThreadRef = useRef(reloadThread);
+  useEffect(() => {
+    reloadThreadRef.current = reloadThread;
+  });
 
   useEffect(() => {
     const unsub = subscribeToEvents((event) => {
@@ -426,45 +357,39 @@ function ConversationsInner() {
                     ? {
                         ...c,
                         last_message_at: event.emitted_at,
-                        unread: c.id === selectedIdRef.current ? 0 : c.unread + 1,
+                        // El hilo abierto es de un NÚMERO: leído significa que ese
+                        // número está en pantalla, no esa conversación.
+                        unread:
+                          c.customer_id === openChatRef.current ? 0 : c.unread + 1,
                       }
                     : c,
                 )
-                .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
+                .sort(byRecentActivity),
             );
-            // El parche de arriba es feedback inmediato (hora + no leídos); el preview
-            // necesita el servidor.
             refreshRow(conversation_id);
+            const fila = conversationsRef.current.find((c) => c.id === conversation_id);
+            if (fila) reloadThreadRef.current(fila);
           } else {
-            // Brand-new conversation (first message from a customer we don't
-            // have in the inbox yet): fetch it and insert it instead of
-            // silently dropping the event.
+            // Conversación nueva: se pide y se inserta en vez de perder el evento.
             getConversation(conversation_id)
               .then((conv) => {
-                // Con el filtro de cliente puesto, la bandeja es el historial de UNA
-                // persona: insertar aquí la conversación de otra convierte el filtro en
-                // mentira. El evento no trae `customer_id`, pero la conversación sí.
                 if (customerIdRef.current && conv.customer_id !== customerIdRef.current)
                   return;
-                // Se deduplica por el id de lo que VOLVIÓ, no por el del evento: si el
-                // servidor devuelve otra fila (una redirección de hilo, un id reciclado en
-                // un test), comparar contra el evento la inserta duplicada y React se queda
-                // con dos hijos con la misma key.
+                // Dedupe por el id que VOLVIÓ, no por el del evento.
                 setConversations((prev) =>
                   prev.some((c) => c.id === conv.id)
                     ? prev
-                    : [...prev, conv].sort((a, b) =>
-                        b.last_message_at.localeCompare(a.last_message_at),
-                      ),
+                    : [...prev, conv].sort(byRecentActivity),
                 );
+                // La misma fila que se acaba de resolver: el hilo decide si es de
+                // su número, sin pedirla otra vez.
+                reloadThreadRef.current(conv);
               })
               .catch(() => {});
           }
-          reloadOpenThread(conversation_id);
           break;
         }
         case "conversacion_asignada": {
-          // An operator took or was reassigned the conversation.
           const { conversation_id, assignee_id } = (event as ConversacionAsignadaEvent)
             .data;
           setConversations((prev) =>
@@ -474,17 +399,20 @@ function ConversationsInner() {
                 : c,
             ),
           );
+          void thread.refreshConversation(conversation_id);
           break;
         }
         case "conversacion_cerrada": {
-          // The detail panel derives from `conversations`, so updating the
-          // list here also reflects it in the open detail if selected.
           const { conversation_id } = (event as ConversacionCerradaEvent).data;
           setConversations((prev) =>
             prev.map((c) =>
               c.id === conversation_id ? { ...c, status: "closed" as const } : c,
             ),
           );
+          // Sin esto la cabecera del hilo se queda mostrando «IA activa» sobre una
+          // conversación ya cerrada — y con el hilo abierto por deep link, su
+          // conversación puede no estar en la página cargada de la bandeja.
+          void thread.refreshConversation(conversation_id);
           break;
         }
         case "conversacion_escalada": {
@@ -492,20 +420,14 @@ function ConversationsInner() {
           setConversations((prev) =>
             prev.map((c) =>
               c.id === conversation_id
-                ? {
-                    ...c,
-                    status: "human_handoff" as const,
-                    active_agent: null,
-                  }
+                ? { ...c, status: "human_handoff" as const, active_agent: null }
                 : c,
             ),
           );
+          void thread.refreshConversation(conversation_id);
           break;
         }
         case "conversacion_reactivada": {
-          // The AI regained the conversation (operator or inactivity timeout);
-          // flip it back to ai_active and drop the human assignee so the panel
-          // doesn't stay stuck on "Handoff".
           const { conversation_id } = (event as ConversacionReactivadaEvent).data;
           setConversations((prev) =>
             prev.map((c) =>
@@ -514,193 +436,194 @@ function ConversationsInner() {
                 : c,
             ),
           );
+          void thread.refreshConversation(conversation_id);
           break;
         }
         case "mensaje_automatico_enviado": {
-          // A scheduled/automated reply went out: reorder the inbox by activity
-          // and, if that conversation is open, pull the new message into view.
           const { conversation_id } = (event as MensajeAutomaticoEnviadoEvent).data;
-          setConversations((prev) => {
-            const conv = prev.find((c) => c.id === conversation_id);
-            if (!conv) return prev;
-            return prev
+          setConversations((prev) =>
+            prev
               .map((c) =>
                 c.id === conversation_id
                   ? { ...c, last_message_at: event.emitted_at }
                   : c,
               )
-              .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at));
-          });
+              .sort(byRecentActivity),
+          );
           refreshRow(conversation_id);
-          reloadOpenThread(conversation_id);
+          const auto = conversationsRef.current.find((c) => c.id === conversation_id);
+          if (auto) reloadThreadRef.current(auto);
           break;
         }
       }
     });
     return () => {
       unsub();
-      // Un refetch coalescido en vuelo al desmontar escribiría estado sobre un componente
-      // que ya no está.
       clearTimeout(rowsTimerRef.current);
       clearTimeout(threadTimerRef.current);
     };
-    // `refreshRow` y `reloadOpenThread` son estables (useCallback sin deps): no re-suscriben
-    // el stream.
-  }, [refreshRow, reloadOpenThread]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshRow]);
+
+  // ── Acciones: siempre sobre la conversación abierta del número ───────────────
+
+  const live = thread.live;
+
+  const applyResult = useCallback(
+    (updated: Conversation) => {
+      thread.applyAction(updated);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === updated.id ? { ...updated, unread: c.unread } : c)),
+      );
+    },
+    [thread],
+  );
 
   const handleSendMessage = useCallback(
     async (text: string) => {
-      if (!selectedId) return;
+      if (!live) return;
       setSendingMessage(true);
       setActionError(null);
       try {
-        const msg = await sendMessage(selectedId, text);
-        setMessages((prev) => [...prev, msg]);
-        setConversations((prev) =>
-          prev
-            .map((c) =>
-              c.id === selectedId
-                ? { ...c, last_message_at: msg.created_at, unread: 0 }
-                : c,
-            )
-            .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
-        );
+        // La respuesta del POST es la ÚNICA vía por la que aparece: no existe evento
+        // SSE de mensaje saliente.
+        const msg = await sendMessage(live.conv.id, text);
+        thread.appendOwnMessage(live.conv.id, msg);
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Error al enviar mensaje");
+        setActionError(
+          err instanceof Error ? err.message : "Error al enviar el mensaje",
+        );
       } finally {
         setSendingMessage(false);
       }
     },
-    [selectedId],
+    [live, thread],
   );
 
   const handleTake = useCallback(async () => {
-    if (!selectedId) return;
+    if (!live) return;
     setActionError(null);
     try {
-      const updated = await takeConversation(selectedId);
-      setConversations((prev) => prev.map((c) => (c.id === selectedId ? updated : c)));
+      applyResult(await takeConversation(live.conv.id));
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Error al tomar conversación",
+        err instanceof Error ? err.message : "Error al tomar la conversación",
       );
     }
-  }, [selectedId]);
+  }, [live, applyResult]);
 
   const handleClose = useCallback(async () => {
-    if (!selectedId) return;
+    if (!live) return;
     setActionError(null);
     try {
-      const updated = await closeConversation(selectedId);
-      setConversations((prev) => prev.map((c) => (c.id === selectedId ? updated : c)));
+      applyResult(await closeConversation(live.conv.id));
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Error al cerrar conversación",
+        err instanceof Error ? err.message : "Error al cerrar la conversación",
       );
     }
-  }, [selectedId]);
+  }, [live, applyResult]);
 
   const handleReactivate = useCallback(async () => {
-    if (!selectedId) return;
+    if (!live) return;
     setActionError(null);
     try {
-      const updated = await reactivateAI(selectedId);
-      setConversations((prev) => prev.map((c) => (c.id === selectedId ? updated : c)));
+      applyResult(await reactivateAI(live.conv.id));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Error al reactivar IA");
     }
-  }, [selectedId]);
+  }, [live, applyResult]);
 
-  const selectedConversation = selectedId
-    ? (conversations.find((c) => c.id === selectedId) ?? null)
-    : null;
-
-  // Skeleton shows whenever the loaded messages don't belong to the current
-  // selection (initial load or while switching). Re-clicking the same
-  // conversation keeps loadedId === selectedId, so it never gets stuck.
-  const loadingMessages = selectedId !== null && loadedId !== selectedId;
+  // Identidad del número abierto: de la bandeja si está, y si no del propio hilo
+  // (un deep link puede abrir un número que no está en la página cargada).
+  const identity = useMemo(() => {
+    const fromInbox = conversations.find((c) => c.customer_id === openChat);
+    const fromThread = thread.state.segments[0]?.conv;
+    return fromInbox ?? fromThread ?? null;
+  }, [conversations, openChat, thread.state.segments]);
 
   return (
     <div className="-mx-6 -my-8 flex h-[calc(100vh-var(--spacing)*20)] md:-mx-12 md:-my-12">
-      {/* Left panel — Inbox. On mobile it takes the full width; it hides when
-          a conversation is opened (master-detail pattern). On desktop always visible. */}
       <div
         className={cn(
           "w-full shrink-0 border-r border-border/60 bg-card lg:w-96",
-          selectedId && "hidden lg:block",
+          openChat && "hidden lg:block",
         )}
       >
         <ConversationList
           conversations={conversations}
-          selectedId={selectedId}
-          onSelect={handleSelect}
+          selectedCustomerId={openChat}
+          onSelect={openNumber}
           statusFilter={statusFilter}
-          onStatusFilterChange={handleStatusFilterChange}
-          view={view}
-          onViewChange={handleViewChange}
+          onStatusFilterChange={(status) =>
+            setFilters({ status: status === "all" ? "all" : status })
+          }
           search={search}
           onSearchChange={setSearch}
           customer={customer}
           onCustomerChange={setCustomer}
-          onClearFilters={handleClearFilters}
+          onClearFilters={() => {
+            setSearch("");
+            setCustomer(null);
+            setFilters({ status: "all", q: "" });
+          }}
           loading={loading}
           error={error}
-          onRetry={handleRetry}
+          onRetry={() => setRetryKey((k) => k + 1)}
           agentNames={agentNames}
           hasMore={hasMore}
           loadingMore={loadingMore}
-          onLoadMore={handleLoadMore}
+          onLoadMore={() => void loadMore()}
           moreError={moreError}
+          lastPageAddedNothing={lastPageAddedNothing}
         />
       </div>
 
-      {/* Right panel — Detail. On mobile it only shows when selected; on
-          desktop it takes the remaining space. min-w-0 allows it to shrink. */}
       <div
         className={cn(
           "min-w-0 flex-1 flex-col bg-background",
-          selectedId ? "flex" : "hidden lg:flex",
+          openChat || resolving || resolveError ? "flex" : "hidden lg:flex",
         )}
       >
-        {selectedConversation ? (
-          <ConversationDetail
-            conversation={selectedConversation}
-            currentUserId={user?.id ?? null}
-            onBack={() => {
-              setSelectedId(null);
-              // Solo se cierra el hilo: los filtros de la bandeja siguen puestos, así que su
-              // parte de la query se queda.
-              setSearchParam("id", null);
-            }}
-            messages={messages}
+        {resolveError ? (
+          // NO el vacío silencioso de antes: la bandeja está bien, lo que falló es
+          // abrir ese enlace.
+          <ErrorState
+            title="No se pudo abrir esa conversación"
+            description={resolveError}
+            onRetry={() => setResolveError(null)}
+            className="m-auto border-none bg-transparent"
+          />
+        ) : openChat ? (
+          // Se monta con `openChat` y NO con `identity`: la identidad puede tardar
+          // (un deep link a un número que no está en la página cargada de la bandeja
+          // la trae recién con el índice), y gatear con ella dejaba al hilo pidiendo
+          // datos detrás de un «Selecciona un número».
+          <CustomerThread
+            thread={thread}
             customerName={
-              selectedConversation.customer_name.trim() ||
-              formatNumber(selectedConversation.customer_phone)
+              identity
+                ? identity.customer_name.trim() || formatNumber(identity.customer_phone)
+                : "Cargando…"
             }
-            agentName={
-              selectedConversation.active_agent
-                ? (agentNames.get(selectedConversation.active_agent) ??
-                  selectedConversation.active_agent)
-                : null
-            }
+            customerPhone={identity ? formatNumber(identity.customer_phone) : ""}
+            ratingAvg={identity?.customer_rating_avg ?? null}
+            ratingCount={identity?.customer_rating_count ?? 0}
+            currentUserId={user?.id ?? null}
+            agentNames={agentNames}
             onSendMessage={handleSendMessage}
             onTake={handleTake}
             onClose={handleClose}
             onReactivate={handleReactivate}
-            loadingMessages={loadingMessages}
-            messagesError={messagesError}
-            onRetryMessages={handleRetryMessages}
-            hasOlder={hasOlder}
-            loadingOlder={loadingOlder}
-            onLoadOlder={handleLoadOlder}
             sendingMessage={sendingMessage}
             actionError={actionError}
             onDismissError={() => setActionError(null)}
+            onBack={closeNumber}
           />
         ) : (
           <EmptyState
-            title="Selecciona una conversación"
-            description="Elige una conversación de la bandeja para ver los mensajes."
+            title="Selecciona un número"
+            description="Elige un número de la bandeja para ver todo su historial."
             icon={MessageSquare}
             className="m-auto border-none bg-transparent"
           />
@@ -711,8 +634,10 @@ function ConversationsInner() {
 }
 
 export default function ConversationsPage() {
-  // useSearchParams requires a Suspense boundary in the App Router.
+  const denied = useRequireAssistant();
+  if (denied) return null;
   return (
+    // `useUrlFilters` usa `useSearchParams`, que en el App Router exige Suspense.
     <Suspense fallback={null}>
       <ConversationsInner />
     </Suspense>

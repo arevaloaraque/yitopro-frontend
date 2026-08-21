@@ -508,12 +508,22 @@ viaja el `code`). Los desajustes de shape se mapean en `lib/api/<dominio>.ts`, n
 componentes. Ver README.
 
 **Eventos SSE de datos (silenciosos, sin toast):** `cliente_creado`, `cliente_actualizado`,
-`ficha_actualizada`, `nota_creada`, `servicio_creado`, `servicio_actualizado`, `servicio_eliminado`.
-Disparan refetch dirigido en clientes/servicios y en el drawer abierto, con **guarda anti-clobber**
-(no pisan ediciones sin guardar). No generan notificación (son eco de la propia acción del operador
+`ficha_actualizada`, `nota_creada`, `servicio_creado`, `servicio_actualizado`, `servicio_eliminado`,
+`producto_creado`, `producto_actualizado`, `profesional_creado`, `profesional_actualizado`,
+`profesional_eliminado`, `enlace_pago_creado` (no existe `producto_eliminado`: el API de tenant
+no tiene DELETE de productos — desactivar es el único camino; el de profesionales SÍ es real).
+OJO: la reconciliación de plan desactiva/restaura profesionales en BULK sin emitir por fila —
+esa señal viaja como `negocio_actualizado`, y por eso la agenda y «Por profesional» escuchan ambos.
+Disparan refetch dirigido en clientes/servicios/productos/pagos y en el drawer abierto, con
+**guarda anti-clobber** (no pisan ediciones sin guardar) y **anti-eco `selfApplied`** donde la
+pantalla origina la acción. No generan notificación (son eco de la propia acción del operador
 o de la IA). El stream emite otros eventos que refrescan estado en vivo (p. ej. `agente_actualizado`,
-`negocio_actualizado`, `pedido_creado`); la lista completa está en `lib/types/events.ts`. Diseño de
-estos 7: `docs/superpowers/specs/2026-07-11-sse-customers-services-design.md`.
+`negocio_actualizado`, `pedido_creado`); la lista completa está en `lib/types/events.ts`.
+La campana se siembra al montar desde `GET /api/notifications/recent/` (endpoint del backend;
+si aún no existe, degrada en silencio a solo-memoria) — la siembra entra leída y sin toasts.
+`/reports` NO tiene SSE a propósito (consulta cara): declara «Actualizado a las HH:MM» y
+ofrece refresco manual. `/settings` no se re-hidrata solo: ante un cambio remoto muestra la
+franja «La configuración cambió en otra sesión» con botón «Recargar».
 
 **`pedido_creado` y `pedido_cancelado` también son silenciosos**, por el mismo criterio: son **acciones
 del operador**, no trabajo entrando. Quien confirma o cancela ya recibió su propio toast con el número,

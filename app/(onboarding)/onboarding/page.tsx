@@ -200,7 +200,9 @@ function OnboardingWizard() {
 
       <Card>
         <CardHeader>
-          <CardTitle as="h1" className="text-lg">{stepTitle(currentStep)}</CardTitle>
+          <CardTitle as="h1" className="text-lg">
+            {stepTitle(currentStep)}
+          </CardTitle>
         </CardHeader>
         <CardContent className="min-h-[320px]">{stepComponent}</CardContent>
       </Card>

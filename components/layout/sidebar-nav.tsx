@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/lib/auth";
+import { useBusinessOptional } from "@/lib/business/business-context";
 import { usePendingOrders } from "@/lib/orders";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +30,16 @@ export function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
   // ausente (el fallback sin rol del login) se muestran: esconderlos ahí le
   // haría perder Reportes al dueño de forma intermitente, y la seguridad real
   // es el 403 del backend, no este filtro.
-  const items =
-    user?.role === "staff" ? NAV_ITEMS.filter((item) => !item.ownerOnly) : NAV_ITEMS;
+  // Igual criterio para el plan: se oculta solo ante un `false` explícito. Si el
+  // negocio todavía no cargó, se muestra — hacerlo al revés haría parpadear el
+  // menú en cada carga, y quien manda es el 403 del backend.
+  const business = useBusinessOptional()?.business ?? null;
+  const hasAssistant = business?.entitlements?.assistant !== false;
+  const items = NAV_ITEMS.filter(
+    (item) =>
+      !(user?.role === "staff" && item.ownerOnly) &&
+      !(item.requiresAssistant && !hasAssistant),
+  );
 
   return (
     <nav className="flex flex-1 flex-col gap-1 px-3 py-5">

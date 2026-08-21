@@ -13,11 +13,6 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "no_show", label: "No asistió" },
 ];
 
-/** Label in Spanish for a status filter (falls back to the raw value). */
-export function statusLabel(status: StatusFilter): string {
-  return STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
-}
-
 /**
  * ¿Es un estado que esta pantalla conoce? Desde que el filtro vive en la URL,
  * su valor es entrada del usuario: un `?status=lol` pegado a mano viajaría al

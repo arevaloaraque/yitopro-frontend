@@ -6,7 +6,7 @@
  * toasting them would be noise. They must stay silent. Real alerts (a new
  * WhatsApp message) must still toast and land in the bell.
  */
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,6 +54,16 @@ function emitSse(event: SSEEvent) {
   });
 }
 
+// Siembra de campana (GET /notifications/recent/). Default: RECHAZA — es el
+// mundo de hoy (endpoint aún no desplegado) y deja todos los tests previos
+// exactamente como estaban; los casos de siembra lo sobreescriben.
+const { recentApi } = vi.hoisted(() => ({
+  recentApi: { getRecentNotifications: vi.fn() },
+}));
+vi.mock("@/lib/api/notifications", () => ({
+  getRecentNotifications: recentApi.getRecentNotifications,
+}));
+
 function Probe() {
   const { unreadCount } = useNotifications();
   return <span data-testid="count">{unreadCount}</span>;
@@ -77,6 +87,8 @@ function renderCard(i = 0) {
 
 beforeEach(() => {
   sseHandlers.length = 0;
+  recentApi.getRecentNotifications.mockReset();
+  recentApi.getRecentNotifications.mockRejectedValue(new Error("404"));
   toastFns.base.mockClear();
   toastFns.success.mockClear();
   toastFns.warning.mockClear();
@@ -142,6 +154,24 @@ describe("NotificationsProvider", () => {
       type: "negocio_actualizado",
       emitted_at: "2026-07-11T10:00:06Z",
       data: { is_operative: true },
+    } as SSEEvent);
+    emitSse({
+      id: "pr1",
+      type: "producto_actualizado",
+      emitted_at: "2026-07-11T10:00:07Z",
+      data: { product_id: "1", active: true },
+    } as SSEEvent);
+    emitSse({
+      id: "pf1",
+      type: "profesional_creado",
+      emitted_at: "2026-07-11T10:00:08Z",
+      data: { professional_id: "p1", active: true },
+    } as SSEEvent);
+    emitSse({
+      id: "el1",
+      type: "enlace_pago_creado",
+      emitted_at: "2026-07-11T10:00:09Z",
+      data: { link_id: "uuid-1", amount: "5000", currency: "CLP", customer_id: null },
     } as SSEEvent);
 
     expect(totalToasts()).toBe(0);
@@ -210,7 +240,9 @@ describe("NotificationsProvider", () => {
     expect(toastFns.custom).toHaveBeenCalledTimes(1);
     const { container } = renderCard();
     expect(container.textContent).toContain("Pedido actualizado");
-    expect(container.querySelector("[role=img]")?.getAttribute("aria-label")).toBe("Pedido");
+    expect(container.querySelector("[role=img]")?.getAttribute("aria-label")).toBe(
+      "Pedido",
+    );
     expect(screen.getByTestId("count").textContent).toBe("1");
   });
 });
@@ -403,5 +435,100 @@ describe("duplicate delivery", () => {
     expect(container.querySelector("a")?.contains(cerrar)).toBe(false);
     await userEvent.click(cerrar);
     expect(toastFns.dismiss).toHaveBeenCalled();
+  });
+});
+
+/** La campana se siembra al montar desde el backend: sin esto, un F5 no la
+ * desactualizaba — la DESTRUÍA (auditoría 2026-08-20). Reglas: entra LEÍDA,
+ * sin toasts/sonidos, silenciosos fuera, y con 404 el mundo sigue como hoy. */
+describe("siembra de la campana", () => {
+  function ListProbe() {
+    const { notifications, unreadCount } = useNotifications();
+    return (
+      <>
+        <span data-testid="len">{notifications.length}</span>
+        <span data-testid="unread">{unreadCount}</span>
+      </>
+    );
+  }
+
+  const seedPago: SSEEvent = {
+    id: "ntf-1",
+    type: "pago_recibido",
+    emitted_at: "2026-08-20T09:00:00Z",
+    data: { payment_id: "7", amount: "12000", currency: "CLP", customer_id: null },
+  } as SSEEvent;
+  const seedPedido: SSEEvent = {
+    id: "ntf-2",
+    type: "pedido_borrador_creado",
+    emitted_at: "2026-08-20T08:00:00Z",
+    data: { order_id: "31", total: "17000", customer_id: "9" },
+  } as SSEEvent;
+  const seedSilencioso: SSEEvent = {
+    id: "ntf-3",
+    type: "cliente_creado",
+    emitted_at: "2026-08-20T07:00:00Z",
+    data: { customer_id: "9", origin: "whatsapp" },
+  } as SSEEvent;
+
+  it("siembra la campana leída, sin toasts y filtrando los silenciosos", async () => {
+    recentApi.getRecentNotifications.mockResolvedValue([
+      seedPago,
+      seedPedido,
+      seedSilencioso,
+    ]);
+    render(
+      <NotificationsProvider>
+        <ListProbe />
+      </NotificationsProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("len").textContent).toBe("2"));
+    // Leída: el badge no se infla en cada recarga con lo ya visto.
+    expect(screen.getByTestId("unread").textContent).toBe("0");
+    // Y jamás re-dispara la interrupción: cero toasts (y por lo tanto cero pings).
+    expect(totalToasts()).toBe(0);
+  });
+
+  it("no duplica un evento que ya llegó vivo antes de que la siembra resuelva", async () => {
+    let resolveSeed!: (v: SSEEvent[]) => void;
+    recentApi.getRecentNotifications.mockReturnValue(
+      new Promise<SSEEvent[]>((r) => {
+        resolveSeed = r;
+      }),
+    );
+    render(
+      <NotificationsProvider>
+        <ListProbe />
+      </NotificationsProvider>,
+    );
+
+    // El evento vivo gana la carrera a la respuesta del endpoint…
+    emitSse(seedPago);
+    expect(screen.getByTestId("len").textContent).toBe("1");
+
+    // …y la siembra trae el MISMO payload persistido: dedupe, no dos entradas.
+    await act(async () => {
+      resolveSeed([{ ...seedPago, id: "persisted-1" }]);
+    });
+    await waitFor(() => expect(screen.getByTestId("len").textContent).toBe("1"));
+  });
+
+  it("con el endpoint caído (404) la campana queda como hoy y lo vivo sigue sonando", async () => {
+    render(
+      <NotificationsProvider>
+        <ListProbe />
+      </NotificationsProvider>,
+    );
+    // La siembra falló en silencio: nada sembrado…
+    await waitFor(() =>
+      expect(recentApi.getRecentNotifications).toHaveBeenCalledTimes(1),
+    );
+    expect(screen.getByTestId("len").textContent).toBe("0");
+
+    // …y un evento vivo se comporta exactamente como siempre.
+    emitSse(seedPedido);
+    expect(screen.getByTestId("len").textContent).toBe("1");
+    expect(totalToasts()).toBe(1);
   });
 });

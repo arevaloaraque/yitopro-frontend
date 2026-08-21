@@ -412,7 +412,10 @@ function play(timbre: Timbre, volume = getSoundVolume()): void {
       }
       // Attack/decay ramp: a raw gate on a sine clicks audibly.
       envelope.gain.setValueAtTime(0.0001, at);
-      envelope.gain.exponentialRampToValueAtTime(peak, at + Math.min(0.012, seconds / 3));
+      envelope.gain.exponentialRampToValueAtTime(
+        peak,
+        at + Math.min(0.012, seconds / 3),
+      );
       envelope.gain.exponentialRampToValueAtTime(0.0001, at + seconds);
       osc.connect(envelope).connect(ctx.destination);
       osc.start(at);

@@ -1,5 +1,6 @@
 "use client";
 
+import { PlanGate } from "@/components/layout/plan-gate";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { AgentsProvider } from "@/lib/agents";
@@ -27,15 +28,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AgentsProvider>
           <BusinessProvider>
             <OrdersProvider>
+              <PlanGate>
               <div className="flex min-h-svh bg-surface">
                 <Sidebar />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <Topbar />
-                  <main className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-6 py-8 md:px-12 md:py-12">
+                  {/* Sin max-w: los módulos van a ancho completo y el único
+                      espacio lateral es este padding. Un tope aquí volvía a
+                      dibujar franjas vacías en monitores anchos. */}
+                  <main className="flex w-full flex-1 flex-col px-6 py-8 md:px-12 md:py-12">
                     {children}
                   </main>
                 </div>
               </div>
+              </PlanGate>
             </OrdersProvider>
           </BusinessProvider>
         </AgentsProvider>

@@ -12,11 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PaymentStatusBadge } from "@/components/payments/payment-status-badge";
-import {
-  getPayment,
-  type Payment,
-  type PaymentDetail,
-} from "@/lib/api/payments";
+import { getPayment, type Payment, type PaymentDetail } from "@/lib/api/payments";
 import { formatDateTime } from "@/lib/format/date";
 import { formatPrice } from "@/lib/utils";
 
@@ -175,9 +171,7 @@ export function PaymentDetailDialog({
                       <Field label="Pagado">
                         {detail.paid_at ? formatDateTime(detail.paid_at) : "—"}
                       </Field>
-                      <Field label="Expira">
-                        {formatDateTime(detail.expires_at)}
-                      </Field>
+                      <Field label="Expira">{formatDateTime(detail.expires_at)}</Field>
                     </dl>
                   </div>
 

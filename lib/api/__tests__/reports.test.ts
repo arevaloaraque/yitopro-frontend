@@ -9,12 +9,12 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
 import {
-  customRangeError,
   exportValueCsv,
   getValueSummary,
   MAX_RANGE_DAYS,
   reportWindow,
 } from "@/lib/api/reports";
+import { customRangeError } from "@/lib/format/date";
 import { server } from "@/mocks/server";
 
 const API = "http://localhost:8050/api";
@@ -181,7 +181,7 @@ describe("reportWindow", () => {
       ...(["7", "30", "90"] as const).map((p) => reportWindow(p).days),
     );
     expect(maxPreset).toBe(MAX_RANGE_DAYS);
-    expect(customRangeError("2026-03-01", "2026-05-30")).toContain(
+    expect(customRangeError("2026-03-01", "2026-05-30", MAX_RANGE_DAYS)).toContain(
       String(MAX_RANGE_DAYS),
     );
     // Un rango inválido no inventa ventana: cae al preset más largo.

@@ -24,7 +24,11 @@ export function useCountUp(target: number, enabled = true, durationMs = 900): nu
     // casos se salta al valor final — vía `setTimeout` y no con un `setValue`
     // directo, que es un render en cascada desde el cuerpo del efecto
     // (`react-hooks/set-state-in-effect`).
-    if (!enabled || prefersReducedMotion() || typeof requestAnimationFrame !== "function") {
+    if (
+      !enabled ||
+      prefersReducedMotion() ||
+      typeof requestAnimationFrame !== "function"
+    ) {
       const id = setTimeout(() => setValue(target), 0);
       return () => clearTimeout(id);
     }

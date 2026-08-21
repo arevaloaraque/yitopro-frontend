@@ -52,6 +52,7 @@ import { useDebounced } from "@/lib/hooks/use-debounced";
 import { useUrlFilters } from "@/lib/hooks/use-url-filters";
 import { subscribeToEvents } from "@/lib/sse";
 import { formatPrice } from "@/lib/utils";
+import { customRangeError, todayISO } from "@/lib/format/date";
 
 const PAGE_SIZE = 25;
 
@@ -96,19 +97,6 @@ const DEFAULT_FILTERS = {
  *  the summary behind it is the query that pays for it. */
 const MAX_CUSTOM_DAYS = 31;
 
-/**
- * «Hoy» en la zona horaria del operador.
- *
- * `toISOString().slice(0,10)` daba el día UTC mientras `customWindow` interpreta
- * las mismas cadenas a medianoche LOCAL: en Chile, a partir de las 20:00 el
- * campo «hasta» arrancaba en mañana y su propio `max` lo daba por inválido.
- * `sv-SE` es el locale que formatea `YYYY-MM-DD`, que es lo que un
- * `<input type="date">` acepta.
- */
-function todayISO(): string {
-  return new Date().toLocaleDateString("sv-SE");
-}
-
 /** `[from, to)` from two `<input type="date">` values, in LOCAL midnight.
  *  The upper bound is the day AFTER `to`, because the backend window is
  *  half-open and "hasta el 5" has to include the 5th. */
@@ -117,16 +105,6 @@ function customWindow(from: string, to: string) {
   const end = new Date(`${to}T00:00:00`);
   end.setDate(end.getDate() + 1);
   return { created_from: start.toISOString(), created_to: end.toISOString() };
-}
-
-/** Empty string when the pair is usable. */
-function customRangeError(from: string, to: string): string {
-  if (!from || !to) return "Selecciona ambas fechas.";
-  if (to < from) return "La fecha final es anterior a la inicial.";
-  const days = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1;
-  if (days > MAX_CUSTOM_DAYS)
-    return `El rango no puede superar ${MAX_CUSTOM_DAYS} días.`;
-  return "";
 }
 
 const STATUSES: { value: PaymentStatus | "all"; label: string }[] = [
@@ -169,7 +147,9 @@ function PaymentsPageContent() {
 
   const [customFrom, setCustomFrom] = useState(f.from);
   const [customTo, setCustomTo] = useState(f.to || todayISO());
-  const rangeError = isCustom ? customRangeError(customFrom, customTo) : "";
+  const rangeError = isCustom
+    ? customRangeError(customFrom, customTo, MAX_CUSTOM_DAYS)
+    : "";
   // El rango personalizado entra en la URL SOLO cuando es usable: un par a medio
   // escribir produciría un enlace que no reproduce lo que se ve en pantalla.
   useEffect(() => {
@@ -259,7 +239,17 @@ function PaymentsPageContent() {
     //
     // `windowFor` se recalcula en cada cambio de filtro, lo que vuelve a anclar
     // "los últimos 30 días" a ahora. Es lo que promete la etiqueta.
-    [f.status, f.method, f.customer, f.q, range, isCustom, rangeError, customFrom, customTo],
+    [
+      f.status,
+      f.method,
+      f.customer,
+      f.q,
+      range,
+      isCustom,
+      rangeError,
+      customFrom,
+      customTo,
+    ],
   );
 
   const load = useCallback(async () => {
@@ -337,6 +327,15 @@ function PaymentsPageContent() {
   useEffect(
     () =>
       subscribeToEvents((event) => {
+        // Un enlace acuñado en OTRA sesión (o por la IA) debe aparecer en la
+        // tabla; el del propio diálogo ya se cargó vía onCreated y su eco se
+        // consume. Refetch completo, no patch: la fila no existe aún y el
+        // cursor debe reiniciarse a la primera página con los filtros vigentes.
+        if (event.type === "enlace_pago_creado") {
+          if (selfApplied.current.delete(`link-${event.data.link_id}`)) return;
+          loadRef.current();
+          return;
+        }
         if (event.type !== "pago_recibido" && event.type !== "pago_rechazado") return;
         const key = `payment-${event.data.payment_id}`;
         if (selfApplied.current.delete(key)) return;
@@ -566,7 +565,7 @@ function PaymentsPageContent() {
 
   if (state === "error") {
     return (
-      <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div className="w-full space-y-6">
         {header}
         <ErrorState description={error ?? "Error desconocido"} onRetry={load} />
       </div>
@@ -574,7 +573,7 @@ function PaymentsPageContent() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       {header}
 
       {/* Totals for the window the table is showing, one card per currency —
@@ -670,8 +669,7 @@ function PaymentsPageContent() {
                   : "text-xs text-muted-foreground"
               }
             >
-              {rangeError ||
-                `Ambas fechas incluidas, máximo ${MAX_CUSTOM_DAYS} días.`}
+              {rangeError || `Ambas fechas incluidas, máximo ${MAX_CUSTOM_DAYS} días.`}
             </p>
           </div>
         )}
@@ -722,8 +720,8 @@ function PaymentsPageContent() {
           </Select>
           {methodsFailed && (
             <p role="alert" className="max-w-64 text-xs text-destructive">
-              No pudimos cargar los medios de pago. La lista de arriba está
-              incompleta, no vacía.
+              No pudimos cargar los medios de pago. La lista de arriba está incompleta,
+              no vacía.
             </p>
           )}
         </div>
@@ -792,7 +790,7 @@ function PaymentsPageContent() {
             <EmptyState
               icon={CreditCard}
               title="Todavía no hay movimientos"
-              description="Genera un enlace de pago y compártelo con tu cliente por WhatsApp."
+              description="Genera un enlace de pago y compártelo con tu cliente."
               action={
                 <Button onClick={() => setLinkOpen(true)}>
                   <Link2 className="size-4" />
@@ -1027,7 +1025,18 @@ function PaymentsPageContent() {
           setLinkOpen(next);
           if (!next) setTimeout(() => setReissued(null), 200);
         }}
-        onCreated={load}
+        onCreated={(link) => {
+          // Anti-eco del enlace propio: el load() de aquí ya lo trae; el
+          // `enlace_pago_creado` que publica el backend se consume. Timeout de
+          // 15 s (espejo del verify): un enlace emite el evento UNA vez, así
+          // que la clave nunca traga un evento real de otro enlace.
+          selfApplied.current.add(`link-${link.public_id}`);
+          setTimeout(
+            () => selfApplied.current.delete(`link-${link.public_id}`),
+            15_000,
+          );
+          load();
+        }}
         reissued={reissued}
       />
 

@@ -416,7 +416,7 @@ function OrdersPanelInner() {
           <EmptyState
             icon={Receipt}
             title="Sin pedidos"
-            description="Los pedidos creados por el asistente o el panel aparecerán aquí."
+            description="Todavía no hay pedidos. Crea el primero desde el panel."
             action={
               <Button onClick={() => openEditor(null)}>
                 <Plus className="size-4" />

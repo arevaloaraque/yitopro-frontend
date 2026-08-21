@@ -54,7 +54,9 @@ export function NotificationToast({
       <div className="min-w-0 flex-1">
         <p className="font-heading text-sm leading-snug font-medium">{title}</p>
         {description ? (
-          <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
+          <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+            {description}
+          </p>
         ) : null}
       </div>
     </div>

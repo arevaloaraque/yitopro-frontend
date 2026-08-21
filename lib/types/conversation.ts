@@ -15,6 +15,17 @@ export interface Conversation {
   assignee_id: string | null;
   /** ISO 8601 of the last message. */
   last_message_at: string;
+  /**
+   * ISO 8601 de cuándo se abrió la conversación. Lo usa el delimitador del hilo
+   * unificado («Conversación abierta el 2 abr»).
+   *
+   * `updated_at` NO está acá a propósito, y la ausencia es la garantía: es «la
+   * última escritura de la fila» sin ningún campo que diga cuál fue —el cierre,
+   * un `take`, una reapertura tibia—, así que no se puede rotular con honestidad.
+   * No existe `closed_at` en el backend. Si el tipo no lo tiene, nadie lo pinta
+   * por descuido como si fuera la hora de cierre.
+   */
+  created_at: string;
   /** Number of messages unread by the operator. */
   unread: number;
   /** Behaviour rating (1-5) for THIS thread, or `null` when it has none. */

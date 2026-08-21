@@ -34,8 +34,22 @@ function makeBusiness(over: Partial<Business> = {}): Business {
     timezone: "America/Santiago",
     is_active: true,
     is_operative: true,
+    is_blocked: false,
     whatsapp_connected: true,
     whatsapp_number: "+56 9 1111 2222",
+    entitlements: {
+      assistant: true,
+      agents: ["scheduling", "sales"],
+      max_professionals: 0,
+      max_users: 0,
+      plan_name: "",
+      has_plan: true,
+      active_professionals: 0,
+      active_users: 1,
+    max_agents: 0,
+    max_reminder_rules: 0,
+    can_edit_automation_timing: true,
+    },
     onboarding_status: "completed",
     assistant_config: {
       display_name: "Maya",
@@ -54,9 +68,6 @@ function makeAgent(over: Partial<Agent> = {}): Agent {
     name: "Agente de agenda",
     type: "scheduling",
     is_active: true,
-    autonomy: "supervised",
-    skills: [],
-    tools: [],
     ...over,
   };
 }

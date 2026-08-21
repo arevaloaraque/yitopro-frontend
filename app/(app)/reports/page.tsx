@@ -2,11 +2,12 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MessageSquareDashed, Sparkles } from "lucide-react";
+import { MessageSquareDashed, RefreshCw, Sparkles } from "lucide-react";
 
 import { AppointmentsBlock } from "@/components/reports/appointments-block";
 import { CoreStrip } from "@/components/reports/core-strip";
 import { CsvExportButton } from "@/components/reports/csv-export-button";
+import { Button } from "@/components/ui/button";
 import { OrdersBlock } from "@/components/reports/orders-block";
 import { CustomersBlock } from "@/components/reports/customers-block";
 import {
@@ -16,7 +17,6 @@ import {
 } from "@/components/reports/payments-block";
 import { ProductsBlock } from "@/components/reports/products-block";
 import { EmptyState, ErrorState, Loading } from "@/components/states";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -28,15 +28,14 @@ import {
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
 import {
-  customRangeError,
   daysSinceSignup,
   MAX_RANGE_DAYS,
   getValueSummary,
   reportWindow,
-  todayISO,
   type ReportPeriod,
   type ValueSummary,
 } from "@/lib/api/reports";
+import { customRangeError, timeOnly, todayISO } from "@/lib/format/date";
 import { useAuth } from "@/lib/auth";
 import { useBusiness } from "@/lib/business";
 import { useUrlFilters } from "@/lib/hooks/use-url-filters";
@@ -97,7 +96,7 @@ function ReportsPageContent() {
   // El rango personalizado también vive en la URL, así que una vista con fechas
   // a mano se comparte y sobrevive un reload igual que un preset.
   const isCustom = period === "custom";
-  const rangeError = isCustom ? customRangeError(f.from, f.to) : "";
+  const rangeError = isCustom ? customRangeError(f.from, f.to, MAX_RANGE_DAYS) : "";
 
   // `reportRange` y no `window`: dentro de un componente `window` sombrea el
   // global del navegador, y el que lo lea después no sabe cuál está usando.
@@ -118,6 +117,11 @@ function ReportsPageContent() {
   );
   /** Hay una carga en vuelo con datos ya en pantalla (refetch por filtro). */
   const [busy, setBusy] = useState(false);
+  /** Cuándo se cargó lo que está en pantalla. Esta pantalla NO tiene SSE a
+   * propósito (cada consulta abre ~6 agregaciones caras): el dato es de la
+   * carga, y lo honesto es DECLARARLO y ofrecer refresco manual (auditoría
+   * 2026-08-20) en vez de fingir que está vivo. */
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
 
   /**
    * La coreografía de entrada corre UNA vez.
@@ -162,6 +166,7 @@ function ReportsPageContent() {
     try {
       const summary = await getValueSummary(reportRange, professionalId);
       setData(summary);
+      setLoadedAt(new Date());
       setState("ready");
     } catch (e) {
       setError({
@@ -227,6 +232,7 @@ function ReportsPageContent() {
           </h1>
           <p className="mt-1.5 text-[0.8rem] text-muted-foreground">
             Lo que yitopro hace por {business.name} · {windowCaption}
+            {loadedAt && <> · Actualizado a las {timeOnly(loadedAt.toISOString())}</>}
           </p>
         </div>
         <div className="flex items-end gap-3">
@@ -292,6 +298,20 @@ function ReportsPageContent() {
               negocio no tiene bloque de cobros, el botón prometía un archivo
               que solo podía salir con la fila de encabezados. */}
           {data?.blocks.payments ? <CsvExportButton range={reportRange} /> : null}
+          {/* Refresco MANUAL: la pantalla no tiene SSE a propósito (consulta
+              cara); el sello de la cabecera dice de cuándo es el dato y este
+              botón lo renueva. Misma talla que el resto de la fila (36/44). */}
+          <Button
+            variant="outline"
+            size="lg"
+            className="h-11 sm:h-9"
+            onClick={() => void load()}
+            disabled={busy}
+            aria-label="Actualizar reportes"
+          >
+            <RefreshCw className={cn("size-4", busy && "animate-spin")} />
+            Actualizar
+          </Button>
         </div>
       </div>
 
@@ -317,6 +337,7 @@ function ReportsPageContent() {
           busy={busy}
           data={data}
           business={business}
+          hasAssistant={business.entitlements?.assistant !== false}
           range={reportRange}
           professionalId={professionalId}
           onProfessionalChange={(id) =>
@@ -339,16 +360,17 @@ function ReportBody({
   professionalId,
   onProfessionalChange,
   animate,
+  hasAssistant,
 }: {
   data: ValueSummary;
   busy: boolean;
   business: { created_at: string };
+  hasAssistant: boolean;
   range: ReturnType<typeof reportWindow>;
   professionalId?: number;
   onProfessionalChange: (id: number | undefined) => void;
   animate: boolean;
 }) {
-  const router = useRouter();
   const { core, blocks } = data;
   const totalReplies = core.replies.ai + core.replies.operator;
   const lifetimeDays = daysSinceSignup(business.created_at);
@@ -372,43 +394,36 @@ function ReportBody({
     >
       {/* Núcleo universal — o, sin respuestas, un vacío que no inventa
           tarjetas en cero: un cero estructural es un dato del sistema recién
-          instalado, no del negocio. */}
-      {totalReplies === 0 ? (
-        isLifetimeWindow ? (
-          <EmptyState
-            icon={Sparkles}
-            title="Tu asistente todavía no ha atendido a nadie"
-            description={`En ${plural(lifetimeDays, "día", "días")} con yitopro no hay ninguna respuesta registrada. En cuanto conteste su primer mensaje, esta pantalla se llena sola.`}
-            // Sin ninguna respuesta en toda la vida del negocio, lo primero que
-            // hay que descartar es que el canal no esté conectado: es la única
-            // acción que puede cambiar este cero.
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/settings")}
-              >
-                Revisar conexión de WhatsApp
-              </Button>
-            }
-          />
+          instalado, no del negocio.
+
+          Toda esta franja habla del asistente (respuestas, derivaciones, tiempo
+          de respuesta). Sin plan que lo incluya no se muestra: los bloques de
+          agenda, pedidos y dinero que vienen debajo sí son del negocio y siguen. */}
+      {hasAssistant &&
+        (totalReplies === 0 ? (
+          isLifetimeWindow ? (
+            <EmptyState
+              icon={Sparkles}
+              title="Tu asistente todavía no ha atendido a nadie"
+              description={`En ${plural(lifetimeDays, "día", "días")} con yitopro no hay ninguna respuesta registrada. En cuanto conteste su primer mensaje, esta pantalla se llena sola.`}
+            />
+          ) : (
+            <EmptyState
+              icon={MessageSquareDashed}
+              title="Sin respuestas en este período"
+              description={`Tu negocio no envió mensajes en los últimos ${range.days} días. Prueba con un período más amplio.`}
+            />
+          )
         ) : (
-          <EmptyState
-            icon={MessageSquareDashed}
-            title="Sin respuestas en este período"
-            description={`Tu negocio no envió mensajes en los últimos ${range.days} días. Prueba con un período más amplio.`}
-          />
-        )
-      ) : (
-        <section aria-labelledby="reports-core">
-          {/* La tira son cinco tarjetas sueltas: sin este rótulo no tienen
+          <section aria-labelledby="reports-core">
+            {/* La tira son cinco tarjetas sueltas: sin este rótulo no tienen
               nombre de grupo y quedan huérfanas en el índice de la página. */}
-          <h2 id="reports-core" className="sr-only">
-            Actividad del asistente
-          </h2>
-          <CoreStrip core={core} animate={animate} />
-        </section>
-      )}
+            <h2 id="reports-core" className="sr-only">
+              Actividad del asistente
+            </h2>
+            <CoreStrip core={core} animate={animate} />
+          </section>
+        ))}
 
       {/* EL DINERO, a ancho completo y en su propia franja.
           Es la respuesta a «¿qué hizo yitopro por mi negocio?» y estaba por

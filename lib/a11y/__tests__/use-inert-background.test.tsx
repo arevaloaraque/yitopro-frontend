@@ -19,7 +19,8 @@ import { useInertBackground } from "@/lib/a11y/use-inert-background";
  */
 
 const shell = () => document.querySelector<HTMLElement>("[data-testid='shell']")!;
-const portals = () => Array.from(document.querySelectorAll<HTMLElement>("[data-base-ui-portal]"));
+const portals = () =>
+  Array.from(document.querySelectorAll<HTMLElement>("[data-base-ui-portal]"));
 
 function Shell() {
   return (
@@ -107,7 +108,9 @@ describe("useInertBackground", () => {
     // the inert target: it would make the dialog inert to itself.
     expect(portals()).not.toHaveLength(0);
     for (const portal of portals()) expect(portal.hasAttribute("inert")).toBe(false);
-    expect(document.querySelector("[data-slot='dialog-content']")!.closest("[inert]")).toBeNull();
+    expect(
+      document.querySelector("[data-slot='dialog-content']")!.closest("[inert]"),
+    ).toBeNull();
   });
 
   it("keeps the background inert when a NESTED dialog closes", () => {

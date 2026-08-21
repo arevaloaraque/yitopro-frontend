@@ -348,4 +348,3 @@ describe("playback safety with a real context", () => {
     expect(stub.createOscillator).not.toHaveBeenCalled();
   });
 });
-

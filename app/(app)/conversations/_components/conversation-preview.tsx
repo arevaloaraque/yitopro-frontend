@@ -24,18 +24,27 @@ export function ConversationPreview({
   conversation: Conversation;
   className?: string;
 }) {
-  const { last_message_preview: text, last_message_direction, last_message_sender_kind } =
-    conversation;
+  const {
+    last_message_preview: text,
+    last_message_direction,
+    last_message_sender_kind,
+  } = conversation;
 
   if (!text) {
     return (
-      <span className={cn("truncate text-[0.7rem] text-muted-foreground/70 italic", className)}>
+      <span
+        className={cn(
+          "truncate text-[0.7rem] text-muted-foreground/70 italic",
+          className,
+        )}
+      >
         Sin mensajes
       </span>
     );
   }
   // Inbound has no prefix: it is the customer, whose name is already on the row.
-  const prefix = last_message_direction === "out" ? SENDER_PREFIX[last_message_sender_kind] : "";
+  const prefix =
+    last_message_direction === "out" ? SENDER_PREFIX[last_message_sender_kind] : "";
   return (
     <span className={cn("truncate text-[0.7rem] text-muted-foreground", className)}>
       {prefix ? <span className="text-muted-foreground/70">{prefix}</span> : null}

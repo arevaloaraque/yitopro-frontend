@@ -145,9 +145,6 @@ describe("Step6Agents (adapted)", () => {
             name: "Agente de agenda",
             type: "scheduling",
             is_active: false,
-            autonomy: "supervised",
-            skills: ["agendar"],
-            tools: [],
           },
         ],
         count: 1,
@@ -166,9 +163,6 @@ describe("Step6Agents (adapted)", () => {
           name: "Agente de agenda",
           type: "scheduling",
           is_active: true,
-          autonomy: "supervised",
-          skills: ["agendar"],
-          tools: [],
         });
       }),
     );

@@ -2,23 +2,13 @@
 
 import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { AUTONOMY_OPTIONS, agentTypeLabel, skillLabel } from "@/lib/consts/agent";
+import { agentTypeLabel } from "@/lib/consts/agent";
 import { useOnboarding } from "@/lib/onboarding";
-import type { AgentAutonomy } from "@/lib/types";
 
 export function Step6Agents() {
-  const { data, toggleAgent, setAgentAutonomy } = useOnboarding();
+  const { data, toggleAgent } = useOnboarding();
   const [error, setError] = useState<string | null>(null);
 
   function run(promise: Promise<void>) {
@@ -65,43 +55,6 @@ export function Step6Agents() {
               />
             </div>
           </div>
-
-          <div className="mt-3 space-y-1.5">
-            <Label className="text-xs">Autonomía</Label>
-            <Select
-              items={AUTONOMY_OPTIONS}
-              value={agent.autonomy}
-              onValueChange={(v) =>
-                run(setAgentAutonomy(agent.type, v as AgentAutonomy))
-              }
-            >
-              <SelectTrigger className="w-full" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {AUTONOMY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {agent.skills.length > 0 ? (
-            <div className="mt-3">
-              <Label className="text-xs">Skills</Label>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {agent.skills.map((skill) => (
-                  <Badge key={skill} variant="outline" className="text-[0.65rem]">
-                    {skillLabel(skill)}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       ))}
     </div>

@@ -157,5 +157,4 @@ describe("calendarWindow — la ventana visible es lo que se le pide al backend"
       date_to: "2026-03-01",
     });
   });
-
 });

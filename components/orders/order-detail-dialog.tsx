@@ -10,6 +10,7 @@ import {
   Pencil,
 } from "lucide-react";
 
+import { useBusinessOptional } from "@/lib/business/business-context";
 import type { Order } from "@/lib/api";
 import { listConversations } from "@/lib/api/conversations";
 import type { Conversation } from "@/lib/types";
@@ -81,10 +82,15 @@ export function OrderDetailDialog({
   const [convFailedFor, setConvFailedFor] = useState<string | null>(null);
   // Guards against a stale response landing after a newer one (same as CustomerDrawer).
   const reqRef = useRef(0);
+  // Las conversaciones del cliente son del asistente: sin plan que lo incluya no
+  // hay hilos, y pedirlos devuelve 403 y pinta «No se pudieron cargar», que se lee
+  // como panel roto en vez de como plan.
+  const hasAssistant =
+    useBusinessOptional()?.business?.entitlements?.assistant !== false;
   const customerId = order?.customer_id ?? null;
 
   useEffect(() => {
-    if (!customerId) return;
+    if (!customerId || !hasAssistant) return;
     const reqId = ++reqRef.current;
     listConversations({ customerId })
       // `.items`: el inbox pasó a paginarse por cursor. Basta la primera página:
@@ -96,7 +102,7 @@ export function OrderDetailDialog({
       .catch(() => {
         if (reqId === reqRef.current) setConvFailedFor(customerId);
       });
-  }, [customerId]);
+  }, [customerId, hasAssistant]);
 
   if (!order) return null;
 
@@ -139,58 +145,62 @@ export function OrderDetailDialog({
               exacto que lo originó no es derivable hoy. Adivinarlo por cercanía de fechas
               se leería como un dato duro sin serlo. Para un pedido de WhatsApp el hilo
               reciente es en la práctica el que corresponde. */}
-          <div className="mt-4 mb-2 space-y-2">
-            <p className="flex items-center gap-1.5 text-sm font-medium">
-              <MessageSquare className="size-3.5" aria-hidden />
-              Conversaciones del cliente
-              {convState === "ready" && (conversations ?? []).length > 0 && (
-                <span className="text-xs font-normal text-muted-foreground">
-                  ({(conversations ?? []).length})
-                </span>
+          {hasAssistant && (
+            <div className="mt-4 mb-2 space-y-2">
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                <MessageSquare className="size-3.5" aria-hidden />
+                Conversaciones del cliente
+                {convState === "ready" && (conversations ?? []).length > 0 && (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    ({(conversations ?? []).length})
+                  </span>
+                )}
+              </p>
+              {convState === "loading" && (
+                <p className="text-xs text-muted-foreground">
+                  Cargando conversaciones…
+                </p>
               )}
-            </p>
-            {convState === "loading" && (
-              <p className="text-xs text-muted-foreground">Cargando conversaciones…</p>
-            )}
-            {convState === "error" && (
-              <p className="text-xs text-muted-foreground">
-                No se pudieron cargar las conversaciones.
-              </p>
-            )}
-            {convState === "ready" && (conversations ?? []).length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                Sin conversaciones. Este pedido no vino por WhatsApp.
-              </p>
-            )}
-            {convState === "ready" && (conversations ?? []).length > 0 && (
-              <ul className="space-y-1.5">
-                {(conversations ?? []).map((conv) => (
-                  <li key={conv.id}>
-                    <Link
-                      href={`/conversations?id=${conv.id}`}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-border/30 px-3 py-2 transition-colors hover:border-border hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs text-foreground">
-                          {formatDateTime(conv.last_message_at)}
+              {convState === "error" && (
+                <p className="text-xs text-muted-foreground">
+                  No se pudieron cargar las conversaciones.
+                </p>
+              )}
+              {convState === "ready" && (conversations ?? []).length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Sin conversaciones. Este pedido no vino por WhatsApp.
+                </p>
+              )}
+              {convState === "ready" && (conversations ?? []).length > 0 && (
+                <ul className="space-y-1.5">
+                  {(conversations ?? []).map((conv) => (
+                    <li key={conv.id}>
+                      <Link
+                        href={`/conversations?chat=${conv.customer_id}&id=${conv.id}`}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border/30 px-3 py-2 transition-colors hover:border-border hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs text-foreground">
+                            {formatDateTime(conv.last_message_at)}
+                          </span>
+                          <span className="block text-[0.65rem] text-muted-foreground">
+                            {relativeTime(conv.last_message_at)}
+                          </span>
                         </span>
-                        <span className="block text-[0.65rem] text-muted-foreground">
-                          {relativeTime(conv.last_message_at)}
-                        </span>
-                      </span>
-                      <Badge variant="outline" className="shrink-0 text-[0.65rem]">
-                        {CONV_STATUS_LABELS[conv.status]}
-                      </Badge>
-                      <ChevronRight
-                        className="size-4 shrink-0 text-muted-foreground"
-                        aria-hidden
-                      />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                        <Badge variant="outline" className="shrink-0 text-[0.65rem]">
+                          {CONV_STATUS_LABELS[conv.status]}
+                        </Badge>
+                        <ChevronRight
+                          className="size-4 shrink-0 text-muted-foreground"
+                          aria-hidden
+                        />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
 
         {/* A cancelled order has nothing to act on: rendering the footer anyway would

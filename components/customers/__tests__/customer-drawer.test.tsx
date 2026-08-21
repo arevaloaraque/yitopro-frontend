@@ -131,6 +131,56 @@ describe("CustomerDrawer — live refresh", () => {
     expect(getRecord).toHaveBeenCalledTimes(1);
   });
 
+  it("re-aplica el rating con cliente_actualizado aunque el nombre esté editado sin guardar", async () => {
+    renderDrawer();
+    const nameInput = await screen.findByDisplayValue("Ana");
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Ana María"); // dirty: el nombre NO debe pisarse
+
+    vi.mocked(getCustomer).mockResolvedValue({
+      id: "cust-1",
+      name: "Ana",
+      phone: "+56911111111",
+      email: "",
+      created_at: "2026-07-11T10:00:00Z",
+      rating_avg: 4.5,
+      rating_count: 2,
+    });
+    emitSse({
+      id: "c1",
+      type: "cliente_actualizado",
+      emitted_at: "2026-08-20T10:00:00Z",
+      data: { customer_id: "cust-1", fields: ["rating"] },
+    } as SSEEvent);
+
+    // El rating no es editable → se re-aplica SIEMPRE…
+    expect(await screen.findByLabelText("4,5 de 5")).toBeTruthy();
+    // …y lo tipeado sobrevive intacto.
+    expect(screen.getByDisplayValue("Ana María")).toBeTruthy();
+  });
+
+  it("mensaje_recibido recarga el historial UNA vez por ráfaga (coalescido 250 ms)", async () => {
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+    expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(1);
+
+    const msg = (id: string): SSEEvent =>
+      ({
+        id,
+        type: "mensaje_recibido",
+        emitted_at: "2026-08-20T10:00:00Z",
+        data: { conversation_id: "conv-1", message_id: id },
+      }) as SSEEvent;
+    emitSse(msg("m1"));
+    emitSse(msg("m2"));
+    emitSse(msg("m3"));
+
+    await waitFor(() => expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(2));
+    // Pasada la ventana de coalescing no llega ninguna llamada extra.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(2);
+  });
+
   it("does NOT clobber unsaved ficha edits on a remote update", async () => {
     renderDrawer();
     const input = await screen.findByRole("spinbutton");
@@ -185,6 +235,7 @@ describe("CustomerDrawer — calificación e historial", () => {
           active_agent: null,
           assignee_id: null,
           last_message_at: "2026-07-30T18:00:00Z",
+          created_at: "2026-07-29T09:00:00Z",
           unread: 0,
           customer_rating: 2,
           rating_status: "rated",
@@ -203,6 +254,7 @@ describe("CustomerDrawer — calificación e historial", () => {
           active_agent: "sales",
           assignee_id: null,
           last_message_at: "2026-07-31T09:00:00Z",
+          created_at: "2026-07-30T09:00:00Z",
           unread: 0,
           customer_rating: null,
           rating_status: "pending",
@@ -227,7 +279,9 @@ describe("CustomerDrawer — calificación e historial", () => {
     // Y cada fila es navegable al inbox, que acepta `?id=`.
     const links = screen.getAllByRole("link");
     const hrefs = links.map((a) => a.getAttribute("href"));
-    expect(hrefs).toContain("/conversations?id=conv-9");
-    expect(hrefs).toContain("/conversations?id=conv-10");
+    // `chat=` es la clave canónica del inbox (el número); `id=` va como ancla para
+    // que el hilo abra posicionado en ESA conversación.
+    expect(hrefs).toContain("/conversations?chat=cust-1&id=conv-9");
+    expect(hrefs).toContain("/conversations?chat=cust-1&id=conv-10");
   });
 });

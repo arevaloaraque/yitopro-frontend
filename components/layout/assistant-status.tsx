@@ -19,6 +19,9 @@ export function AssistantStatus() {
     return <Skeleton className="hidden h-5 w-28 rounded-4xl sm:block" />;
   }
   if (bizState === "error" || !business) return null;
+  // Sin asistente en el plan no hay nada que informar: un badge que dice "en
+  // pausa" para siempre se lee como producto a medio instalar, no como plan.
+  if (business.entitlements?.assistant === false) return null;
 
   // "Activa" only when the business is live (is_operative: active AND
   // status === "active") AND at least one agent is enabled — with no enabled

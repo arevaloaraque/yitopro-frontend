@@ -7,7 +7,6 @@ import {
   InfoIcon,
   TriangleAlertIcon,
   OctagonXIcon,
-  Loader2Icon,
 } from "lucide-react";
 
 const Toaster = ({ ...props }: ToasterProps) => {
@@ -16,7 +15,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
       // A burst of events (the AI closing several threads, a sweep delivering reminders)
       // used to pile toasts up the whole screen. Four is what fits without covering the
       // work. This is a BACKSTOP: `notify()` already dismisses the oldest past four, so
@@ -36,7 +34,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
         info: <InfoIcon className="size-4" />,
         warning: <TriangleAlertIcon className="size-4" />,
         error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
       }}
       style={
         {
@@ -51,11 +48,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--toast-close-button-transform": "translate(35%, -35%)",
         } as React.CSSProperties
       }
-      toastOptions={{
-        classNames: {
-          toast: "cn-toast",
-        },
-      }}
       {...props}
     />
   );

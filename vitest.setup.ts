@@ -22,6 +22,25 @@ if (typeof window !== "undefined" && !window.ResizeObserver) {
   } as unknown as typeof ResizeObserver;
 }
 
+// jsdom no implementa IntersectionObserver (lo usa el scroll infinito del hilo de
+// conversaciones). No-op a propósito: en jsdom nada tiene alto, así que un
+// observador que "viera" los centinelas dispararía carga sin fin. Lo que el
+// scroll infinito decide está probado en `lib/conversations/__tests__/thread.test.ts`,
+// que es puro; acá lo único que hace falta es que el componente no reviente.
+if (typeof window !== "undefined" && !window.IntersectionObserver) {
+  window.IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds: readonly number[] = [];
+  } as unknown as typeof IntersectionObserver;
+}
+
 // jsdom no implementa matchMedia (lo usan next-themes y media queries).
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({

@@ -66,7 +66,10 @@ describe("apiFetch (lib/api/client)", () => {
   it("never surfaces a 5xx body: uses the Spanish status message", async () => {
     server.use(
       http.get(`${BASE}/crash`, () =>
-        HttpResponse.json({ detail: "Traceback (most recent call last)…" }, { status: 500 }),
+        HttpResponse.json(
+          { detail: "Traceback (most recent call last)…" },
+          { status: 500 },
+        ),
       ),
     );
     await expect(api.get("/crash")).rejects.toMatchObject({

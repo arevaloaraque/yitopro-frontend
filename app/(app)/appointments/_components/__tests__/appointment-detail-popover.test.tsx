@@ -5,16 +5,39 @@
  * evento: datos de la cita, acciones, y la sección de pago que decide entre
  * "Pagado" y "Crear link de pago" con UNA consulta acotada por appointment_id.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { listPayments } from "@/lib/api/payments";
+import type { SSEEvent } from "@/lib/types";
 
 import { AppointmentDetailPopover } from "../appointment-detail-popover";
 import type { EnrichedAppointment } from "../types";
 
 vi.mock("@/lib/api/payments");
+
+// PaymentSection se suscribe al stream mientras el popover está abierto; el
+// mock registra el handler para poder emitir eventos y verificar que al cerrar
+// la suscripción se retira (el array queda vacío).
+const { sseHandlers } = vi.hoisted(() => ({
+  sseHandlers: [] as ((event: SSEEvent) => void)[],
+}));
+vi.mock("@/lib/sse", () => ({
+  subscribeToEvents: (handler: (event: SSEEvent) => void) => {
+    sseHandlers.push(handler);
+    return () => {
+      const i = sseHandlers.indexOf(handler);
+      if (i >= 0) sseHandlers.splice(i, 1);
+    };
+  },
+}));
+
+function emitSse(event: SSEEvent) {
+  act(() => {
+    for (const handler of [...sseHandlers]) handler(event);
+  });
+}
 
 // Relativas al reloj, no fijas: `canChange` depende de `isPastAppointment()`, así
 // que una fecha literal "futura" caduca sola y el día que pasa se lleva por delante
@@ -68,8 +91,34 @@ function renderPopover(overrides: Partial<EnrichedAppointment> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sseHandlers.length = 0;
   noPayments();
 });
+
+const PAID_PAYMENT = {
+  kind: "payment" as const,
+  id: "7",
+  reference: "YTO-1",
+  status: "paid" as const,
+  amount: 15000,
+  currency: "CLP",
+  created_at: "2026-08-20T10:00:00-04:00",
+  paid_at: "2026-08-20T10:01:00-04:00",
+  expires_at: "2026-08-21T10:00:00-04:00",
+  customer_id: "cust-1",
+  customer_name: "Ana Díaz",
+  concept: "",
+  method_label: "Tarjeta",
+  provider_name: "ALPS JustPay",
+  channel_name: "Transbank",
+};
+
+const PAGO_RECIBIDO: SSEEvent = {
+  id: "e1",
+  type: "pago_recibido",
+  emitted_at: "2026-08-20T10:01:00Z",
+  data: { payment_id: "7", amount: "15000", currency: "CLP", customer_id: "cust-1" },
+} as SSEEvent;
 
 describe("AppointmentDetailPopover", () => {
   it("abre la tarjeta con el detalle de la cita al hacer click", async () => {
@@ -153,9 +202,7 @@ describe("AppointmentDetailPopover", () => {
     expect(
       screen.queryByRole("button", { name: /crear link de pago/i }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Reagendar" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reagendar" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Cancelar cita" }),
     ).not.toBeInTheDocument();
@@ -173,9 +220,7 @@ describe("AppointmentDetailPopover", () => {
     await user.click(screen.getByText("evento"));
     expect(await screen.findByText("Ana Díaz")).toBeInTheDocument();
 
-    expect(
-      screen.queryByRole("button", { name: "Reagendar" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reagendar" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Cancelar cita" }),
     ).not.toBeInTheDocument();
@@ -201,5 +246,42 @@ describe("AppointmentDetailPopover", () => {
     await user.click(screen.getByText("evento"));
     await user.click(await screen.findByRole("button", { name: "Ver historial" }));
     expect(onHistory).toHaveBeenCalledWith(apt);
+  });
+});
+
+/** El estado de pago se mantiene vivo mientras la tarjeta está abierta: un pago
+ * que se acredita ya no sigue diciendo «Pendiente» (auditoría 2026-08-20). El
+ * payload no trae appointment_id, así que el diseño es re-consultar la propia
+ * query acotada, no hacer matching. */
+describe("AppointmentDetailPopover — pago en vivo", () => {
+  it("re-consulta el pago cuando llega pago_recibido con la tarjeta abierta", async () => {
+    const user = userEvent.setup();
+    renderPopover();
+    await user.click(screen.getByText("evento"));
+    await waitFor(() => expect(listPayments).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Crear link de pago/)).toBeInTheDocument();
+
+    vi.mocked(listPayments).mockResolvedValue({
+      items: [PAID_PAYMENT],
+      next_cursor: "",
+      has_more: false,
+    });
+    emitSse(PAGO_RECIBIDO);
+
+    expect(await screen.findByText("Pagado")).toBeInTheDocument();
+    expect(listPayments).toHaveBeenCalledTimes(2);
+  });
+
+  it("cerrada la tarjeta, la suscripción se retira y el evento no consulta nada", async () => {
+    const user = userEvent.setup();
+    renderPopover();
+    await user.click(screen.getByText("evento"));
+    await waitFor(() => expect(listPayments).toHaveBeenCalledTimes(1));
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(sseHandlers.length).toBe(0));
+
+    emitSse(PAGO_RECIBIDO);
+    expect(listPayments).toHaveBeenCalledTimes(1);
   });
 });

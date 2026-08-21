@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/brand/logo";
 import { BootSplash } from "@/components/states";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { NO_PLAN_NOTICE_KEY } from "@/components/layout/plan-gate";
 import { ApiError, getOnboardingStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSubmitGuard } from "@/lib/hooks/use-submit-guard";
@@ -55,6 +56,20 @@ export default function LoginPage() {
     void resolvePostLoginTarget().then((target) => router.replace(target));
   }, [isAuthenticated, router]);
 
+  // Aviso dejado por PlanGate al cerrar la sesión de un staff cuyo negocio
+  // quedó sin plan: se muestra una vez y se limpia.
+  useEffect(() => {
+    try {
+      const notice = sessionStorage.getItem(NO_PLAN_NOTICE_KEY);
+      if (notice) {
+        sessionStorage.removeItem(NO_PLAN_NOTICE_KEY);
+        setError("root", { message: notice });
+      }
+    } catch {
+      // Storage bloqueado: sin aviso, el 403 del backend igual lo explica.
+    }
+  }, [setError]);
+
   const submitGuard = useSubmitGuard();
   const onSubmit = (values: LoginValues) => submitGuard(() => doLogin(values));
 
@@ -68,7 +83,11 @@ export default function LoginPage() {
         message:
           err instanceof ApiError && err.status === 401
             ? "Email o contraseña incorrectos."
-            : "No pudimos conectar con el servidor. Inténtalo de nuevo.",
+            : err instanceof ApiError && err.status === 403
+              ? // «Sin plan = bloqueado»: el backend responde 403 con el
+                // mensaje para staff de un negocio sin plan — se muestra tal cual.
+                err.message
+              : "No pudimos conectar con el servidor. Inténtalo de nuevo.",
       });
     }
   }

@@ -81,7 +81,9 @@ export function PaymentLinkDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated?: () => void;
+  /** Recibe el enlace acuñado: el caller lo necesita para el anti-eco del
+   *  `enlace_pago_creado` que el backend publica por el mismo POST. */
+  onCreated?: (link: PaymentLink) => void;
   /**
    * A link the caller already rotated, to open straight on the copy step.
    *
@@ -248,7 +250,7 @@ export function PaymentLinkDialog({
       });
       setMinted(link);
       setWasReissue(false);
-      onCreated?.();
+      onCreated?.(link);
     } catch (e) {
       setErrors({
         _form: e instanceof Error ? e.message : "No se pudo crear el enlace",
@@ -301,12 +303,12 @@ export function PaymentLinkDialog({
                     <strong className="font-medium text-foreground">
                       el anterior dejó de funcionar
                     </strong>
-                    . Envíaselo a tu cliente por WhatsApp.
+                    . Envíaselo a tu cliente.
                   </>
                 ) : (
                   <>
                     Compártelo con {minted.customer_id ? customer?.name : "tu cliente"}{" "}
-                    por WhatsApp. Es de un solo uso.
+                    . Es de un solo uso.
                   </>
                 )}
               </DialogDescription>
@@ -363,7 +365,7 @@ export function PaymentLinkDialog({
             <DialogHeader>
               <DialogTitle>Nuevo enlace de pago</DialogTitle>
               <DialogDescription>
-                Genera un enlace para cobrarle a un cliente por WhatsApp.
+                Genera un enlace para cobrarle a un cliente.
               </DialogDescription>
             </DialogHeader>
 

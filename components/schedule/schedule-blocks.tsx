@@ -135,11 +135,19 @@ export function ScheduleBlocks() {
           citas. Puedes bloquear a un profesional o a todo el negocio.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      {/* Form de alta a la izquierda y lista a la derecha desde xl: el flujo es
+          «creo → veo el resultado» sin scroll. Bajo xl apilan como siempre. */}
+      <CardContent className="grid items-start gap-4 xl:grid-cols-[minmax(0,420px)_1fr] xl:gap-6">
+        {/* Los estados abarcan las dos columnas: como celda de 420px dejaban
+            la mitad derecha del card en blanco, que se lee como algo roto. */}
         {!loaded ? (
-          <Loading rows={2} label="Cargando bloqueos…" />
+          <div className="xl:col-span-2">
+            <Loading rows={2} label="Cargando bloqueos…" />
+          </div>
         ) : loadError ? (
-          <ErrorState description={loadError} />
+          <div className="xl:col-span-2">
+            <ErrorState description={loadError} />
+          </div>
         ) : (
           <>
             <div className="grid gap-3 rounded-lg border border-border/40 p-3 sm:grid-cols-2">
@@ -210,7 +218,11 @@ export function ScheduleBlocks() {
                     </>
                   )}
                 </Button>
-                {formError && <p className="text-xs text-destructive">{formError}</p>}
+                {/* role="status" en un contenedor SIEMPRE montado: el error se
+                    anuncia al lector de pantalla en vez de aparecer en silencio. */}
+                <div role="status">
+                  {formError && <p className="text-xs text-destructive">{formError}</p>}
+                </div>
               </div>
             </div>
 

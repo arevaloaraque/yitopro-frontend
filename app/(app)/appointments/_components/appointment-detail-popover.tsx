@@ -14,10 +14,12 @@ import {
 } from "@/components/ui/popover";
 import { listPayments } from "@/lib/api/payments";
 import { useMoney } from "@/lib/business/use-money";
+import { subscribeToEvents } from "@/lib/sse";
 import type { Appointment } from "@/lib/types";
 
 import type { EnrichedAppointment } from "./types";
 import { isPastAppointment } from "./types";
+import { timeOnly } from "@/lib/format/date";
 
 interface AppointmentDetailPopoverProps {
   appointment: EnrichedAppointment;
@@ -68,13 +70,6 @@ function formatDay(iso: string): string {
   });
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("es-CL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 /**
  * The event card, Google Calendar style: click an appointment anywhere in the
  * agenda and its detail floats next to it instead of navigating away. The
@@ -96,7 +91,8 @@ export function AppointmentDetailPopover({
 }: AppointmentDetailPopoverProps) {
   // A started appointment cannot be rescheduled or cancelled anymore — only
   // read (history) and charged (payment section below).
-  const canChange = appointment.status === "scheduled" && !isPastAppointment(appointment);
+  const canChange =
+    appointment.status === "scheduled" && !isPastAppointment(appointment);
   const badge = statusBadge(appointment.status);
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -157,7 +153,9 @@ export function AppointmentDetailPopover({
             >
               <History className="size-3.5" />
             </PopoverClose>
-            <PopoverClose render={<Button variant="ghost" size="icon-xs" aria-label="Cerrar" />}>
+            <PopoverClose
+              render={<Button variant="ghost" size="icon-xs" aria-label="Cerrar" />}
+            >
               <X className="size-3.5" />
             </PopoverClose>
           </div>
@@ -179,8 +177,8 @@ export function AppointmentDetailPopover({
           <div className="flex items-center gap-2">
             <Clock className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="text-foreground">
-              {formatDay(appointment.start)} · {formatTime(appointment.start)} –{" "}
-              {formatTime(appointment.end)}
+              {formatDay(appointment.start)} · {timeOnly(appointment.start)} –{" "}
+              {timeOnly(appointment.end)}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -197,7 +195,10 @@ export function AppointmentDetailPopover({
           )}
         </dl>
 
-        <PaymentSection appointment={appointment} onCreatePaymentLink={onCreatePaymentLink} />
+        <PaymentSection
+          appointment={appointment}
+          onCreatePaymentLink={onCreatePaymentLink}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -222,6 +223,22 @@ function PaymentSection({
   const money = useMoney();
   const [state, setState] = useState<"loading" | "paid" | "unpaid">("loading");
   const [paidAmount, setPaidAmount] = useState<number | null>(null);
+  // Bump para re-consultar el pago mientras el popover está abierto. El payload
+  // de pago_recibido/pago_rechazado no trae appointment_id, así que no hay
+  // matching posible: se re-ejecuta la consulta propia (acotada e idempotente).
+  // La suscripción vive en PaymentSection, que se desmonta al cerrar el popover
+  // (Base UI, sin keepMounted): cerrado, no cuesta nada.
+  const [version, setVersion] = useState(0);
+
+  useEffect(
+    () =>
+      subscribeToEvents((event) => {
+        if (event.type === "pago_recibido" || event.type === "pago_rechazado") {
+          setVersion((v) => v + 1);
+        }
+      }),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -247,7 +264,7 @@ function PaymentSection({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [appointment.id]);
+  }, [appointment.id, version]);
 
   const canCharge =
     appointment.status === "scheduled" || appointment.status === "completed";

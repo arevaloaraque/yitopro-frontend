@@ -162,6 +162,8 @@ describe("AppointmentListView — paginación", () => {
     renderList([appointment], { total: 1 });
 
     expect(screen.getByText("Mostrando 1 de 1")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Cargar más" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cargar más" }),
+    ).not.toBeInTheDocument();
   });
 });

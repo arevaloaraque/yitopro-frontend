@@ -47,9 +47,7 @@ vi.mock("@/lib/sse", () => ({
  *  es correcto — con una ventana de 90 días no se puede afirmar nada sobre toda la
  *  vida de un tenant más viejo. */
 const LIFETIME_DAYS = 40;
-const signupIso = new Date(
-  Date.now() - (LIFETIME_DAYS - 1) * 86_400_000,
-).toISOString();
+const signupIso = new Date(Date.now() - (LIFETIME_DAYS - 1) * 86_400_000).toISOString();
 
 const backendBusiness = {
   id: 3,
@@ -231,7 +229,9 @@ describe("/reports page", () => {
     // Sin pendientes, el subtitulo nombra el motivo de la escalacion. El
     // fixture empata `ai` y `customer` en 4, y con empate NO se corona a
     // ninguno: el orden de las claves lo decide el backend, no el negocio.
-    expect(screen.getByText("todas atendidas · por varios motivos")).toBeInTheDocument();
+    expect(
+      screen.getByText("todas atendidas · por varios motivos"),
+    ).toBeInTheDocument();
     // La mediana es el número grande; el subtítulo NO la repite y sí trae el
     // p90 y la base sobre la que se calcula.
     expect(screen.getByText("6,1 s")).toBeInTheDocument();
@@ -251,7 +251,9 @@ describe("/reports page", () => {
 
     // Conversión de enlaces: un embudo de tres pasos, cada uno con su conteo y
     // su porcentaje en TEXTO — la barra acompaña al dato, no lo reemplaza.
-    expect(screen.getByRole("heading", { name: "Enlaces de cobro" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Enlaces de cobro" }),
+    ).toBeInTheDocument();
     for (const step of ["Enviados", "Abiertos", "Pagados"]) {
       expect(screen.getByText(step)).toBeInTheDocument();
     }
@@ -355,7 +357,9 @@ describe("/reports page", () => {
 
     // Negocio que agenda solo desde el panel: nunca tuvo cita de IA, pero su
     // reparto sí existe. La tarjeta de la IA desaparece, el ranking no.
-    mockSummary(makeSummary({ appointments: { ...DEFAULT_AGENDA, ai_active_count: null } }));
+    mockSummary(
+      makeSummary({ appointments: { ...DEFAULT_AGENDA, ai_active_count: null } }),
+    );
     renderPage();
 
     expect(
@@ -434,9 +438,7 @@ describe("/reports page", () => {
     // por sí sola (0 cobros previos), así que afirmarlo a secas pasaría aunque
     // el piso de CLP no funcionara. El «1 cobro» solo puede venir de CLP.
     expect(
-      await screen.findByText(
-        /base insuficiente: 1 cobro en los \d+ días anteriores/,
-      ),
+      await screen.findByText(/base insuficiente: 1 cobro en los \d+ días anteriores/),
     ).toBeInTheDocument();
   });
 
@@ -454,7 +456,6 @@ describe("/reports page", () => {
       screen.getByText(/vs los \d+ días anteriores \(5 cobros\)/),
     ).toBeInTheDocument();
   });
-
 
   it("clientes: rótulo de CONDUCTA (no satisfacción), promedio, base y distribución", async () => {
     mockOwnerSession();
@@ -498,7 +499,9 @@ describe("/reports page", () => {
     renderPage();
 
     expect(
-      await screen.findByText(/Ninguna conversación de este período tiene nota todavía: 3 están/),
+      await screen.findByText(
+        /Ninguna conversación de este período tiene nota todavía: 3 están/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -507,10 +510,14 @@ describe("/reports page", () => {
     mockSummary(makeSummary({}));
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Lo más vendido" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Lo más vendido" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Cera y Pomada")).toBeInTheDocument();
     expect(screen.getByText("en 5 pedidos")).toBeInTheDocument();
-    expect(screen.getByText(/Unidades vendidas en pedidos confirmados/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Unidades vendidas en pedidos confirmados/),
+    ).toBeInTheDocument();
     // Unidades, NUNCA dinero, y se comprueba dentro de la tarjeta: el pedido no
     // tiene columna de moneda, así que un importe aquí llevaría el símbolo de
     // hoy sobre precios congelados hace meses.
@@ -526,7 +533,9 @@ describe("/reports page", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Cobros" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Lo más vendido" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Lo más vendido" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Cómo te escriben tus clientes" }),
     ).not.toBeInTheDocument();
@@ -562,7 +571,9 @@ describe("/reports page", () => {
   });
 
   it("rango personalizado: un par inválido muestra el motivo y NO pide datos", async () => {
-    searchParamsStub.current = new URLSearchParams("p=custom&from=2026-08-10&to=2026-08-01");
+    searchParamsStub.current = new URLSearchParams(
+      "p=custom&from=2026-08-10&to=2026-08-01",
+    );
     mockOwnerSession();
     let calls = 0;
     server.use(
@@ -612,7 +623,9 @@ describe("/reports page", () => {
   });
 
   it("rango personalizado válido: la ventana viaja tal cual al backend", async () => {
-    searchParamsStub.current = new URLSearchParams("p=custom&from=2026-08-01&to=2026-08-07");
+    searchParamsStub.current = new URLSearchParams(
+      "p=custom&from=2026-08-01&to=2026-08-07",
+    );
     mockOwnerSession();
     let seen: URL | null = null;
     server.use(

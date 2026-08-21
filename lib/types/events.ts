@@ -27,6 +27,12 @@ export type SSEEventType =
   | "servicio_creado"
   | "servicio_actualizado"
   | "servicio_eliminado"
+  | "producto_creado"
+  | "producto_actualizado"
+  | "profesional_creado"
+  | "profesional_actualizado"
+  | "profesional_eliminado"
+  | "enlace_pago_creado"
   | "error_operativo"
   | "error_integracion";
 
@@ -211,6 +217,53 @@ type ServicioEliminadoEvent = SSEEventBase<
   { service_id: string }
 >;
 
+// --- Product catalog (data-sync) ---
+// Espejo de servicio_*, emitidos post-commit desde POST/PATCH /api/products/.
+// NO existe `producto_eliminado`: el API de tenant no tiene DELETE de productos
+// (desactivar es el único camino), y un nombre que nada emite es mentira en el
+// contrato — se retiró de aquí cuando el backend lo confirmó (2026-08-20).
+
+type ProductoCreadoEvent = SSEEventBase<
+  "producto_creado",
+  { product_id: string; active?: boolean }
+>;
+
+type ProductoActualizadoEvent = SSEEventBase<
+  "producto_actualizado",
+  { product_id: string; active?: boolean }
+>;
+
+// --- Professionals (data-sync) ---
+// A diferencia de productos, `profesional_eliminado` SÍ existe: el DELETE de
+// profesionales es real (físico, con 409 si tiene citas). OJO: la
+// reconciliación de plan desactiva/restaura profesionales en BULK y no emite
+// por fila — esa señal viaja como `negocio_actualizado`, por eso los
+// consumidores escuchan ambos.
+
+type ProfesionalCreadoEvent = SSEEventBase<
+  "profesional_creado",
+  { professional_id: string; active?: boolean }
+>;
+
+type ProfesionalActualizadoEvent = SSEEventBase<
+  "profesional_actualizado",
+  { professional_id: string; active?: boolean }
+>;
+
+type ProfesionalEliminadoEvent = SSEEventBase<
+  "profesional_eliminado",
+  { professional_id: string }
+>;
+
+/** Un enlace de pago fue acuñado (por la IA u otro operador).
+ *  `link_id` es el uuid PÚBLICO del enlace (el `public_id` del POST y la cola
+ *  del `reference` de la fila): es el único identificador que el panel conoce
+ *  tras crear uno, y por eso es la clave del anti-eco. Nunca el secreto. */
+type EnlacePagoCreadoEvent = SSEEventBase<
+  "enlace_pago_creado",
+  { link_id: string; amount: string; currency: string; customer_id: string | null }
+>;
+
 type ErrorOperativoEvent = SSEEventBase<
   "error_operativo",
   // `event_type` names the operational event that failed; any extra keys are
@@ -249,5 +302,11 @@ export type SSEEvent =
   | ServicioCreadoEvent
   | ServicioActualizadoEvent
   | ServicioEliminadoEvent
+  | ProductoCreadoEvent
+  | ProductoActualizadoEvent
+  | ProfesionalCreadoEvent
+  | ProfesionalActualizadoEvent
+  | ProfesionalEliminadoEvent
+  | EnlacePagoCreadoEvent
   | ErrorOperativoEvent
   | ErrorIntegracionEvent;

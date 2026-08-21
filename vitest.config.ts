@@ -18,7 +18,6 @@ export default defineConfig({
     // Los tests NUNCA tocan el backend real: MSW (node) intercepta toda la red.
     env: {
       NEXT_PUBLIC_API_URL: "http://localhost:8050",
-      NEXT_PUBLIC_API_MOCKING: "disabled",
     },
     include: ["**/*.{test,spec}.{ts,tsx}"],
     exclude: [

@@ -88,7 +88,11 @@ function makeDetail(over: Partial<PaymentDetail> = {}): PaymentDetail {
     shopper_doc_number: "12.345.678-9",
     shopper_name: "Ana María Fuentes",
     provider_metadata: { authorization_code: "A1B2C3" },
-    payment_method: { id: "3", channel_id: "tbk", label: "Tarjeta de crédito o débito" },
+    payment_method: {
+      id: "3",
+      channel_id: "tbk",
+      label: "Tarjeta de crédito o débito",
+    },
     ...over,
   };
 }
@@ -665,9 +669,32 @@ describe("PaymentsPage payment detail dialog", () => {
     render(<PaymentsPage />);
     await screen.findByText("Ana Fuentes");
 
-    expect(
-      screen.queryByRole("button", { name: /Ver detalle del pago/ }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ver detalle del pago/ })).toBeNull();
     expect(getPayment).not.toHaveBeenCalled();
+  });
+});
+
+/** Un enlace acuñado en OTRA sesión (o por la IA) debe aparecer sin F5
+ * (auditoría 2026-08-20): `enlace_pago_creado` recarga la tabla con los filtros
+ * vigentes. El eco del propio diálogo se consume vía selfApplied en onCreated. */
+describe("PaymentsPage enlaces por SSE", () => {
+  it("un enlace_pago_creado remoto recarga la tabla", async () => {
+    render(<PaymentsPage />);
+    await screen.findByText("Ana Fuentes");
+    const calls = vi.mocked(listPayments).mock.calls.length;
+
+    emit({
+      type: "enlace_pago_creado",
+      data: {
+        link_id: "uuid-remoto-9",
+        amount: "5000",
+        currency: "CLP",
+        customer_id: null,
+      },
+    } as Partial<SSEEvent> & { type: SSEEvent["type"] });
+
+    await waitFor(() =>
+      expect(vi.mocked(listPayments).mock.calls.length).toBe(calls + 1),
+    );
   });
 });

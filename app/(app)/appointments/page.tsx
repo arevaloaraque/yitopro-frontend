@@ -182,9 +182,12 @@ function AppointmentsPageContent() {
     }
   }, []);
 
-  // Los catálogos se piden UNA vez: no cambian al mover un filtro, y traerlos
+  // Los catálogos se piden al montar (no cambian al mover un filtro, y traerlos
   // dentro del mismo `Promise.all` de las citas hacía dos requests de más por
-  // cada cambio de selector.
+  // cada cambio de selector) y se REFRESCAN vía SSE con servicio_*,
+  // profesional_* y negocio_actualizado (este último cubre el bulk de la
+  // reconciliación de plan): un servicio o profesional creado por otra sesión
+  // no aparecía en «Nueva cita» hasta un reload (auditoría 2026-08-20).
   useEffect(() => {
     const t = setTimeout(() => {
       void loadCatalogs();
@@ -218,10 +221,21 @@ function AppointmentsPageContent() {
           // la IA volvía a bajar el historial completo del tenant.
           void loadAppointments(queryRef.current);
           break;
+        case "servicio_creado":
+        case "servicio_actualizado":
+        case "servicio_eliminado":
+        case "profesional_creado":
+        case "profesional_actualizado":
+        case "profesional_eliminado":
+        // La reconciliación de plan desactiva/restaura profesionales en BULK
+        // sin emitir por fila; su señal es negocio_actualizado.
+        case "negocio_actualizado":
+          void loadCatalogs();
+          break;
       }
     });
     return unsub;
-  }, [loadAppointments]);
+  }, [loadAppointments, loadCatalogs]);
 
   // DASHBOARD-04: un deep-link `?id=…` (p. ej. desde una fila del dashboard)
   // abre el historial de esa cita concreta. Lectura única al montar; el diálogo
@@ -311,7 +325,7 @@ function AppointmentsPageContent() {
   // abajo).
   if (error && appointments.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-6xl space-y-10">
+      <div className="w-full space-y-10">
         {header}
         <ErrorState
           description="Ocurrió un error al cargar la agenda."
@@ -322,7 +336,7 @@ function AppointmentsPageContent() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-8">
+    <div className="w-full space-y-8">
       {/* Page header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {header}

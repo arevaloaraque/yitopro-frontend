@@ -355,7 +355,7 @@ function ServicesPageContent() {
 
   if (error && services.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="w-full space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Servicios
@@ -370,7 +370,7 @@ function ServicesPageContent() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -716,10 +716,10 @@ function ServicesPageContent() {
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Desaparece del catálogo y el agente de IA deja de ofrecerlo al agendar. Si
-            solo quieres dejar de venderlo por un tiempo, desactívalo con el
-            interruptor: se conserva y vuelve con un clic. Si ya tiene citas asociadas,
-            el sistema no permitirá eliminarlo.
+            Desaparece del catálogo y deja de estar disponible al agendar. Si solo
+            quieres dejar de venderlo por un tiempo, desactívalo con el interruptor: se
+            conserva y vuelve con un clic. Si ya tiene citas asociadas, el sistema no
+            permitirá eliminarlo.
           </p>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" disabled={deletePending} />}>

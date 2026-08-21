@@ -1,10 +1,14 @@
 /**
- * Conversations page — message-thread loading state machine.
+ * La pantalla de conversaciones, ahora un chat continuo POR NÚMERO.
  *
- * Regression guard for the double-click bug: re-clicking the already-open
- * conversation must NOT wipe its messages nor get stuck on the loading
- * skeleton. lib/api and lib/sse are mocked so this exercises the page's own
- * state machine in isolation.
+ * Cada caso de acá viene de uno que existía antes: la pantalla cambió de modelo
+ * —de «una conversación seleccionada» a «el historial de un número»— así que las
+ * aserciones se retargetearon, no se borraron. Las tres que probaban el encadenado
+ * de páginas y el merge se mudaron a `lib/conversations/__tests__/thread.test.ts`,
+ * donde la lógica es pura y está verificada por mutación; acá queda el CABLEADO.
+ *
+ * `lib/api` y `lib/sse` van mockeados: esto ejercita la máquina de estados de la
+ * pantalla, no el cable HTTP.
  */
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -52,13 +56,17 @@ vi.mock("@/lib/sse", () => ({
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ user: { id: "op-1", email: "op@x.cl", name: "Op" } }),
 }));
-// selectedId is seeded from the URL (?id=…); mock useSearchParams so tests can
-// drive the initial deep-linked selection. Reset to empty in beforeEach.
+// El número abierto se siembra de `?chat=`; `?id=` se acepta como entrada y se
+// resuelve a `chat=`. Se mockea `useSearchParams` para poder dirigir esa entrada.
 const { searchParamsStub } = vi.hoisted(() => ({
   searchParamsStub: { current: new URLSearchParams() },
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParamsStub.current,
+  // La página consulta el router desde `useRequireAssistant`, que devuelve al
+  // dashboard cuando el plan no incluye asistente. Aquí nunca dispara (el
+  // negocio del fixture sí lo incluye), pero el hook lo pide igual.
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
 }));
 
 function emitSse(event: SSEEvent) {
@@ -77,13 +85,19 @@ function makeConversation(over: Partial<Conversation> = {}): Conversation {
     active_agent: null,
     assignee_id: null,
     last_message_at: "2026-06-30T10:00:00Z",
+    created_at: "2026-06-29T09:00:00Z",
     unread: 0,
     customer_rating: null,
     rating_status: "pending",
     customer_rating_avg: null,
     customer_rating_count: 0,
-    last_message_preview: "",
-    last_message_direction: "",
+    // El backend calcula el preview del último mensaje, así que un preview VACÍO
+    // significa «sin mensajes» y el hilo no le pide ninguna página. Un fixture con
+    // mensajes y preview vacío es una combinación que la API no puede producir.
+    // Distinto del texto de `makeMessage`: si coinciden, un `getByText` encuentra dos
+    // elementos (el preview de la fila y la burbuja) y el test no distingue cuál mira.
+    last_message_preview: "ultimo mensaje",
+    last_message_direction: "in",
     last_message_sender_kind: "",
     ...over,
   };
@@ -126,359 +140,214 @@ beforeEach(() => {
   vi.mocked(getConversation).mockResolvedValue(makeConversation());
 });
 
-describe("ConversationsPage — message loading", () => {
-  it("keeps messages visible and not stuck loading when the same conversation is clicked twice", async () => {
+/** Abre el primer número de la bandeja y espera a que el hilo esté en pantalla. */
+async function abrirPrimerNumero(nombre: RegExp = /Ana/) {
+  render(<ConversationsPage />);
+  const fila = await screen.findByRole("button", { name: nombre });
+  await userEvent.click(fila);
+  return fila;
+}
+
+describe("ConversationsPage — abrir el hilo de un número", () => {
+  it("pide el índice del CLIENTE y después sus mensajes", async () => {
     vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
     vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
 
-    render(<ConversationsPage />);
+    await abrirPrimerNumero();
 
-    const row = await screen.findByRole("button", { name: /Ana/ });
-    await userEvent.click(row);
-
-    // First load resolves: message visible, skeleton gone.
-    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
-
-    // Double-click the SAME conversation.
-    await userEvent.click(row);
-
-    // The message must remain and the thread must not be stuck on the skeleton.
-    expect(screen.getByText("hola equipo")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await waitFor(() =>
+      // El índice se pide por `customer_id` y de 100: por un request queda el
+      // esqueleto completo del historial de esa persona.
+      expect(listConversations).toHaveBeenCalledWith(
+        { customerId: "cust-1" },
+        { limit: 100 },
+      ),
+    );
+    expect(await screen.findByText("hola equipo")).toBeTruthy();
   });
 
-  it("loads the second conversation's messages when switching", async () => {
-    vi.mocked(listConversations).mockResolvedValue(
-      inboxPage([
-        makeConversation(),
-        makeConversation({
-          id: "conv-2",
-          customer_id: "cust-2",
-          customer_name: "Bruno",
-        }),
-      ]),
+  it("volver a pulsar el mismo número no borra el hilo (el bug del doble clic)", async () => {
+    vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
+    vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
+
+    const fila = await abrirPrimerNumero();
+    expect(await screen.findByText("hola equipo")).toBeTruthy();
+
+    await userEvent.click(fila);
+    // Sigue en pantalla: ni se vacía ni queda colgado en el esqueleto.
+    expect(screen.getByText("hola equipo")).toBeTruthy();
+  });
+
+  it("cambiar de número carga el historial del otro", async () => {
+    const ana = makeConversation();
+    const bruno = makeConversation({
+      id: "conv-2",
+      customer_id: "cust-2",
+      customer_name: "Bruno",
+      last_message_at: "2026-06-29T10:00:00Z",
+    });
+    // El mock RESPETA `customer_id`, como el servidor: el índice de un número no
+    // puede traer las conversaciones de otro.
+    vi.mocked(listConversations).mockImplementation(async (params) =>
+      inboxPage(
+        params?.customerId
+          ? [ana, bruno].filter((c) => c.customer_id === params.customerId)
+          : [ana, bruno],
+      ),
     );
     vi.mocked(listMessages).mockImplementation(async (id: string) =>
-      id === "conv-2"
-        ? threadPage([
-            makeMessage({ id: "m2", conversation_id: "conv-2", text: "mensaje dos" }),
-          ])
-        : threadPage([makeMessage()]),
+      threadPage([makeMessage({ id: `m-${id}`, text: `mensaje de ${id}` })]),
     );
 
     render(<ConversationsPage />);
-
     await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
+    expect(await screen.findByText("mensaje de conv-1")).toBeTruthy();
 
     await userEvent.click(screen.getByRole("button", { name: /Bruno/ }));
-    expect(await screen.findByText("mensaje dos")).toBeInTheDocument();
+    expect(await screen.findByText("mensaje de conv-2")).toBeTruthy();
   });
 });
 
-describe("ConversationsPage — live SSE freshness", () => {
-  it("reverts a conversation the AI reactivated (no longer stuck on Handoff)", async () => {
-    // Owned by me + handed off → the take button is hidden and I can reply.
-    vi.mocked(listConversations).mockResolvedValue(
-      inboxPage([makeConversation({ status: "human_handoff", assignee_id: "op-1" })]),
-    );
-    vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
-
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Tomar/ })).not.toBeInTheDocument();
-
-    // The AI regains the conversation (inactivity timeout).
-    emitSse({
-      id: "e1",
-      type: "conversacion_reactivada",
-      emitted_at: "2026-06-30T10:05:00Z",
-      data: { conversation_id: "conv-1", reason: "timeout" },
-    } as SSEEvent);
-
-    // It must flip back to AI-active: the take button reappears, no longer stuck.
-    expect(await screen.findByRole("button", { name: /Tomar/ })).toBeInTheDocument();
-  });
-
-  it("shows an automatic message pushed to the open conversation", async () => {
+describe("ConversationsPage — la URL: `chat=` es la clave, `?id=` es una entrada", () => {
+  it("al elegir un número escribe `?chat=` con el id del CLIENTE", async () => {
     vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
     vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
 
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
+    await abrirPrimerNumero();
 
-    // The automation engine delivers a reminder on this conversation.
-    vi.mocked(listMessages).mockResolvedValue(
-      threadPage([
-        makeMessage(),
-        makeMessage({
-          id: "m-auto",
-          text: "recordatorio automático",
-          direction: "outbound",
-        }),
-      ]),
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get("chat")).toBe("cust-1"),
     );
-    emitSse({
-      id: "e2",
-      type: "mensaje_automatico_enviado",
-      emitted_at: "2026-06-30T10:06:00Z",
-      data: {
-        conversation_id: "conv-1",
-        scheduled_message_id: "s1",
-        rule_code: "reminder_24h",
-        customer_id: "cust-1",
-      },
-    } as SSEEvent);
-
-    expect(await screen.findByText("recordatorio automático")).toBeInTheDocument();
   });
 
-  it("inserts a brand-new conversation into the inbox on mensaje_recibido for an unknown id", async () => {
-    vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
-    vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
-    vi.mocked(getConversation).mockResolvedValue(
-      makeConversation({
-        id: "conv-2",
-        customer_id: "cust-2",
-        customer_name: "Bruno",
-        last_message_at: "2026-06-30T10:10:00Z",
-      }),
-    );
-
-    render(<ConversationsPage />);
-    await screen.findByRole("button", { name: /Ana/ });
-
-    // A message arrives for a conversation not yet in the inbox (e.g. its
-    // very first message): it must be fetched and inserted, not dropped.
-    emitSse({
-      id: "e3",
-      type: "mensaje_recibido",
-      emitted_at: "2026-06-30T10:10:00Z",
-      data: { conversation_id: "conv-2", message_id: "m-new" },
-    } as SSEEvent);
-
-    expect(await screen.findByRole("button", { name: /Bruno/ })).toBeInTheDocument();
-    expect(getConversation).toHaveBeenCalledWith("conv-2");
-  });
-});
-
-describe("ConversationsPage — URL selection (CONV-02) & search (CONV-01)", () => {
-  it("preselects the conversation from ?id= on mount (deep-link / survives F5)", async () => {
+  it("un `?id=` de la página cargada abre su número y reescribe la URL", async () => {
     searchParamsStub.current = new URLSearchParams("id=conv-1");
     vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
     vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
 
     render(<ConversationsPage />);
 
-    // No click needed: the detail opens straight from the URL param.
-    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
+    expect(await screen.findByText("hola equipo")).toBeTruthy();
+    await waitFor(() => {
+      const qs = new URLSearchParams(window.location.search);
+      expect(qs.get("chat")).toBe("cust-1");
+      // `id` no queda como clave paralela: se resuelve una vez y se borra.
+      expect(qs.get("id")).toBeNull();
+    });
   });
 
-  it("mirrors the selected conversation id into the URL", async () => {
-    vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
-    vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
-
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-
-    expect(window.location.search).toContain("id=conv-1");
-  });
-
-  it("manda el buscador al SERVIDOR (`?search=`), sin recortar en el navegador", async () => {
-    vi.mocked(listConversations).mockResolvedValue(
-      inboxPage([
-        makeConversation(),
-        makeConversation({
-          id: "conv-2",
-          customer_id: "cust-2",
-          customer_name: "Bruno",
-          customer_phone: "+56933334444",
-        }),
-      ]),
+  it("un `?id=` FUERA de la página cargada se resuelve y abre el hilo igual", async () => {
+    // Antes esto mostraba «Selecciona una conversación» con los mensajes ya bajados
+    // y descartados, porque la conversación abierta se derivaba de la lista. Lo
+    // sufren la campana y el drawer de cliente, que enlazan cualquier id.
+    searchParamsStub.current = new URLSearchParams("id=conv-99");
+    const zoe = makeConversation({
+      id: "conv-99",
+      customer_id: "cust-9",
+      customer_name: "Zoe",
+    });
+    // La bandeja NO trae conv-99 (está en otra página), pero el índice del número de
+    // Zoe sí: es exactamente la situación que rompía la pantalla antes.
+    vi.mocked(listConversations).mockImplementation(async (params) =>
+      inboxPage(params?.customerId === "cust-9" ? [zoe] : [makeConversation()]),
     );
-    vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
+    vi.mocked(getConversation).mockResolvedValue(zoe);
+    vi.mocked(listMessages).mockResolvedValue(
+      threadPage([makeMessage({ text: "mensaje viejo" })]),
+    );
 
     render(<ConversationsPage />);
-    await screen.findByRole("button", { name: /Ana/ });
 
-    await userEvent.type(screen.getByRole("textbox", { name: /buscar/i }), "Bruno");
-
-    // Con la bandeja paginada, recortar en cliente significaría «lo que coincide de las 25
-    // filas que bajé». El término va tal como se tecleó: el backend compara el teléfono en
-    // dígitos en los dos lados, así que limpiarlo aquí sería trabajo repetido.
+    await waitFor(() => expect(getConversation).toHaveBeenCalledWith("conv-99"));
+    expect(await screen.findByText("mensaje viejo")).toBeTruthy();
     await waitFor(() =>
-      expect(listConversations).toHaveBeenCalledWith({ search: "Bruno" }),
+      expect(new URLSearchParams(window.location.search).get("chat")).toBe("cust-9"),
     );
   });
-});
 
-describe("ConversationsPage — paginación por cursor de la bandeja", () => {
-  it("«Cargar más» devuelve el cursor OPACO y añade la página siguiente", async () => {
-    vi.mocked(listConversations).mockResolvedValueOnce(
-      inboxPage([makeConversation()], {
-        next_cursor: "MjAyNi0wNi0zMHwx",
-        has_more: true,
-      }),
-    );
-    vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
-
-    render(<ConversationsPage />);
-    await screen.findByRole("button", { name: /Ana/ });
-    // Sin total: el backend no manda `count` (ver `ConversationPageOut`).
-    expect(screen.getByText("1 conversación (hay más)")).toBeInTheDocument();
-
-    vi.mocked(listConversations).mockResolvedValueOnce(
-      inboxPage([
-        makeConversation({
-          id: "conv-2",
-          customer_id: "cust-2",
-          customer_name: "Bruno",
-        }),
-      ]),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Cargar más" }));
-
-    // El cursor viaja tal cual llegó: no se construye ni se parsea en el cliente.
-    await waitFor(() =>
-      expect(listConversations).toHaveBeenLastCalledWith(
-        {},
-        { cursor: "MjAyNi0wNi0zMHwx" },
-      ),
-    );
-    // Se AÑADE: la primera página sigue en pantalla.
-    expect(await screen.findByRole("button", { name: /Bruno/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ana/ })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Cargar más" }),
-    ).not.toBeInTheDocument();
-  });
-});
-
-describe("ConversationsPage — historia del hilo (paginado hacia arriba)", () => {
-  it("antepone la página más vieja con `before` = primer mensaje que ya se tiene", async () => {
+  it("un `?id=` que no resuelve muestra un error con reintento, no un vacío", async () => {
+    searchParamsStub.current = new URLSearchParams("id=conv-borrada");
     vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
-    vi.mocked(listMessages).mockResolvedValueOnce(
-      threadPage([makeMessage({ id: "m5", text: "el más nuevo" })], true),
-    );
+    vi.mocked(getConversation).mockRejectedValue(new Error("No encontrada"));
 
     render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("el más nuevo")).toBeInTheDocument();
 
-    vi.mocked(listMessages).mockResolvedValueOnce(
-      threadPage([makeMessage({ id: "m1", text: "el más viejo" })], false),
-    );
-    await userEvent.click(screen.getByRole("button", { name: /mensajes anteriores/i }));
-
-    await waitFor(() =>
-      expect(listMessages).toHaveBeenLastCalledWith("conv-1", { before: "m5" }),
-    );
-    // Antepuesto y en orden: el hilo se lee de arriba abajo, y `items` ya viene ascendente.
-    const textos = screen.getAllByText(/el más/).map((el) => el.textContent);
-    expect(textos).toEqual(["el más viejo", "el más nuevo"]);
-    // `has_more: false` en la página vieja: ya no hay nada más arriba.
-    expect(screen.queryByRole("button", { name: /mensajes anteriores/i })).toBeNull();
+    expect(await screen.findByText("No se pudo abrir esa conversación")).toBeTruthy();
+    // La bandeja sigue usable: lo que falló es abrir ese enlace.
+    expect(screen.getByRole("button", { name: /Ana/ })).toBeTruthy();
   });
 
-  it("el refetch del SSE no descarta la historia que el operador subió a leer", async () => {
-    vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
-    vi.mocked(listMessages).mockResolvedValueOnce(
-      threadPage([makeMessage({ id: "m5", text: "el más nuevo" })], true),
-    );
-
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("el más nuevo")).toBeInTheDocument();
-
-    vi.mocked(listMessages).mockResolvedValueOnce(
-      threadPage([makeMessage({ id: "m1", text: "el más viejo" })], false),
-    );
-    await userEvent.click(screen.getByRole("button", { name: /mensajes anteriores/i }));
-    expect(await screen.findByText("el más viejo")).toBeInTheDocument();
-
-    // Entra un mensaje: el refetch trae la página MÁS NUEVA (m5 + el nuevo). Reemplazar el
-    // hilo aquí borraría m1 y el chat saltaría al fondo justo mientras se lee la historia.
-    vi.mocked(listMessages).mockResolvedValueOnce(
-      threadPage(
-        [
-          makeMessage({ id: "m5", text: "el más nuevo" }),
-          makeMessage({ id: "m6", text: "acaba de llegar" }),
-        ],
-        true,
-      ),
-    );
-    emitSse({
-      id: "e1",
-      type: "mensaje_recibido",
-      emitted_at: "2026-06-30T10:30:00Z",
-      data: { conversation_id: "conv-1", message_id: "m6" },
-    } as SSEEvent);
-
-    expect(await screen.findByText("acaba de llegar")).toBeInTheDocument();
-    expect(screen.getByText("el más viejo")).toBeInTheDocument();
-    // Sin duplicar m5, que viene en las dos páginas.
-    expect(screen.getAllByText("el más nuevo")).toHaveLength(1);
-  });
-
-  it("reemplaza el hilo cuando la ráfaga fue mayor que la página (habría hueco)", async () => {
-    vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
-    vi.mocked(listMessages).mockResolvedValueOnce(
-      threadPage([makeMessage({ id: "m1", text: "lo que estaba" })], false),
-    );
-
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("lo que estaba")).toBeInTheDocument();
-
-    // Ni un id en común: entraron más mensajes que el tamaño de página. Mergear la cola
-    // dejaría un hueco invisible en medio del chat, que se lee como corrupción.
-    vi.mocked(listMessages).mockResolvedValueOnce(
-      threadPage([makeMessage({ id: "m90", text: "página nueva entera" })], true),
-    );
-    emitSse({
-      id: "e2",
-      type: "mensaje_recibido",
-      emitted_at: "2026-06-30T10:40:00Z",
-      data: { conversation_id: "conv-1", message_id: "m90" },
-    } as SSEEvent);
-
-    expect(await screen.findByText("página nueva entera")).toBeInTheDocument();
-    expect(screen.queryByText("lo que estaba")).toBeNull();
-    // Y `has_more` vuelve a describir el hilo: hay historia arriba otra vez.
-    expect(
-      await screen.findByRole("button", { name: /mensajes anteriores/i }),
-    ).toBeInTheDocument();
-  });
-});
-
-describe("ConversationsPage — filtros en la URL (CONV-06)", () => {
-  it("escribe los filtros sin cerrar el hilo abierto: `?id=` es contrato", async () => {
+  it("los filtros no cierran el hilo abierto: `chat=` se preserva", async () => {
     vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
     vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
 
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(window.location.search).toContain("id=conv-1");
+    await abrirPrimerNumero();
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get("chat")).toBe("cust-1"),
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "Cerrados" }));
-    await waitFor(() => expect(window.location.search).toContain("status=closed"));
-    // Lo escribe el toast, el dashboard y cualquier enlace compartido: si filtrar lo
-    // borrase, teclear en el buscador cerraría la conversación que se está leyendo.
-    expect(window.location.search).toContain("id=conv-1");
 
-    await userEvent.type(screen.getByRole("textbox", { name: /buscar/i }), "Ana");
-    await waitFor(() => expect(window.location.search).toContain("q=Ana"));
-    expect(window.location.search).toContain("id=conv-1");
+    await waitFor(() => {
+      const qs = new URLSearchParams(window.location.search);
+      expect(qs.get("status")).toBe("closed");
+      expect(qs.get("chat")).toBe("cust-1");
+    });
+  });
+});
+
+describe("ConversationsPage — la bandeja", () => {
+  it("manda el buscador al SERVIDOR (`?search=`), sin recortar en el navegador", async () => {
+    vi.mocked(listConversations).mockResolvedValue(
+      inboxPage([makeConversation({ customer_name: "Ana" })]),
+    );
+    render(<ConversationsPage />);
+    await screen.findByRole("button", { name: /Ana/ });
+
+    await userEvent.type(screen.getByLabelText(/Buscar por nombre o teléfono/), "bru");
+
+    await waitFor(() =>
+      expect(listConversations).toHaveBeenCalledWith(
+        expect.objectContaining({ search: "bru" }),
+      ),
+    );
   });
 
-  it("arranca con lo que dice la URL y se lo pide al servidor", async () => {
-    searchParamsStub.current = new URLSearchParams("status=closed&view=number");
+  it("«Cargar más» devuelve el cursor OPACO y suma la página siguiente", async () => {
+    vi.mocked(listConversations).mockResolvedValueOnce(
+      inboxPage([makeConversation()], { next_cursor: "OPACO==", has_more: true }),
+    );
+    vi.mocked(listMessages).mockResolvedValue(threadPage([]));
+    render(<ConversationsPage />);
+    await screen.findByRole("button", { name: /Ana/ });
+
+    vi.mocked(listConversations).mockResolvedValueOnce(
+      inboxPage([
+        makeConversation({
+          id: "conv-2",
+          customer_id: "cust-2",
+          customer_name: "Bruno",
+        }),
+      ]),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Cargar más/ }));
+
+    await waitFor(() =>
+      // El cursor viaja tal cual: no se construye ni se parsea en el cliente.
+      expect(listConversations).toHaveBeenCalledWith(expect.anything(), {
+        cursor: "OPACO==",
+      }),
+    );
+    expect(await screen.findByRole("button", { name: /Bruno/ })).toBeTruthy();
+    // Dos cifras: el servidor pagina conversaciones y la lista muestra números.
+    expect(screen.getByText(/2 números/)).toBeTruthy();
+  });
+
+  it("arranca con el estado que dice la URL y se lo pide al servidor", async () => {
+    searchParamsStub.current = new URLSearchParams("status=closed");
     vi.mocked(listConversations).mockResolvedValue(
       inboxPage([makeConversation({ status: "closed" })]),
     );
-
     render(<ConversationsPage />);
 
     await waitFor(() =>
@@ -487,15 +356,11 @@ describe("ConversationsPage — filtros en la URL (CONV-06)", () => {
     expect(
       screen.getByRole("button", { name: "Cerrados" }).getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(
-      screen.getByRole("button", { name: "Por número" }).getAttribute("aria-pressed"),
-    ).toBe("true");
   });
 
   it("cae a «Todos» con un status inventado en la URL, sin mandárselo al backend", async () => {
     searchParamsStub.current = new URLSearchParams("status=lol");
     vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
-
     render(<ConversationsPage />);
 
     await waitFor(() => expect(listConversations).toHaveBeenCalledWith({}));
@@ -505,51 +370,31 @@ describe("ConversationsPage — filtros en la URL (CONV-06)", () => {
   });
 });
 
-describe("ConversationsPage — filtro por cliente (CONV-04)", () => {
-  it("acota la bandeja en el SERVIDOR con el cliente elegido", async () => {
-    vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
-
-    render(<ConversationsPage />);
-    await screen.findByRole("button", { name: /Ana/ });
-
-    await userEvent.click(screen.getByRole("combobox", { name: "Cliente" }));
-    await userEvent.click(await screen.findByRole("option", { name: /Bruno/ }));
-
-    // `customer_id` es filtro de servidor: alcanza TODO el historial de esa persona, no
-    // solo lo que ya estaba cargado — que es lo único que puede hacer el buscador.
-    await waitFor(() =>
-      expect(listConversations).toHaveBeenCalledWith({ customerId: "cust-2" }),
-    );
-  });
-});
-
-describe("ConversationsPage — el SSE no re-descarga por cada mensaje (CONV-05)", () => {
-  it("una ráfaga de mensajes se cobra una recarga del hilo, no una por evento", async () => {
+describe("ConversationsPage — el SSE", () => {
+  it("una ráfaga de mensajes se cobra UNA recarga del hilo, no una por evento", async () => {
     vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
     vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
 
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
-    expect(listMessages).toHaveBeenCalledTimes(1);
+    await abrirPrimerNumero();
+    await screen.findByText("hola equipo");
+    const antes = vi.mocked(listMessages).mock.calls.length;
 
-    // Un cliente que escribe tres líneas seguidas emite tres eventos.
-    for (const id of ["m2", "m3", "m4"]) {
+    for (let i = 0; i < 4; i++) {
       emitSse({
-        id,
         type: "mensaje_recibido",
-        emitted_at: "2026-06-30T10:0" + id.slice(1) + ":00Z",
-        data: { conversation_id: "conv-1", message_id: id },
+        emitted_at: `2026-06-30T10:0${i}:00Z`,
+        data: { conversation_id: "conv-1", message_id: `m${i}` },
       } as SSEEvent);
     }
 
-    // Una sola recarga del hilo y una sola de la fila. El hilo sigue bajando entero —
-    // acotarlo necesita `?limit=&before=` en el backend—, pero ya no N veces.
-    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
-    expect(getConversation).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(vi.mocked(listMessages).mock.calls.length).toBeGreaterThan(antes),
+    );
+    // Cuatro eventos, una recarga: el coalescing de 250 ms.
+    expect(vi.mocked(listMessages).mock.calls.length - antes).toBe(1);
   });
 
-  it("no recarga el hilo de una conversación que no está abierta", async () => {
+  it("no recarga el hilo por un mensaje de OTRO número", async () => {
     vi.mocked(listConversations).mockResolvedValue(
       inboxPage([
         makeConversation(),
@@ -562,98 +407,88 @@ describe("ConversationsPage — el SSE no re-descarga por cada mensaje (CONV-05)
     );
     vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
 
-    render(<ConversationsPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ana/ }));
-    expect(await screen.findByText("hola equipo")).toBeInTheDocument();
+    await abrirPrimerNumero();
+    await screen.findByText("hola equipo");
+    const antes = vi.mocked(listMessages).mock.calls.length;
 
     emitSse({
-      id: "e9",
-      type: "mensaje_recibido",
-      emitted_at: "2026-06-30T10:20:00Z",
-      data: { conversation_id: "conv-2", message_id: "m9" },
-    } as SSEEvent);
-
-    await waitFor(() => expect(getConversation).toHaveBeenCalledWith("conv-2"));
-    // Sigue en 1: la del montaje de conv-1. El hilo de conv-2 no está en pantalla.
-    expect(listMessages).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("ConversationsPage — el preview no se queda viejo", () => {
-  it("refresca la fila cuando entra un mensaje, y conserva los no leídos", async () => {
-    vi.mocked(listConversations).mockResolvedValue(
-      inboxPage([
-        makeConversation({
-          last_message_preview: "hola, tienen hora?",
-          last_message_direction: "in",
-        }),
-      ]),
-    );
-    vi.mocked(listMessages).mockResolvedValue(threadPage([]));
-    // Lo que el servidor devolverá al re-pedir la fila.
-    vi.mocked(getConversation).mockResolvedValue(
-      makeConversation({
-        last_message_preview: "y para el sabado?",
-        last_message_direction: "in",
-        last_message_at: "2026-06-30T11:00:00Z",
-      }),
-    );
-
-    render(<ConversationsPage />);
-    expect(await screen.findByText("hola, tienen hora?")).toBeInTheDocument();
-
-    emitSse({
-      id: "e1",
       type: "mensaje_recibido",
       emitted_at: "2026-06-30T11:00:00Z",
-      data: { conversation_id: "conv-1", customer_id: "cust-1", message_id: "m2" },
+      data: { conversation_id: "conv-2", message_id: "mx" },
     } as SSEEvent);
 
-    // El evento NO trae el texto (es PII), así que la página re-pide esa conversación. Sin
-    // eso la fila salta a «Ahora» mostrando el mensaje ANTERIOR: hora nueva, texto viejo.
-    expect(await screen.findByText("y para el sabado?")).toBeInTheDocument();
-    expect(getConversation).toHaveBeenCalledWith("conv-1");
-    // Y el contador de no leídos que el parche local subió no se pierde en el refetch
-    // (el backend no expone `unread`: el mapper devuelve 0).
-    expect(await screen.findByText("1")).toBeInTheDocument();
+    // La fila se refresca (eso sí interesa), pero el hilo abierto es de otro número:
+    // bajar sus mensajes sería puro gasto.
+    await waitFor(() => expect(getConversation).toHaveBeenCalled());
+    expect(vi.mocked(listMessages).mock.calls.length).toBe(antes);
   });
 
-  it("también refresca cuando el que escribe es el motor de automatizaciones", async () => {
+  it("una conversación nueva desconocida entra en la bandeja en vez de perderse", async () => {
+    vi.mocked(listConversations).mockResolvedValue(inboxPage([makeConversation()]));
+    vi.mocked(listMessages).mockResolvedValue(threadPage([]));
+    vi.mocked(getConversation).mockResolvedValue(
+      makeConversation({ id: "conv-9", customer_id: "cust-9", customer_name: "Nueva" }),
+    );
+    render(<ConversationsPage />);
+    await screen.findByRole("button", { name: /Ana/ });
+
+    emitSse({
+      type: "mensaje_recibido",
+      emitted_at: "2026-06-30T12:00:00Z",
+      data: { conversation_id: "conv-9", message_id: "m9" },
+    } as SSEEvent);
+
+    expect(await screen.findByRole("button", { name: /Nueva/ })).toBeTruthy();
+  });
+
+  it("refresca la fila cuando entra un mensaje y conserva los no leídos", async () => {
     vi.mocked(listConversations).mockResolvedValue(
-      inboxPage([
-        makeConversation({
-          last_message_preview: "hola",
-          last_message_direction: "in",
-        }),
-      ]),
+      inboxPage([makeConversation({ last_message_preview: "viejo" })]),
     );
     vi.mocked(listMessages).mockResolvedValue(threadPage([]));
     vi.mocked(getConversation).mockResolvedValue(
-      makeConversation({
-        last_message_preview: "Te recordamos tu cita de mañana",
-        last_message_direction: "out",
-        last_message_sender_kind: "system",
-      }),
+      makeConversation({ last_message_preview: "nuevo de verdad" }),
     );
-
     render(<ConversationsPage />);
-    expect(await screen.findByText("hola")).toBeInTheDocument();
+    await screen.findByRole("button", { name: /Ana/ });
 
     emitSse({
-      id: "e2",
-      type: "mensaje_automatico_enviado",
-      emitted_at: "2026-06-30T11:00:00Z",
-      data: {
-        conversation_id: "conv-1",
-        customer_id: "cust-1",
-        rule_code: "appointment_reminder",
-      },
+      type: "mensaje_recibido",
+      emitted_at: "2026-06-30T13:00:00Z",
+      data: { conversation_id: "conv-1", message_id: "m2" },
     } as SSEEvent);
 
+    // El preview no se puede parchear desde el payload (viaja sin texto), así que se
+    // re-pide la fila; y el contador de no leídos que el handler acaba de subir NO se
+    // pierde en ese refetch, porque el backend lo devuelve en 0.
+    expect(await screen.findByText(/nuevo de verdad/)).toBeTruthy();
     expect(
-      await screen.findByText("Te recordamos tu cita de mañana"),
-    ).toBeInTheDocument();
-    // El prefijo «Automático:» lo cubre conversation-list.test.tsx sobre el texto de la
-    // fila completa: como elemento suelto es frágil (vive en su propio span, pegado al texto).
+      await screen.findByRole("button", {
+        name: /1 mensaje desde que abriste el panel/,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("un cierre en vivo actualiza la cabecera del hilo, no solo la fila", async () => {
+    vi.mocked(listConversations).mockResolvedValue(
+      inboxPage([makeConversation({ status: "ai_active" })]),
+    );
+    vi.mocked(listMessages).mockResolvedValue(threadPage([makeMessage()]));
+
+    await abrirPrimerNumero();
+    await screen.findByText("hola equipo");
+
+    vi.mocked(getConversation).mockResolvedValue(
+      makeConversation({ status: "closed" }),
+    );
+    emitSse({
+      type: "conversacion_cerrada",
+      emitted_at: "2026-06-30T14:00:00Z",
+      data: { conversation_id: "conv-1", reason: "manual" },
+    } as SSEEvent);
+
+    // Sin el parche hermano sobre el hilo, la cabecera se quedaba diciendo que hay
+    // una conversación abierta sobre una ya cerrada.
+    expect(await screen.findByText("Sin conversación abierta")).toBeTruthy();
   });
 });

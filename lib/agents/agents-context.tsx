@@ -11,7 +11,7 @@ import {
 
 import { listAgents, updateAgent } from "@/lib/api/agents";
 import { subscribeToEvents } from "@/lib/sse";
-import type { Agent, AgentAutonomy } from "@/lib/types";
+import type { Agent } from "@/lib/types";
 
 type LoadState = "loading" | "error" | "ready";
 
@@ -24,8 +24,6 @@ interface AgentsContextValue {
   refetch: () => void;
   /** Optimistically toggle an agent's active flag; rolls back and re-throws on error. */
   toggleActive: (agent: Agent) => Promise<void>;
-  /** Optimistically change an agent's autonomy; rolls back and re-throws on error. */
-  changeAutonomy: (agent: Agent, autonomy: AgentAutonomy) => Promise<void>;
 }
 
 const AgentsContext = createContext<AgentsContextValue | null>(null);
@@ -54,26 +52,12 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // La carga inicial ES el refetch: el cuerpo estaba escrito dos veces, y una
+  // segunda copia de «cómo se cargan los agentes» es la que se olvida de cambiar.
   useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(() => {
-      listAgents()
-        .then((data) => {
-          if (cancelled) return;
-          setAgents(data);
-          setState("ready");
-        })
-        .catch((e) => {
-          if (cancelled) return;
-          setError(e instanceof Error ? e.message : "Error al cargar agentes");
-          setState("error");
-        });
-    }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, []);
+    const t = setTimeout(refetch, 0);
+    return () => clearTimeout(t);
+  }, [refetch]);
 
   // Real-time: another operator/session can change an agent's config —
   // refetch so the topbar badge and the Agents page stay in sync everywhere.
@@ -98,19 +82,6 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const changeAutonomy = useCallback(async (agent: Agent, autonomy: AgentAutonomy) => {
-    const prevAutonomy = agent.autonomy;
-    setAgents((prev) => prev.map((a) => (a.id === agent.id ? { ...a, autonomy } : a)));
-    try {
-      await updateAgent(agent.id, { autonomy });
-    } catch (e) {
-      setAgents((prev) =>
-        prev.map((a) => (a.id === agent.id ? { ...a, autonomy: prevAutonomy } : a)),
-      );
-      throw e;
-    }
-  }, []);
-
   const hasActiveAgents = agents.some((a) => a.is_active);
 
   return (
@@ -122,7 +93,6 @@ export function AgentsProvider({ children }: { children: ReactNode }) {
         hasActiveAgents,
         refetch,
         toggleActive,
-        changeAutonomy,
       }}
     >
       {children}

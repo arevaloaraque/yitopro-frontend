@@ -51,7 +51,11 @@ function makeDetail(over: Partial<PaymentDetail> = {}): PaymentDetail {
     shopper_doc_number: "12.345.678-9",
     shopper_name: "Ana María Fuentes",
     provider_metadata: { authorization_code: "A1B2C3", installments: 3 },
-    payment_method: { id: "3", channel_id: "tbk", label: "Tarjeta de crédito o débito" },
+    payment_method: {
+      id: "3",
+      channel_id: "tbk",
+      label: "Tarjeta de crédito o débito",
+    },
     ...over,
   };
 }
@@ -63,9 +67,7 @@ beforeEach(() => {
 
 describe("PaymentDetailDialog", () => {
   it("shows the row's data, who paid, and the gateway metadata verbatim", async () => {
-    render(
-      <PaymentDetailDialog row={makeRow()} open onOpenChange={() => {}} />,
-    );
+    render(<PaymentDetailDialog row={makeRow()} open onOpenChange={() => {}} />);
 
     // From the row, no fetch needed.
     expect(screen.getByText("Ana Fuentes")).toBeInTheDocument();
@@ -83,9 +85,7 @@ describe("PaymentDetailDialog", () => {
 
   it("shows skeletons while the detail is in flight", async () => {
     vi.mocked(getPayment).mockReturnValue(new Promise<PaymentDetail>(() => {}));
-    render(
-      <PaymentDetailDialog row={makeRow()} open onOpenChange={() => {}} />,
-    );
+    render(<PaymentDetailDialog row={makeRow()} open onOpenChange={() => {}} />);
     // The fetch is deferred a tick (same pattern as the page loader), so the
     // skeletons are too.
     await waitFor(() =>
@@ -100,9 +100,7 @@ describe("PaymentDetailDialog", () => {
   it("reports a failed fetch and retries from the dialog", async () => {
     vi.mocked(getPayment).mockRejectedValueOnce(new Error("Error de red"));
     const user = userEvent.setup();
-    render(
-      <PaymentDetailDialog row={makeRow()} open onOpenChange={() => {}} />,
-    );
+    render(<PaymentDetailDialog row={makeRow()} open onOpenChange={() => {}} />);
 
     expect(await screen.findByText("Error de red")).toBeInTheDocument();
 

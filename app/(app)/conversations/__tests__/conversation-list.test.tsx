@@ -1,3 +1,11 @@
+/**
+ * La bandeja, ahora con UNA FILA POR NÚMERO.
+ *
+ * Lo que se fija acá es la honestidad de la fila: qué puede decir con los datos que
+ * el servidor da, y qué no. En particular NO lleva un conteo de conversaciones —
+ * solo abarcaría las páginas descargadas— y el pie tiene que mostrar las dos cifras
+ * (números vs. conversaciones cargadas) porque la relación entre ellas es el dato.
+ */
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -6,7 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Conversation, ConversationStatus } from "@/lib/types";
 import type { CustomerSelection } from "@/components/customers/customer-combobox";
 
-import { ConversationList, type InboxView } from "../_components/conversation-list";
+import { ConversationList } from "../_components/conversation-list";
 
 // El filtro de cliente pide clientes al montarse; aquí no se está probando ese combobox.
 vi.mock("@/lib/api/customers", () => ({
@@ -23,6 +31,7 @@ function makeConv(over: Partial<Conversation> = {}): Conversation {
     active_agent: null,
     assignee_id: null,
     last_message_at: "2026-07-31T10:00:00Z",
+    created_at: "2026-07-30T09:00:00Z",
     unread: 0,
     customer_rating: null,
     rating_status: "pending",
@@ -36,9 +45,9 @@ function makeConv(over: Partial<Conversation> = {}): Conversation {
 }
 
 /**
- * La lista es controlada: vista, buscador, estado y cliente los posee la página (viven en la
- * URL). El arnés hace de página para que un click siga cambiando lo que se ve, y de paso
- * deja espiar los callbacks.
+ * La lista es controlada: buscador, estado y cliente los posee la página (viven en la
+ * URL). El arnés hace de página para que un click siga cambiando lo que se ve, y de
+ * paso deja espiar los callbacks.
  */
 function Harness({
   conversations,
@@ -48,28 +57,27 @@ function Harness({
   hasMore = false,
   onLoadMore = () => {},
   moreError = null,
+  lastPageAddedNothing = false,
 }: {
   conversations: Conversation[];
-  onSelect: (id: string) => void;
+  onSelect: (customerId: string) => void;
   onClearFilters: () => void;
   initialCustomer?: CustomerSelection;
   hasMore?: boolean;
   onLoadMore?: () => void;
   moreError?: string | null;
+  lastPageAddedNothing?: boolean;
 }) {
-  const [view, setView] = useState<InboxView>("thread");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | "all">("all");
   const [customer, setCustomer] = useState<CustomerSelection>(initialCustomer);
   return (
     <ConversationList
       conversations={conversations}
-      selectedId={null}
+      selectedCustomerId={null}
       onSelect={onSelect}
       statusFilter={statusFilter}
       onStatusFilterChange={setStatusFilter}
-      view={view}
-      onViewChange={setView}
       search={search}
       onSearchChange={setSearch}
       customer={customer}
@@ -83,6 +91,7 @@ function Harness({
       loadingMore={false}
       onLoadMore={onLoadMore}
       moreError={moreError}
+      lastPageAddedNothing={lastPageAddedNothing}
     />
   );
 }
@@ -93,6 +102,7 @@ function renderList(
     initialCustomer?: CustomerSelection;
     hasMore?: boolean;
     moreError?: string | null;
+    lastPageAddedNothing?: boolean;
   } = {},
 ) {
   const onSelect = vi.fn();
@@ -107,6 +117,7 @@ function renderList(
       hasMore={opts.hasMore}
       onLoadMore={onLoadMore}
       moreError={opts.moreError}
+      lastPageAddedNothing={opts.lastPageAddedNothing}
     />,
   );
   // `textContent` de la fila: es la línea que el operador lee de corrido. Afirmar el prefijo
@@ -118,6 +129,28 @@ function renderList(
     text: () => container.textContent ?? "",
   };
 }
+
+/** Tres conversaciones de DOS personas: el caso que la agrupación tiene que colapsar. */
+const tresDeDos = [
+  makeConv({
+    id: "10",
+    customer_id: "c1",
+    last_message_preview: "gracias!",
+    last_message_direction: "in",
+    customer_rating_avg: 3.5,
+    customer_rating_count: 2,
+  }),
+  makeConv({
+    id: "11",
+    customer_id: "c1",
+    status: "closed",
+    last_message_at: "2026-07-30T10:00:00Z",
+    created_at: "2026-07-29T09:00:00Z",
+    customer_rating_avg: 3.5,
+    customer_rating_count: 2,
+  }),
+  makeConv({ id: "20", customer_id: "c2", customer_name: "Beto" }),
+];
 
 describe("ConversationList — preview del último mensaje", () => {
   it("muestra el texto del cliente sin prefijo (su nombre ya está en la fila)", () => {
@@ -155,183 +188,109 @@ describe("ConversationList — preview del último mensaje", () => {
   });
 });
 
-describe("ConversationList — rating", () => {
-  it("muestra la nota de cada hilo, y por qué falta cuando no la tiene", () => {
+describe("ConversationList — una fila por número", () => {
+  it("colapsa las conversaciones de la misma persona en una sola fila", () => {
+    renderList(tresDeDos);
+    // Dos filas, no tres: la fila es la persona.
+    expect(screen.getAllByRole("button", { name: /Ana|Beto/ })).toHaveLength(2);
+  });
+
+  it("la fila resume la conversación MÁS RECIENTE de esa persona", () => {
+    const { text } = renderList(tresDeDos);
+    // El preview y el estado son los del hilo más nuevo de Ana, no los del cerrado.
+    expect(text()).toContain("gracias!");
+    const filaAna = screen.getByRole("button", { name: /Ana/ });
+    expect(filaAna.textContent).toContain("IA");
+  });
+
+  it("al elegir una fila entrega el id del CLIENTE, no de una conversación", async () => {
+    const { onSelect } = renderList(tresDeDos);
+    await userEvent.click(screen.getByRole("button", { name: /Beto/ }));
+    expect(onSelect).toHaveBeenCalledWith("c2");
+  });
+
+  it("NO muestra un conteo de conversaciones: solo contaría lo descargado", () => {
+    const { text } = renderList(tresDeDos);
+    expect(text()).not.toContain("2 conversaciones");
+    expect(text()).not.toContain("1 conversación ");
+  });
+
+  it("suma los no leídos de todas las conversaciones del número", () => {
     renderList([
-      makeConv({ id: "1", customer_rating: 4, rating_status: "rated" }),
-      makeConv({ id: "2", customer_rating: null, rating_status: "pending" }),
+      makeConv({ id: "10", customer_id: "c1", unread: 2 }),
+      makeConv({
+        id: "11",
+        customer_id: "c1",
+        unread: 3,
+        last_message_at: "2026-07-30T10:00:00Z",
+      }),
     ]);
-    // La nota se pinta como estrellas; el número vive en el nombre accesible.
-    expect(screen.getByLabelText("4 de 5")).toBeTruthy();
-    expect(screen.getByText("Sin calificar aún")).toBeTruthy();
-  });
-});
-
-describe("ConversationList — vista por número", () => {
-  const dosHilos = [
-    makeConv({
-      id: "10",
-      customer_id: "c1",
-      last_message_preview: "gracias!",
-      last_message_direction: "in",
-      customer_rating: 4,
-      rating_status: "rated",
-      customer_rating_avg: 3.5,
-      customer_rating_count: 2,
-    }),
-    makeConv({
-      id: "11",
-      customer_id: "c1",
-      status: "closed",
-      last_message_at: "2026-07-30T10:00:00Z",
-      customer_rating: 3,
-      rating_status: "rated",
-      customer_rating_avg: 3.5,
-      customer_rating_count: 2,
-    }),
-    makeConv({ id: "20", customer_id: "c2", customer_name: "Beto" }),
-  ];
-
-  it("arranca por conversación: la vista agrupada se agrega, no reemplaza", () => {
-    renderList(dosHilos);
+    // El badge visible es `aria-hidden`; el número vive en el nombre accesible. Y no
+    // dice «sin leer»: el backend no expone eso, esto cuenta lo que llegó con la
+    // pestaña abierta.
     expect(
-      screen
-        .getByRole("button", { name: "Por conversación" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    // Tres filas de hilo, no dos grupos.
-    expect(screen.getAllByText(/Ana|Beto/).length).toBe(3);
+      screen.getByRole("button", { name: /5 mensajes desde que abriste el panel/ }),
+    ).toBeTruthy();
   });
 
-  it("agrupa por número y cuenta los hilos de cada uno", async () => {
-    renderList(dosHilos);
-    await userEvent.click(screen.getByRole("button", { name: "Por número" }));
+  it("el nombre accesible dice el estado en largo, que fuera de contexto «IA» no dice", () => {
+    renderList([makeConv({ customer_id: "c1", status: "human_handoff" })]);
+    expect(screen.getByRole("button", { name: /Derivada a una persona/ })).toBeTruthy();
+  });
 
-    expect(screen.getByText("2 conversaciones")).toBeTruthy();
-    expect(screen.getByText("1 conversación")).toBeTruthy();
-    // El encabezado muestra el promedio DE LA PERSONA (3,5), no el de los hilos en pantalla
-    // — que serían solo los cargados y calificados. En variante compacta: el conteo de
-    // hilos ya está al lado, y dos «conversaciones» distintas pegadas se leen como una
-    // contradicción.
+  it("muestra el promedio DE LA PERSONA, que calcula el backend sobre todo su historial", () => {
+    renderList(tresDeDos);
     expect(screen.getByLabelText("3,5 de 5")).toBeTruthy();
-    // La cola «· N conversaciones» sigue fuera en modo compacto: las dos que se ven
-    // («2 conversaciones», «1 conversación») cuentan hilos, no la muestra del promedio.
-    expect(screen.queryByText(/· \d+ conversaci/)).toBeNull();
-  });
-
-  it("sigue permitiendo abrir un hilo concreto desde el grupo", async () => {
-    const { onSelect } = renderList(dosHilos);
-    await userEvent.click(screen.getByRole("button", { name: "Por número" }));
-    // En un grupo la fila del hilo se rotula con su estado corto ("IA"/"Cerrado"), porque
-    // el nombre ya está en el encabezado. La primera es la más reciente.
-    await userEvent.click(screen.getAllByText("IA")[0]);
-    expect(onSelect).toHaveBeenCalledWith("10");
-  });
-
-  it("se puede colapsar un grupo sin perder el resto", async () => {
-    renderList(dosHilos);
-    await userEvent.click(screen.getByRole("button", { name: "Por número" }));
-    const header = screen.getAllByRole("button", { expanded: true })[0];
-    await userEvent.click(header);
-    expect(header.getAttribute("aria-expanded")).toBe("false");
-    // El otro grupo sigue ahí.
-    expect(screen.getByText("1 conversación")).toBeTruthy();
+    // Sin notas no se dibuja un 0: se dice que no hay.
+    expect(screen.getAllByText("Sin calificar").length).toBeGreaterThan(0);
   });
 });
 
-describe("ConversationList — buscador", () => {
-  it("NO recorta en el navegador: dibuja la página que llegó del servidor", async () => {
-    renderList([
-      makeConv({ id: "1", customer_name: "Ana", customer_phone: "+56911112222" }),
-      makeConv({ id: "2", customer_name: "Beto", customer_phone: "+56933334444" }),
-    ]);
-
-    // El término va a `?search=` y el backend compara por CONTIENE (teléfono en dígitos en
-    // los dos lados). Volver a filtrar aquí convertiría el buscador en «lo que coincide de
-    // las 25 filas que bajé», que con la bandeja paginada es un filtro que miente.
-    await userEvent.type(screen.getByRole("textbox", { name: /buscar/i }), "Ana");
-
-    expect(screen.getByText("Ana")).toBeTruthy();
-    expect(screen.getByText("Beto")).toBeTruthy();
+describe("ConversationList — el pie y sus dos cifras", () => {
+  it("cuenta NÚMEROS arriba y conversaciones cargadas abajo", () => {
+    const { text } = renderList(tresDeDos, { hasMore: true });
+    expect(text()).toContain("2 números");
+    expect(text()).toContain("3 conversaciones cargadas");
   });
 
-  it("dice que busca en todo el historial y que distingue acentos", () => {
-    renderList([makeConv()]);
-    const hint = screen.getByText(/todo el historial/i);
-    // La limitación es real (`icontains` sin `unaccent`): un buscador que no encuentra un
-    // nombre que existe se lee como roto si nadie lo avisa.
-    expect(hint.textContent).toContain("acentos");
-    expect(
-      screen.getByRole("textbox", { name: /buscar/i }).getAttribute("aria-describedby"),
-    ).toBe(hint.getAttribute("id"));
-  });
-});
-
-describe("ConversationList — paginación por cursor", () => {
-  it("cuenta lo que hay en pantalla y avisa que hay más, sin un total", async () => {
-    const { onLoadMore } = renderList([makeConv({ id: "1" }), makeConv({ id: "2" })], {
-      hasMore: true,
-    });
-
-    // Sin «de N»: el backend no manda `count` a propósito. Si aparece un total aquí,
-    // alguien reintrodujo el COUNT sobre la tabla que más crece del producto.
-    expect(screen.getByText("2 conversaciones (hay más)")).toBeTruthy();
-    expect(screen.queryByText(/ de \d+/)).toBeNull();
-
-    await userEvent.click(screen.getByRole("button", { name: "Cargar más" }));
-    expect(onLoadMore).toHaveBeenCalled();
+  it("anuncia cuando una página no agregó ningún número nuevo", () => {
+    renderList(tresDeDos, { hasMore: true, lastPageAddedNothing: true });
+    // Un botón que no cambia nada se lee como roto: hay que decirlo, y a un lector
+    // de pantalla también (`role="status"`).
+    expect(screen.getByRole("status").textContent).toContain(
+      "no agregó números nuevos",
+    );
   });
 
-  it("no ofrece «Cargar más» cuando la página es la última", () => {
-    renderList([makeConv()], { hasMore: false });
-    expect(screen.getByText("1 conversación")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cargar más" })).toBeNull();
-  });
-
-  it("si falla la página siguiente lo dice en el pie, sin borrar lo ya cargado", () => {
-    renderList([makeConv({ customer_name: "Ana" })], {
-      hasMore: true,
-      moreError: "No se pudo cargar la página siguiente.",
-    });
-    // Un `ErrorState` aquí borraría de la pantalla la página que el operador está leyendo.
-    expect(screen.getByText("Ana")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("página siguiente");
-    // Y el botón sigue ahí: reintentar es un clic.
-    expect(screen.getByRole("button", { name: "Cargar más" })).toBeTruthy();
+  it("un fallo al paginar va al pie, no reemplaza la lista ya cargada", () => {
+    renderList(tresDeDos, { hasMore: true, moreError: "Error de red" });
+    expect(screen.getByRole("alert").textContent).toContain("Error de red");
+    expect(screen.getAllByRole("button", { name: /Ana|Beto/ })).toHaveLength(2);
   });
 });
 
 describe("ConversationList — filtros", () => {
-  it("marca con aria-pressed la pestaña de estado activa, no solo con color", async () => {
-    renderList([makeConv()]);
-    const todos = screen.getByRole("button", { name: "Todos" });
-    const cerrados = screen.getByRole("button", { name: "Cerrados" });
-    expect(todos.getAttribute("aria-pressed")).toBe("true");
-    expect(cerrados.getAttribute("aria-pressed")).toBe("false");
-
-    await userEvent.click(cerrados);
-    expect(cerrados.getAttribute("aria-pressed")).toBe("true");
-    expect(todos.getAttribute("aria-pressed")).toBe("false");
+  it("el buscador dice que busca por nombre o teléfono, y dónde buscar texto", () => {
+    renderList([]);
+    const hint = screen.getByText(/Busca por nombre o teléfono/);
+    // La API no busca en mensajes; ahora que la pantalla se comporta como WhatsApp
+    // esa expectativa es más fuerte, así que la pista tiene que redirigirla.
+    expect(hint.textContent).toContain("abrí un chat");
   });
 
-  it("distingue «todavía no hay nada» de «tu filtro no encontró nada»", async () => {
+  it("con un estado puesto explica que la fila resume solo esas conversaciones", async () => {
+    renderList(tresDeDos);
+    await userEvent.click(screen.getByRole("button", { name: "Cerrados" }));
+    expect(screen.getByText(/Cada fila resume solo esas/)).toBeTruthy();
+  });
+
+  it("distingue «sin conversaciones» de «tu filtro no encontró nada»", async () => {
     const { onClearFilters } = renderList([]);
-    // Sin filtro puesto la bandeja vacía no es culpa de nadie: no ofrece limpiar nada.
     expect(screen.getByText("Sin conversaciones")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Limpiar filtros" })).toBeNull();
 
-    await userEvent.type(screen.getByRole("textbox", { name: /buscar/i }), "zzz");
-
+    await userEvent.click(screen.getByRole("button", { name: "Cerrados" }));
     expect(screen.getByText("Sin resultados")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(onClearFilters).toHaveBeenCalled();
-  });
-
-  it("ofrece limpiar cuando el vacío lo produce un filtro de servidor", () => {
-    // El recorte por cliente lo aplica el backend: la lista llega vacía y no hay texto en el
-    // buscador del que deducir que hay un filtro puesto.
-    renderList([], { initialCustomer: { id: "c9", name: "Ana" } });
-    expect(screen.getByText("Sin resultados")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Limpiar filtros" })).toBeTruthy();
   });
 });

@@ -186,9 +186,11 @@ describe("conversations mapper", () => {
                 rating_count: 2,
               },
               assignee_id: 2,
-              last_message_at: "2026-06-01T00:00:00Z",
+              // DISTINTOS a propósito: si fueran iguales, un mapper que copiara
+              // `last_message_at` en `created_at` pasaría el test igual.
+              last_message_at: "2026-06-03T10:00:00Z",
               created_at: "2026-06-01T00:00:00Z",
-              updated_at: "2026-06-01T00:00:00Z",
+              updated_at: "2026-06-05T23:00:00Z",
               customer_rating: 3,
               rating_status: "rated",
               last_message_preview: "hola, tienen hora?",
@@ -219,7 +221,16 @@ describe("conversations mapper", () => {
       last_message_preview: "hola, tienen hora?",
       last_message_direction: "in",
       last_message_sender_kind: "",
+      last_message_at: "2026-06-03T10:00:00Z",
+      // Lo usa el delimitador del hilo unificado («Conversación abierta el …»).
+      created_at: "2026-06-01T00:00:00Z",
     });
+
+    // `updated_at` NO se mapea, y la ausencia es la garantía: es «la última
+    // escritura de la fila» sin nada que diga cuál fue, así que no se puede
+    // rotular con honestidad — y no existe `closed_at`. Si alguien lo agrega
+    // para pintar una hora de cierre, esto lo caza.
+    expect((await listConversations()).items[0]).not.toHaveProperty("updated_at");
 
     let body: unknown;
     server.use(
@@ -491,7 +502,9 @@ describe("orders mapper", () => {
       id: "5",
       customer: "Ana",
       total: 30,
-      items: [{ product_id: "9", product_name: "Croquetas", quantity: 2, unit_price: 15 }],
+      items: [
+        { product_id: "9", product_name: "Croquetas", quantity: 2, unit_price: 15 },
+      ],
     });
   });
 

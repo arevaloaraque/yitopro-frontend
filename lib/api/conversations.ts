@@ -62,6 +62,7 @@ function convFromBackend(c: BackendConversation): Conversation {
     active_agent: c.active_agent || null,
     assignee_id: c.assignee_id === null ? null : String(c.assignee_id),
     last_message_at: c.last_message_at ?? c.created_at,
+    created_at: c.created_at,
     unread: 0, // not exposed; the SSE `mensaje_recibido` increments it live
     customer_rating: c.customer_rating ?? null,
     rating_status: c.rating_status ?? "",

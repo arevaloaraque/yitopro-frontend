@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { PlanBadge } from "./plan-badge";
 import { SidebarBrand } from "./sidebar-brand";
 import { SidebarNav } from "./sidebar-nav";
 
@@ -58,7 +59,10 @@ export function Sidebar() {
         </div>
       ) : null}
 
+      {/* `SidebarNav` es `flex-1`, así que el plan queda anclado abajo sin
+          posicionamiento absoluto. */}
       <SidebarNav collapsed={collapsed} />
+      <PlanBadge collapsed={collapsed} />
     </aside>
   );
 }

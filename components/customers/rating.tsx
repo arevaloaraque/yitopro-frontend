@@ -59,7 +59,10 @@ function Stars({
     <span className="relative inline-flex shrink-0" role="img" aria-label={label}>
       <span className="inline-flex" aria-hidden>
         {SLOTS.map((i) => (
-          <Star key={i} className={cn(starClass, "shrink-0 text-muted-foreground/40")} />
+          <Star
+            key={i}
+            className={cn(starClass, "shrink-0 text-muted-foreground/40")}
+          />
         ))}
       </span>
       <span
@@ -68,7 +71,10 @@ function Stars({
         aria-hidden
       >
         {SLOTS.map((i) => (
-          <Star key={i} className={cn(starClass, "shrink-0 fill-warning text-warning")} />
+          <Star
+            key={i}
+            className={cn(starClass, "shrink-0 fill-warning text-warning")}
+          />
         ))}
       </span>
     </span>
@@ -105,7 +111,10 @@ export function CustomerRating({
   const formatted = avg.toLocaleString("es-CL");
   return (
     <span
-      className={cn("inline-flex items-center gap-1.5 text-xs text-foreground", className)}
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs text-foreground",
+        className,
+      )}
       title={`${PROVENANCE} Promedio de ${count} ${plural(count)}.`}
     >
       <Stars value={avg} label={`${formatted} de 5`} starClass="size-3.5" />
@@ -147,7 +156,10 @@ export function ThreadRating({
   }
   return (
     <span
-      className={cn("inline-flex items-center text-[0.65rem] text-foreground", className)}
+      className={cn(
+        "inline-flex items-center text-[0.65rem] text-foreground",
+        className,
+      )}
       title={`${PROVENANCE} Esta conversación: ${value} de 5.`}
     >
       <Stars value={value} label={`${value} de 5`} starClass="size-3" />

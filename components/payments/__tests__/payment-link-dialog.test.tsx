@@ -112,6 +112,22 @@ describe("PaymentLinkDialog", () => {
     expect(screen.queryByLabelText(/servicio/i)).not.toBeInTheDocument();
   });
 
+  it("entrega el enlace acuñado a onCreated — el caller lo necesita para el anti-eco", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    render(<PaymentLinkDialog open onOpenChange={() => {}} onCreated={onCreated} />);
+    await pickCustomer(user);
+    await user.click(screen.getByLabelText(/cita o pedido/i));
+    await user.click(await screen.findByRole("option", { name: /^Cita/ }));
+    await user.click(screen.getByRole("button", { name: /generar enlace/i }));
+
+    await waitFor(() =>
+      expect(onCreated).toHaveBeenCalledWith(
+        expect.objectContaining({ public_id: "abc" }),
+      ),
+    );
+  });
+
   it("loads the cita's registered price and sends appointment_id alone", async () => {
     const user = userEvent.setup();
     render(<PaymentLinkDialog open onOpenChange={() => {}} />);

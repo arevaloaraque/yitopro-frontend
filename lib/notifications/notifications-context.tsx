@@ -27,6 +27,7 @@ import {
   subscribeNotificationPreferences,
 } from "./preferences";
 
+import { getRecentNotifications } from "@/lib/api/notifications";
 import { subscribeToEvents } from "@/lib/sse";
 import type { ConversacionEscaladaEvent, SSEEvent, SSEEventType } from "@/lib/types";
 
@@ -101,6 +102,9 @@ const ESCALATION_REASON_LABELS: Record<
 function hrefFor(event: SSEEvent): string | undefined {
   const data = event.data as Record<string, unknown>;
   if (typeof data.conversation_id === "string") {
+    // Se queda en `?id=`, y no por compatibilidad: el payload del SSE no trae
+    // `customer_id` (política de PII: solo ids), así que este llamador no se puede
+    // enriquecer desde el cliente. La pantalla lo resuelve y reescribe la URL.
     return `/conversations?id=${data.conversation_id}`;
   }
   // Neither the appointments nor the orders screen reads an id from the query string
@@ -223,8 +227,10 @@ function toNotification(event: SSEEvent): AppNotification | null {
         description: `Total ${event.data.total}`,
         tone: "default",
       };
-    // Un pago confirmado es LA transición que un operador está esperando, así que suena
-    // igual que un pedido nuevo (es la misma plata entrando).
+    // Un pago confirmado alimenta campana y toast pero NO suena: los tres timbres
+    // configurables cubren mensajes/pedidos/agenda y el pago no tiene slot propio
+    // (soundFor cae al default silencioso). La pantalla de pagos se refresca sola
+    // con este mismo evento, así que el aviso visual basta.
     case "pago_recibido":
       return {
         ...base,
@@ -271,6 +277,11 @@ function toNotification(event: SSEEvent): AppNotification | null {
     case "servicio_creado":
     case "servicio_actualizado":
     case "servicio_eliminado":
+    case "producto_creado":
+    case "producto_actualizado":
+    case "profesional_creado":
+    case "profesional_actualizado":
+    case "profesional_eliminado":
     case "conversacion_cerrada":
     case "conversacion_asignada":
     case "agente_actualizado":
@@ -282,6 +293,9 @@ function toNotification(event: SSEEvent): AppNotification | null {
     // confirmation produced two toasts at once — "Pedido #31 confirmado · $17.000" next to
     // "Nuevo pedido", the second one also being factually wrong. `pedido_borrador_creado`
     // stays loud: that one IS new work arriving from WhatsApp.
+    // Un enlace acuñado tampoco alerta: casi siempre es eco del propio diálogo o
+    // trabajo de la IA en curso; la tabla de pagos se refresca sola con él.
+    case "enlace_pago_creado":
     case "pedido_creado":
     case "pedido_cancelado":
       return null;
@@ -460,7 +474,11 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   // The mute preference lives in localStorage, i.e. outside React. Reading it with
   // useSyncExternalStore keeps SSR and the first client render in agreement (server
   // snapshot = audible) without mirroring it in state.
-  const soundMuted = useSyncExternalStore(subscribeSoundSettings, isSoundMuted, () => false);
+  const soundMuted = useSyncExternalStore(
+    subscribeSoundSettings,
+    isSoundMuted,
+    () => false,
+  );
   const toastsEnabled = useSyncExternalStore(
     subscribeNotificationPreferences,
     areToastsEnabled,
@@ -504,6 +522,37 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       setNotifications((prev) => [notification, ...prev].slice(0, MAX_NOTIFICATIONS));
     });
     return unsubscribe;
+  }, []);
+
+  // Siembra de la campana desde el backend: sin esto, un F5 no desactualizaba la
+  // campana — la DESTRUÍA (auditoría 2026-08-20). Reglas de la siembra: nunca pasa
+  // por notify() (cero toasts/sonidos re-disparados), entra LEÍDA (read: true —
+  // re-alarmar en cada recarga con lo ya visto sería ruido perpetuo), se dedupea
+  // contra lo que ya llegó vivo en la ventana montaje→respuesta, y los eventos
+  // silenciosos quedan fuera por la misma regla del stream (toNotification → null).
+  // Si el endpoint todavía no existe (404/red), el catch deja el comportamiento
+  // de siempre: el frontend se despliega antes que el backend.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current) return;
+    seededRef.current = true;
+    getRecentNotifications()
+      .then((events) => {
+        const seeded = events
+          .filter((e) => !lastSeen.current.has(dedupeKey(e)))
+          .map(toNotification)
+          .filter((n): n is AppNotification => n !== null)
+          .map((n) => ({ ...n, read: true }));
+        if (seeded.length === 0) return;
+        setNotifications((prev) =>
+          [...prev, ...seeded]
+            .sort((a, b) => b.at.localeCompare(a.at))
+            .slice(0, MAX_NOTIFICATIONS),
+        );
+      })
+      .catch(() => {
+        // Degradación silenciosa: campana solo en memoria, como hasta hoy.
+      });
   }, []);
 
   const markAllRead = useCallback(() => {

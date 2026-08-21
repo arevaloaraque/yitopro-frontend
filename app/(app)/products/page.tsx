@@ -276,13 +276,34 @@ function ProductsPageContent() {
     });
   }, [loadProducts]);
 
-  // Real-time: confirming an order (`pedido_creado`) decrements stock, so refresh
-  // the products list to reflect it. Orders themselves live on the Pedidos page.
-  // The SSE stream is multiplexed; NotificationsProvider owns the toasts, this
-  // screen owns its own data refresh (same pattern as appointments/conversations).
+  // Anti-eco de producto_*: la clave se arma ANTES del PATCH (el backend publica
+  // post-commit, así que el evento puede ganarle al HTTP propio — mismo patrón
+  // que orders-panel/payments) y se desarma si el PATCH falla, porque una clave
+  // huérfana tragaría un evento real posterior. La rama CREAR no se arma: el id
+  // no existe antes del request; el costo es un reload duplicado, idempotente y
+  // acotado a las filas visibles.
+  const selfApplied = useRef(new Set<string>());
+
+  // Real-time: `pedido_creado`/`pedido_cancelado` mueven stock (confirmar
+  // descuenta; cancelar un confirmado lo restaura) y `producto_*` es el propio
+  // catálogo cambiando en otra sesión o por la IA. Orders themselves live on the
+  // Pedidos page. The SSE stream is multiplexed; NotificationsProvider owns the
+  // toasts, this screen owns its own data refresh (same pattern as appointments).
+  // Categorías NO se recargan: el payload no trae señal de categoría y el mapa
+  // solo alimenta el Select de filtro.
   useEffect(() => {
     const unsub = subscribeToEvents((event: SSEEvent) => {
-      if (event.type === "pedido_creado") reloadShown();
+      switch (event.type) {
+        case "pedido_creado":
+        case "pedido_cancelado":
+          reloadShown();
+          break;
+        case "producto_creado":
+        case "producto_actualizado":
+          if (selfApplied.current.delete(event.data.product_id)) return;
+          reloadShown();
+          break;
+      }
     });
     return unsub;
   }, [reloadShown]);
@@ -314,6 +335,7 @@ function ProductsPageContent() {
     setSaving(true);
     try {
       if (editing) {
+        selfApplied.current.add(editing.id);
         const updated = await updateProduct(editing.id, {
           name: form.name.trim(),
           description: form.description.trim(),
@@ -336,6 +358,7 @@ function ProductsPageContent() {
         reloadShown();
       }
     } catch (e) {
+      if (editing) selfApplied.current.delete(editing.id);
       setFormErrors({ _form: e instanceof Error ? e.message : "Error al guardar" });
     } finally {
       setSaving(false);
@@ -347,9 +370,11 @@ function ProductsPageContent() {
     setProducts((prev) =>
       prev.map((p) => (p.id === product.id ? { ...p, is_active: !p.is_active } : p)),
     );
+    selfApplied.current.add(product.id);
     try {
       await updateProduct(product.id, { is_active: !product.is_active });
     } catch {
+      selfApplied.current.delete(product.id);
       setProducts((prev) =>
         prev.map((p) =>
           p.id === product.id ? { ...p, is_active: product.is_active } : p,
@@ -359,7 +384,7 @@ function ProductsPageContent() {
     }
   }
 
-  async function toggleWhatsApp(product: Product) {
+  async function toggleSellable(product: Product) {
     setActionError(null);
     setProducts((prev) =>
       prev.map((p) =>
@@ -368,11 +393,13 @@ function ProductsPageContent() {
           : p,
       ),
     );
+    selfApplied.current.add(product.id);
     try {
       await updateProduct(product.id, {
         sellable_via_whatsapp: !product.sellable_via_whatsapp,
       });
     } catch {
+      selfApplied.current.delete(product.id);
       setProducts((prev) =>
         prev.map((p) =>
           p.id === product.id
@@ -380,7 +407,7 @@ function ProductsPageContent() {
             : p,
         ),
       );
-      setActionError("No se pudo cambiar el estado de WhatsApp.");
+      setActionError("No se pudo cambiar la disponibilidad del producto.");
     }
   }
 
@@ -454,7 +481,7 @@ function ProductsPageContent() {
   // más», las filas ya cargadas siguen siendo válidas y el error va en línea.
   if (error && products.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="w-full space-y-6">
         {header}
         <ErrorState description={error} onRetry={refetch} />
       </div>
@@ -462,7 +489,7 @@ function ProductsPageContent() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       {header}
 
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
@@ -609,7 +636,7 @@ function ProductsPageContent() {
                       scroll horizontal: en teléfono el scroll dejaba «Nombre» en
                       pantalla y empujaba fuera precio y estado. Se quedan siempre
                       la que identifica la fila (Nombre), el precio, el estado y la
-                      acción; stock y WhatsApp bajan a la ficha de edición, que los
+                      acción; stock y disponibilidad bajan a la ficha de edición, que los
                       dos tiene. */}
                   <TableRow>
                     <TableHead>Nombre</TableHead>
@@ -627,7 +654,7 @@ function ProductsPageContent() {
                       Stock
                     </TableHead>
                     <TableHead className="hidden w-28 lg:table-cell">
-                      WhatsApp
+                      Vendible
                     </TableHead>
                     <TableHead className="w-28">Estado</TableHead>
                     {/* `w-12` y no `w-20`: es un solo botón de icono, y en 375px
@@ -668,11 +695,11 @@ function ProductsPageContent() {
                       <TableCell className="hidden lg:table-cell">
                         <Switch
                           checked={p.sellable_via_whatsapp}
-                          onChange={() => toggleWhatsApp(p)}
+                          onChange={() => toggleSellable(p)}
                           aria-label={
                             p.sellable_via_whatsapp
-                              ? "Desactivar venta por WhatsApp"
-                              : "Activar venta por WhatsApp"
+                              ? "Desactivar venta"
+                              : "Activar venta"
                           }
                         />
                       </TableCell>
@@ -791,17 +818,16 @@ function ProductsPageContent() {
                 placeholder="Ej. Shampoo sin sulfatos para pieles sensibles, 500 ml"
                 aria-describedby="prod-description-hint"
               />
-              {/* No es un campo decorativo: el agente de WhatsApp busca el
-                  catálogo por nombre Y descripción, así que un producto sin ella
-                  solo aparece si el cliente escribe el nombre casi exacto. */}
+              {/* No es un campo decorativo: la búsqueda del catálogo mira nombre Y
+                  descripción, así que un producto sin ella solo aparece si se
+                  escribe el nombre casi exacto. */}
               <p id="prod-description-hint" className="text-xs text-muted-foreground">
-                El asistente de WhatsApp la lee para recomendar y encontrar este
-                producto.
+                Se usa para buscar y describir el producto.
               </p>
             </div>
             <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
               <Label htmlFor="prod-whatsapp" className="cursor-pointer text-sm">
-                Venta por WhatsApp
+                Disponible para pedidos
               </Label>
               <Switch
                 id="prod-whatsapp"

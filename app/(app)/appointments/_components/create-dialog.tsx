@@ -153,7 +153,7 @@ export function CreateDialog({
         <DialogHeader>
           <DialogTitle>Nueva cita</DialogTitle>
           <DialogDescription>
-            Completa los datos para agendar una cita manualmente.
+            Completa los datos para agendar una cita.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -169,7 +169,9 @@ export function CreateDialog({
               }}
               placeholder="Buscar cliente…"
               aria-invalid={errors.customer_id ? true : undefined}
-              aria-describedby={errors.customer_id ? "create-customer-error" : undefined}
+              aria-describedby={
+                errors.customer_id ? "create-customer-error" : undefined
+              }
             />
             {errors.customer_id && (
               <p
@@ -274,7 +276,11 @@ export function CreateDialog({
                 aria-describedby={errors.date ? "create-date-error" : undefined}
               />
               {errors.date && (
-                <p id="create-date-error" role="alert" className="text-xs text-destructive">
+                <p
+                  id="create-date-error"
+                  role="alert"
+                  className="text-xs text-destructive"
+                >
                   {errors.date}
                 </p>
               )}
@@ -293,7 +299,11 @@ export function CreateDialog({
                 aria-describedby={errors.time ? "create-time-error" : undefined}
               />
               {errors.time && (
-                <p id="create-time-error" role="alert" className="text-xs text-destructive">
+                <p
+                  id="create-time-error"
+                  role="alert"
+                  className="text-xs text-destructive"
+                >
                   {errors.time}
                 </p>
               )}

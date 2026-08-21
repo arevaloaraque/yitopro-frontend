@@ -28,6 +28,7 @@ import { useBusiness } from "@/lib/business";
 import { subscribeToEvents } from "@/lib/sse";
 import type { Appointment, Conversation, Service, SSEEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { relativeTime, timeOnly } from "@/lib/format/date";
 
 type PageState = "loading" | "error" | "ready";
 
@@ -61,22 +62,6 @@ function todayYmd(timezone?: string): string {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
-}
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "ahora";
-  if (mins < 60) return `hace ${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  return `hace ${days}d`;
 }
 
 function statusBadge(status: Conversation["status"]) {
@@ -185,7 +170,8 @@ function ConversationRow({
   const s = statusBadge(conversation.status);
   return (
     <Link
-      href={`/conversations?id=${conversation.id}`}
+      // `chat=` es la clave canónica; el `id=` va como ancla dentro del hilo.
+      href={`/conversations?chat=${conversation.customer_id}&id=${conversation.id}`}
       className="flex cursor-pointer items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5 transition-all duration-200 hover:border-border/60 hover:bg-surface active:scale-[0.99]"
     >
       <div
@@ -256,7 +242,7 @@ function AppointmentRow({
           {s.label}
         </Badge>
         <span className="text-[0.7rem] text-muted-foreground tabular-nums">
-          {formatTime(appointment.start)} – {formatTime(appointment.end)}
+          {timeOnly(appointment.start)} – {timeOnly(appointment.end)}
         </span>
       </div>
     </Link>
@@ -320,11 +306,15 @@ export default function DashboardPage() {
   // refetches (ready -> loading -> ready) after an unrelated update.
   const loadedRef = useRef(false);
 
-  const loadData = useCallback(async (timezone?: string) => {
+  const loadData = useCallback(async (timezone?: string, hasAssistant = true) => {
     // Las dos listas llegan en sobre paginado (`{items, …}`), no como array: la
     // tarjeta se queda con `items`.
+    //
+    // `listConversations` NO se llama sin asistente: el router responde 403 y este
+    // `Promise.all` comparte un solo `.catch`, así que un plan sin conversaciones
+    // dejaba el dashboard entero en estado de error. No es cosmético.
     const [conversations, appointments, services] = await Promise.all([
-      listConversations(),
+      hasAssistant ? listConversations() : Promise.resolve({ items: [] }),
       listAppointments({ date: todayYmd(timezone) }),
       listServices(),
     ]);
@@ -343,7 +333,7 @@ export default function DashboardPage() {
     if (bizState !== "ready" || loadedRef.current) return;
     let cancelled = false;
     const t = setTimeout(() => {
-      loadData(business?.timezone)
+      loadData(business?.timezone, business?.entitlements?.assistant !== false)
         .then((result) => {
           if (!cancelled) {
             loadedRef.current = true;
@@ -454,7 +444,7 @@ export default function DashboardPage() {
         description="Ocurrió un error al obtener los datos. Revisa tu conexión e inténtalo de nuevo."
         onRetry={() => {
           setState("loading");
-          loadData(business.timezone)
+          loadData(business.timezone, business.entitlements?.assistant !== false)
             .then((result) => {
               loadedRef.current = true;
               setData(result);
@@ -478,6 +468,8 @@ export default function DashboardPage() {
   const totalUnread = inboundThisSession;
   // Live = the business is operative (answers customers) and has at least one agent on.
   const assistantActive = business.is_operative && hasActiveAgents;
+  // Solo ante un `false` explícito, como el menú y las pestañas de Configuración.
+  const hasAssistant = business.entitlements?.assistant !== false;
 
   const recentConversations = conversations.slice(0, 5);
   const todayAppointments = appointments.filter((a) => a.status !== "cancelled");
@@ -494,21 +486,23 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Metric cards */}
+      {/* Metric cards. Tres de las cuatro son del asistente: sin plan que lo
+          incluya no se muestran, porque un "0 / Sin actividad" sobre algo que el
+          negocio no contrató se lee como producto roto, no como plan. */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Conversaciones activas"
-          value={activeConversations.length}
-          subValue={`${activeConversations.length > 0 ? "En curso" : "Sin actividad"}`}
-          icon={<MessageSquare className="size-4" />}
-          trend={activeConversations.length > 0 ? "up" : "neutral"}
-        />
+        {hasAssistant && (
+          <MetricCard
+            label="Conversaciones activas"
+            value={activeConversations.length}
+            subValue={`${activeConversations.length > 0 ? "En curso" : "Sin actividad"}`}
+            icon={<MessageSquare className="size-4" />}
+          />
+        )}
         <MetricCard
           label="Citas de hoy"
           value={todayAppointments.length}
           subValue={`${todayAppointments.length} programada${todayAppointments.length !== 1 ? "s" : ""}`}
           icon={<Calendar className="size-4" />}
-          trend={todayAppointments.length >= 3 ? "up" : "neutral"}
         />
         {/* DASHBOARD-03: el backend no modela leído/no leído, así que este KPI sólo
             puede contar lo que llegó mientras el panel está abierto — y el rótulo lo
@@ -516,25 +510,30 @@ export default function DashboardPage() {
             `mensaje_recibido` devolvía siempre en 0: la tarjeta decía "sin mensajes
             nuevos" con mensajes de WhatsApp entrando (QA en vivo 2026-07-26). El
             arreglo de fondo es un `last_read_at` por operador en el backend. */}
-        <MetricCard
-          label="Mensajes nuevos"
-          value={totalUnread}
-          subValue={
-            totalUnread > 0 ? "Recibidos en esta sesión" : "Sin mensajes en esta sesión"
-          }
-          icon={<Users className="size-4" />}
-          trend={totalUnread > 5 ? "up" : totalUnread > 0 ? "down" : "neutral"}
-          variant={totalUnread > 0 ? "warning" : "default"}
-        />
-        <MetricCard
-          label="Asistente IA"
-          value={assistantActive ? "Activo" : "Pausado"}
-          subValue={
-            assistantActive ? "Respondiendo automáticamente" : "Esperando activación"
-          }
-          icon={<Bot className="size-4" />}
-          variant={assistantActive ? "accent" : "default"}
-        />
+        {hasAssistant && (
+          <MetricCard
+            label="Mensajes nuevos"
+            value={totalUnread}
+            subValue={
+              totalUnread > 0
+                ? "Recibidos en esta sesión"
+                : "Sin mensajes en esta sesión"
+            }
+            icon={<Users className="size-4" />}
+            variant={totalUnread > 0 ? "warning" : "default"}
+          />
+        )}
+        {hasAssistant && (
+          <MetricCard
+            label="Asistente IA"
+            value={assistantActive ? "Activo" : "Pausado"}
+            subValue={
+              assistantActive ? "Respondiendo automáticamente" : "Esperando activación"
+            }
+            icon={<Bot className="size-4" />}
+            variant={assistantActive ? "accent" : "default"}
+          />
+        )}
       </div>
 
       {/* Alerts section */}
@@ -561,49 +560,51 @@ export default function DashboardPage() {
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Recent conversations */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Conversaciones recientes</CardTitle>
-              <CardDescription>
-                Últimas {recentConversations.length} conversaciones
-              </CardDescription>
-            </div>
-            <Link
-              href="/conversations"
-              className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Ver todas
-              <ArrowUpRight className="size-3" />
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {recentConversations.length === 0 ? (
-              <EmptyState
-                title="Sin conversaciones"
-                description="No hay conversaciones recientes para mostrar."
-                icon={MessageSquare}
-              />
-            ) : (
-              <div className="space-y-2">
-                {recentConversations.map((c) => {
-                  const agent = c.active_agent ? agentMap.get(c.active_agent) : null;
-                  return (
-                    <ConversationRow
-                      key={c.id}
-                      conversation={c}
-                      customerName={c.customer_name.trim() || c.customer_phone}
-                      agentName={agent?.name ?? null}
-                    />
-                  );
-                })}
+        {hasAssistant && (
+          <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Conversaciones recientes</CardTitle>
+                <CardDescription>
+                  Últimas {recentConversations.length} conversaciones
+                </CardDescription>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <Link
+                href="/conversations"
+                className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Ver todas
+                <ArrowUpRight className="size-3" />
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {recentConversations.length === 0 ? (
+                <EmptyState
+                  title="Sin conversaciones"
+                  description="No hay conversaciones recientes para mostrar."
+                  icon={MessageSquare}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {recentConversations.map((c) => {
+                    const agent = c.active_agent ? agentMap.get(c.active_agent) : null;
+                    return (
+                      <ConversationRow
+                        key={c.id}
+                        conversation={c}
+                        customerName={c.customer_name.trim() || c.customer_phone}
+                        agentName={agent?.name ?? null}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Today's appointments */}
-        <Card>
+        <Card className={hasAssistant ? undefined : "lg:col-span-3"}>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Citas de hoy</CardTitle>

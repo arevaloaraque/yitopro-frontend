@@ -25,10 +25,7 @@ export async function validateInvite(token: string): Promise<boolean> {
  * establishes the session immediately (same shape as login: `TokenResponse`).
  * `POST /api/auth/invite/accept/`
  */
-export function acceptInvite(
-  token: string,
-  password: string,
-): Promise<TokenResponse> {
+export function acceptInvite(token: string, password: string): Promise<TokenResponse> {
   // skipRefresh: a 400 here is "bad token/weak password", not an expired session.
   return api.post<TokenResponse>(
     "/auth/invite/accept/",

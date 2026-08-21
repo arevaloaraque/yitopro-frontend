@@ -74,7 +74,9 @@ function Probe() {
   return (
     <>
       <span data-testid="count">{notifications.length}</span>
-      <span data-testid="hrefs">{notifications.map((n) => n.href ?? "-").join("|")}</span>
+      <span data-testid="hrefs">
+        {notifications.map((n) => n.href ?? "-").join("|")}
+      </span>
       <span data-testid="muted">{String(soundMuted)}</span>
       <button type="button" data-testid="toggle" onClick={toggleSound}>
         toggle
@@ -104,7 +106,10 @@ beforeEach(() => {
 describe("notification sound policy", () => {
   it("pings a customer message with the message voice", () => {
     mount();
-    emit({ type: "mensaje_recibido", data: { conversation_id: "7", message_id: "m1" } });
+    emit({
+      type: "mensaje_recibido",
+      data: { conversation_id: "7", message_id: "m1" },
+    });
     expect(sound.play).toHaveBeenCalledExactlyOnceWith("message");
   });
 
@@ -160,7 +165,10 @@ describe("notification sound policy", () => {
 
   it("stays silent for echoes of work already in motion", () => {
     mount();
-    emit({ type: "conversacion_reactivada", data: { conversation_id: "7", reason: "timeout" } });
+    emit({
+      type: "conversacion_reactivada",
+      data: { conversation_id: "7", reason: "timeout" },
+    });
     emit({
       type: "mensaje_automatico_enviado",
       data: {
@@ -192,7 +200,10 @@ describe("notification sound policy", () => {
 describe("notification deep links", () => {
   it("points a message at that conversation, not at the inbox", () => {
     mount();
-    emit({ type: "mensaje_recibido", data: { conversation_id: "42", message_id: "m1" } });
+    emit({
+      type: "mensaje_recibido",
+      data: { conversation_id: "42", message_id: "m1" },
+    });
     expect(hrefs()).toBe("/conversations?id=42");
   });
 
@@ -238,8 +249,14 @@ describe("duplicate deliveries", () => {
 
   it("does not collapse two different conversations", () => {
     mount();
-    emit({ type: "mensaje_recibido", data: { conversation_id: "7", message_id: "m1" } });
-    emit({ type: "mensaje_recibido", data: { conversation_id: "8", message_id: "m2" } });
+    emit({
+      type: "mensaje_recibido",
+      data: { conversation_id: "7", message_id: "m1" },
+    });
+    emit({
+      type: "mensaje_recibido",
+      data: { conversation_id: "8", message_id: "m2" },
+    });
     expect(count()).toBe("2");
   });
 });

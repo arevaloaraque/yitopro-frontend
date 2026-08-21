@@ -107,8 +107,8 @@ export function Step1BusinessInfo() {
           placeholder="Dirección de la tienda (opcional)"
         />
         <p className="text-[0.7rem] text-muted-foreground">
-          El asistente la usa para responder «¿dónde están?». Puedes dejarla vacía
-          y completarla luego.
+          El asistente la usa para responder «¿dónde están?». Puedes dejarla vacía y
+          completarla luego.
         </p>
       </div>
 

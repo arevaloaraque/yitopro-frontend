@@ -131,7 +131,9 @@ export function OrderPrintSheet({ order, onDone }: OrderPrintSheetProps) {
             <tr key={line.product_id} className="align-top">
               <td className="py-0.5 pr-2">{line.product_name}</td>
               <td className="py-0.5 text-right tabular-nums">{line.quantity}</td>
-              <td className="py-0.5 text-right tabular-nums">{money(line.unit_price)}</td>
+              <td className="py-0.5 text-right tabular-nums">
+                {money(line.unit_price)}
+              </td>
               <td className="py-0.5 text-right tabular-nums">{money(line.subtotal)}</td>
             </tr>
           ))}

@@ -8,7 +8,7 @@
  * se publica ya retrasado, que recargar no encoge una lista con varias páginas
  * dentro, y que una respuesta que llega tarde no pisa a la vigente.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -367,5 +367,72 @@ describe("ProductsPage — respuestas obsoletas (PROD-8)", () => {
       expect(screen.getByText("Shampoo hipoalergénico")).toBeInTheDocument(),
     );
     expect(screen.queryByText("Collar rojo")).not.toBeInTheDocument();
+  });
+});
+
+/** Frescura del catálogo por SSE (auditoría 2026-08-20): `producto_*` recarga
+ * las filas visibles, el eco del propio toggle se consume, y `pedido_cancelado`
+ * refresca el stock igual que `pedido_creado` (cancelar un confirmado lo
+ * restaura). */
+describe("ProductsPage — SSE de catálogo", () => {
+  function emitSse(event: SSEEvent) {
+    act(() => {
+      for (const handler of sseHandlers) handler(event);
+    });
+  }
+
+  it("un producto_creado remoto recarga las filas visibles sin tocar categorías", async () => {
+    render(<ProductsPage />);
+    await screen.findByText("Shampoo hipoalergénico");
+    expect(vi.mocked(searchProducts)).toHaveBeenCalledTimes(1);
+
+    emitSse({
+      id: "pr1",
+      type: "producto_creado",
+      emitted_at: "2026-08-20T10:00:00Z",
+      data: { product_id: "p9", active: true },
+    } as SSEEvent);
+
+    await waitFor(() => expect(vi.mocked(searchProducts)).toHaveBeenCalledTimes(2));
+    // Las categorías no se recargan: el payload no trae señal de categoría.
+    expect(vi.mocked(listProductCategories)).toHaveBeenCalledTimes(1);
+  });
+
+  it("el eco del propio toggle se consume; el mismo evento con id ajeno sí recarga", async () => {
+    render(<ProductsPage />);
+    await screen.findByText("Shampoo hipoalergénico");
+
+    // Toggle propio → arma la clave ANTES del PATCH → el eco no refetchea.
+    await userEvent.click(screen.getByRole("switch", { name: "Desactivar producto" }));
+    emitSse({
+      id: "pr2",
+      type: "producto_actualizado",
+      emitted_at: "2026-08-20T10:00:01Z",
+      data: { product_id: "p1", active: false },
+    } as SSEEvent);
+    expect(vi.mocked(searchProducts)).toHaveBeenCalledTimes(1);
+
+    // Un cambio de OTRA sesión sobre otro producto sí recarga.
+    emitSse({
+      id: "pr3",
+      type: "producto_actualizado",
+      emitted_at: "2026-08-20T10:00:02Z",
+      data: { product_id: "p999", active: true },
+    } as SSEEvent);
+    await waitFor(() => expect(vi.mocked(searchProducts)).toHaveBeenCalledTimes(2));
+  });
+
+  it("pedido_cancelado recarga el stock igual que pedido_creado", async () => {
+    render(<ProductsPage />);
+    await screen.findByText("Shampoo hipoalergénico");
+
+    emitSse({
+      id: "pc1",
+      type: "pedido_cancelado",
+      emitted_at: "2026-08-20T10:00:00Z",
+      data: { order_id: "31", total: "17000", customer_id: "9" },
+    } as SSEEvent);
+
+    await waitFor(() => expect(vi.mocked(searchProducts)).toHaveBeenCalledTimes(2));
   });
 });

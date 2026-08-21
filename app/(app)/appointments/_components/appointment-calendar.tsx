@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 import { AppointmentDetailPopover } from "./appointment-detail-popover";
 import type { EnrichedAppointment } from "./types";
+import { timeOnly } from "@/lib/format/date";
 
 export type CalendarView = "day" | "week" | "month";
 
@@ -478,7 +479,7 @@ function TimeGrid({
               {dayApps.map((apt) => {
                 const { top, height } = getPosition(apt.start, apt.end);
                 const showService = height >= 64;
-                const timeLabel = `${new Date(apt.start).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} – ${new Date(apt.end).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}`;
+                const timeLabel = `${timeOnly(apt.start)} – ${timeOnly(apt.end)}`;
                 return (
                   <AppointmentDetailPopover
                     key={apt.id}

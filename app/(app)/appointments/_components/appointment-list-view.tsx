@@ -17,6 +17,7 @@ import type { Appointment } from "@/lib/types";
 import { AppointmentActions } from "./appointment-actions";
 import { AppointmentDetailPopover } from "./appointment-detail-popover";
 import type { EnrichedAppointment } from "./types";
+import { timeOnly } from "@/lib/format/date";
 
 interface AppointmentListViewProps {
   /** Ya filtradas en el servidor: aquí no se vuelve a filtrar por estado. */
@@ -37,13 +38,6 @@ function formatDate(iso: string): string {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  });
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("es-CL", {
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -153,7 +147,7 @@ export function AppointmentListView({
                   {/* Fecha y hora tienen columna propia desde `sm`; por debajo
                       se leen aquí, porque una cita sin cuándo no es una cita. */}
                   <span className="block text-xs whitespace-normal text-muted-foreground tabular-nums sm:hidden">
-                    {formatDate(apt.start)} · {formatTime(apt.start)}
+                    {formatDate(apt.start)} · {timeOnly(apt.start)}
                   </span>
                 </TableCell>
                 <TableCell>{apt.customerName}</TableCell>
@@ -164,7 +158,7 @@ export function AppointmentListView({
                   {formatDate(apt.start)}
                 </TableCell>
                 <TableCell className="hidden tabular-nums md:table-cell">
-                  {formatTime(apt.start)} – {formatTime(apt.end)}
+                  {timeOnly(apt.start)} – {timeOnly(apt.end)}
                 </TableCell>
                 <TableCell>
                   <Badge variant={s.variant}>{s.label}</Badge>

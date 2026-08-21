@@ -81,6 +81,8 @@ describe("RescheduleDialog — slots pasados", () => {
     const [id, next] = onReschedule.mock.calls[0];
     expect(id).toBe("apt-1");
     expect(next.start).toContain("2099-12-31");
-    expect(new Date(next.end).getTime() - new Date(next.start).getTime()).toBe(3_600_000);
+    expect(new Date(next.end).getTime() - new Date(next.start).getTime()).toBe(
+      3_600_000,
+    );
   });
 });

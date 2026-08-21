@@ -48,26 +48,12 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // La carga inicial ES el refetch: el cuerpo estaba escrito dos veces, y una
+  // segunda copia de «cómo se carga el negocio» es la que se olvida de cambiar.
   useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(() => {
-      getBusiness()
-        .then((data) => {
-          if (cancelled) return;
-          setBusiness(data);
-          setState("ready");
-        })
-        .catch((e) => {
-          if (cancelled) return;
-          setError(e instanceof Error ? e.message : "Error al cargar el negocio");
-          setState("error");
-        });
-    }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, []);
+    const t = setTimeout(refetch, 0);
+    return () => clearTimeout(t);
+  }, [refetch]);
 
   // Real-time: an admin action or another session can flip is_operative —
   // refetch so the topbar badge stays accurate everywhere.

@@ -41,7 +41,8 @@ function isPopupHost(el: Element): boolean {
 function apply() {
   release();
   for (const el of Array.from(document.body.children)) {
-    if (!(el instanceof HTMLElement) || isPopupHost(el) || el.hasAttribute("inert")) continue;
+    if (!(el instanceof HTMLElement) || isPopupHost(el) || el.hasAttribute("inert"))
+      continue;
     // The ATTRIBUTE, not the `inert` IDL property: it is what CSS and the Playwright
     // focus probe read, and jsdom implements the attribute but not the property — via
     // the property this whole mechanism would be untestable (and silently absent in the
