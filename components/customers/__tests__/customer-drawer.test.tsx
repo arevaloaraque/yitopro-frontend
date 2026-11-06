@@ -285,3 +285,34 @@ describe("CustomerDrawer — calificación e historial", () => {
     expect(hrefs).toContain("/conversations?chat=cust-1&id=conv-10");
   });
 });
+
+describe("CustomerDrawer — negocio sin ficha (H11)", () => {
+  it("un record null (204) muestra el vacío normal, no un error", async () => {
+    vi.mocked(getRecord).mockResolvedValue(null);
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+
+    expect(screen.getByText("Sin campos adicionales configurados.")).toBeTruthy();
+    expect(screen.queryByText(/No se pudo cargar la ficha/)).toBeNull();
+  });
+
+  it("un fallo real de la ficha se nombra en su sección y el cliente sigue visible", async () => {
+    vi.mocked(getRecord).mockRejectedValue(new Error("Error de red"));
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+
+    expect(screen.getByText(/No se pudo cargar la ficha: Error de red/)).toBeTruthy();
+  });
+
+  it("ficha_actualizada que vuelve null no rompe el drawer", async () => {
+    renderDrawer();
+    expect(await screen.findByRole("spinbutton")).toBeInTheDocument();
+
+    vi.mocked(getRecord).mockResolvedValue(null);
+    emitSse(fichaEvent("cust-1"));
+
+    expect(
+      await screen.findByText("Sin campos adicionales configurados."),
+    ).toBeTruthy();
+  });
+});

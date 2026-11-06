@@ -44,9 +44,10 @@ interface OrderEditorDialogProps {
 interface Row {
   product_id: string;
   quantity: string;
+  note: string;
 }
 
-const emptyRow: Row = { product_id: "", quantity: "1" };
+const emptyRow: Row = { product_id: "", quantity: "1", note: "" };
 
 type ProductOption = { value: string; label: string };
 
@@ -66,6 +67,9 @@ export function OrderEditorDialog({
       ? order.items.map((i) => ({
           product_id: i.product_id,
           quantity: String(i.quantity),
+          // Carried through untouched: PATCH replaces every line, so a note left out of
+          // the row would be deleted on save.
+          note: i.note,
         }))
       : [{ ...emptyRow }],
   );
@@ -122,7 +126,11 @@ export function OrderEditorDialog({
   function buildItems(): OrderItemInput[] {
     return rows
       .filter((r) => r.product_id)
-      .map((r) => ({ product_id: r.product_id, quantity: Number(r.quantity) }));
+      .map((r) => ({
+        product_id: r.product_id,
+        quantity: Number(r.quantity),
+        note: r.note,
+      }));
   }
 
   function validate(): Record<string, string> {
@@ -281,6 +289,16 @@ export function OrderEditorDialog({
                 >
                   <Trash2 className="size-3.5" />
                 </Button>
+                {/* Una línea por nota: dos «Familiar» con mitades distintas son dos filas,
+                    no una con cantidad 2. El servidor rechaza más de 140 caracteres. */}
+                <Input
+                  value={row.note}
+                  onChange={(ev) => updateRow(idx, { note: ev.target.value })}
+                  maxLength={140}
+                  placeholder="Nota (opcional)"
+                  aria-label="Nota"
+                  className="w-full"
+                />
               </div>
             ))}
             <Button

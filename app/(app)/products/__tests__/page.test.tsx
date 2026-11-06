@@ -8,7 +8,7 @@
  * se publica ya retrasado, que recargar no encoge una lista con varias páginas
  * dentro, y que una respuesta que llega tarde no pisa a la vigente.
  */
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -211,6 +211,24 @@ describe("ProductsPage — categorías", () => {
     expect(
       screen.queryByRole("button", { name: /reintentar/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ProductsPage — ids únicos (H10)", () => {
+  it("dentro del diálogo «Stock» resuelve solo el campo del producto", async () => {
+    const user = userEvent.setup();
+    render(<ProductsPage />);
+    await screen.findByText("Shampoo hipoalergénico");
+
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByLabelText("Stock")).toHaveLength(1);
+
+    // Y no queda ningún id repetido en la página con el diálogo abierto.
+    const ids = [...document.querySelectorAll("[id]")].map((el) => el.id);
+    expect(
+      ids.filter((id, i) => id.startsWith("prod-") && ids.indexOf(id) !== i),
+    ).toEqual([]);
   });
 });
 

@@ -23,6 +23,7 @@ const service: Service = {
   duration_minutes: 45,
   price: 12000,
   is_active: true,
+  professional_ids: [],
 } as Service;
 
 const professional: Professional = {
@@ -64,5 +65,80 @@ describe("CreateDialog — errores de formulario", () => {
     expect(screen.getAllByRole("alert")).toHaveLength(3);
     expect(dateInput).not.toHaveAttribute("aria-invalid");
     expect(document.getElementById("create-date-error")).toBeNull();
+  });
+});
+
+describe("CreateDialog — profesionales por servicio (H4)", () => {
+  const pros: Professional[] = [
+    { id: "pro-1", name: "Camila", is_active: true },
+    { id: "pro-2", name: "Diego", is_active: true },
+    { id: "pro-3", name: "Rocío", is_active: true },
+  ];
+  const corte: Service = {
+    ...service,
+    id: "svc-2",
+    name: "Corte",
+    professional_ids: ["pro-2"],
+  };
+
+  function renderDialog() {
+    return render(
+      <CreateDialog
+        open
+        onOpenChange={() => {}}
+        services={[service, corte]}
+        professionals={pros}
+        onCreate={vi.fn()}
+      />,
+    );
+  }
+
+  async function pick(
+    user: ReturnType<typeof userEvent.setup>,
+    label: string,
+    option: string,
+  ) {
+    await user.click(screen.getByLabelText(label));
+    await user.click(await screen.findByRole("option", { name: option }));
+  }
+
+  it("un servicio sin restricción ofrece a todos los profesionales activos", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await pick(user, "Servicio", "Baño (45 min)");
+
+    await user.click(screen.getByLabelText("Profesional"));
+    const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(names).toEqual(["Cualquiera (automático)", "Camila", "Diego", "Rocío"]);
+  });
+
+  it("un servicio restringido ofrece solo a sus profesionales", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await pick(user, "Servicio", "Corte (45 min)");
+
+    await user.click(screen.getByLabelText("Profesional"));
+    const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(names).toEqual(["Cualquiera (automático)", "Diego"]);
+  });
+
+  it("suelta un profesional ya elegido que no atiende el servicio nuevo", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await pick(user, "Profesional", "Camila");
+    expect(screen.getByLabelText("Profesional")).toHaveTextContent("Camila");
+
+    await pick(user, "Servicio", "Corte (45 min)");
+    expect(screen.getByLabelText("Profesional")).toHaveTextContent(
+      "Cualquiera (automático)",
+    );
+  });
+
+  it("conserva al elegido si sí atiende el servicio nuevo", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await pick(user, "Profesional", "Diego");
+    await pick(user, "Servicio", "Corte (45 min)");
+    expect(screen.getByLabelText("Profesional")).toHaveTextContent("Diego");
   });
 });

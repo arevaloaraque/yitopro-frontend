@@ -3,8 +3,14 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Service } from "@/lib/types";
-import { searchServices, createService, updateService, deleteService } from "@/lib/api";
+import type { Professional, Service } from "@/lib/types";
+import {
+  searchServices,
+  createService,
+  updateService,
+  deleteService,
+  listProfessionals,
+} from "@/lib/api";
 import { subscribeToEvents } from "@/lib/sse";
 import { useMoney } from "@/lib/business";
 import { useDebounced } from "@/lib/hooks/use-debounced";
@@ -51,6 +57,7 @@ interface FormData {
   price: string;
   description: string;
   is_active: boolean;
+  professional_ids: string[];
 }
 
 const emptyForm: FormData = {
@@ -59,6 +66,7 @@ const emptyForm: FormData = {
   price: "",
   description: "",
   is_active: true,
+  professional_ids: [],
 };
 const PAGE_SIZE = 20;
 
@@ -88,6 +96,7 @@ function serviceToForm(s: Service): FormData {
     price: String(s.price),
     description: s.description ?? "",
     is_active: s.is_active,
+    professional_ids: s.professional_ids,
   };
 }
 
@@ -113,10 +122,20 @@ function ServicesPageContent() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
   const [deletePending, setDeletePending] = useState(false);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
 
   useEffect(() => {
     setFilters({ q: debouncedSearch });
   }, [debouncedSearch, setFilters]);
+
+  // Para el selector «Profesionales» del diálogo y la columna de la tabla. Si
+  // falla, el selector no aparece y el catálogo sigue usable.
+  // ponytail: se carga una vez; escuchar `profesional_*` por SSE si hace falta.
+  useEffect(() => {
+    listProfessionals()
+      .then(setProfessionals)
+      .catch(() => {});
+  }, []);
 
   // Filas en pantalla, leídas por los `catch` y por el handler SSE (que se
   // registra una sola vez).
@@ -250,6 +269,7 @@ function ServicesPageContent() {
           description: form.description.trim(),
           duration_minutes: Number(form.duration_minutes),
           price: Number(form.price),
+          professional_ids: form.professional_ids,
         });
         setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
         toast.success(`Servicio «${updated.name}» actualizado`);
@@ -260,6 +280,7 @@ function ServicesPageContent() {
           duration_minutes: Number(form.duration_minutes),
           price: Number(form.price),
           is_active: form.is_active,
+          professional_ids: form.professional_ids,
         });
         // Prepend: the list is newest-first (backend order_by -id), so a just-created
         // service belongs at the top — appending hid it below the page limit (QA-SERVICIOS-02).
@@ -336,6 +357,30 @@ function ServicesPageContent() {
   }
 
   const dialogOpen = creating || editing !== null;
+  // Inactivos solo si ya estaban marcados: así se pueden desmarcar.
+  const professionalOptions = professionals.filter(
+    (p) => p.is_active || form.professional_ids.includes(p.id),
+  );
+
+  function attendedBy(s: Service): string {
+    if (s.professional_ids.length === 0) return "Todos";
+    const names = professionals
+      .filter((p) => s.professional_ids.includes(p.id))
+      .map((p) => p.name);
+    const n = s.professional_ids.length;
+    return names.length > 0
+      ? names.join(", ")
+      : `${n} ${n === 1 ? "profesional" : "profesionales"}`;
+  }
+
+  function toggleProfessional(id: string, checked: boolean) {
+    setForm((prev) => ({
+      ...prev,
+      professional_ids: checked
+        ? [...prev.professional_ids, id]
+        : prev.professional_ids.filter((x) => x !== id),
+    }));
+  }
   // El vacío se decide por los filtros APLICADOS, no por la lista que devolvió:
   // sin filtros, cero filas significa «todavía no hay catálogo», y con alguno
   // significa «tu filtro no encontró nada». Son dos pantallas distintas, y el
@@ -490,6 +535,7 @@ function ServicesPageContent() {
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden w-28 md:table-cell">Duración</TableHead>
+                  <TableHead className="hidden lg:table-cell">Profesionales</TableHead>
                   <TableHead className="hidden w-32 text-right sm:table-cell">
                     Precio
                   </TableHead>
@@ -508,6 +554,9 @@ function ServicesPageContent() {
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
                       {formatDuration(s.duration_minutes)}
+                    </TableCell>
+                    <TableCell className="hidden whitespace-normal text-muted-foreground lg:table-cell">
+                      {attendedBy(s)}
                     </TableCell>
                     <TableCell className="hidden text-right tabular-nums sm:table-cell">
                       {money(s.price)}
@@ -669,6 +718,35 @@ function ServicesPageContent() {
                 placeholder="Ej. Incluye baño, secado y corte de uñas"
               />
             </div>
+            {professionalOptions.length > 0 && (
+              <fieldset
+                className="flex flex-col gap-2"
+                aria-describedby="svc-professionals-hint"
+              >
+                <legend className="mb-1.5 text-sm leading-none font-medium">
+                  Profesionales que lo atienden
+                </legend>
+                {professionalOptions.map((p) => (
+                  <Label key={p.id} className="font-normal">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={form.professional_ids.includes(p.id)}
+                      onChange={(e) => toggleProfessional(p.id, e.target.checked)}
+                    />
+                    {p.is_active ? p.name : `${p.name} (inactivo)`}
+                  </Label>
+                ))}
+                <p
+                  id="svc-professionals-hint"
+                  className="text-xs text-muted-foreground"
+                >
+                  {form.professional_ids.length === 0
+                    ? "Ninguno marcado: lo atienden todos los profesionales."
+                    : "Solo los marcados lo atienden. Desmárcalos todos para que lo atiendan todos los profesionales."}
+                </p>
+              </fieldset>
+            )}
             {creating && (
               <div className="flex items-center gap-2">
                 <Switch

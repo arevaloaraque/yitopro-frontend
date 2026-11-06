@@ -40,6 +40,7 @@ const backendOrder = {
       subtotal: "14.00",
       product_price: "14.00",
       product_stock: 20,
+      note: "sin cebolla",
     },
   ],
 };
@@ -72,6 +73,7 @@ describe("orders api", () => {
       unit_price: 14,
       subtotal: 14,
       product_stock: 20,
+      note: "sin cebolla",
     });
   });
 

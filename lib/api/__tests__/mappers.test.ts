@@ -12,7 +12,13 @@ import {
 import { listConversations, listMessages, sendMessage } from "@/lib/api/conversations";
 import { createCustomer, getCustomer, updateCustomer } from "@/lib/api/customers";
 import { createOrder, updateOrder } from "@/lib/api/orders";
-import { createService, listServices, searchServices } from "@/lib/api/services";
+import { getRecord } from "@/lib/api/records";
+import {
+  createService,
+  listServices,
+  searchServices,
+  updateService,
+} from "@/lib/api/services";
 import { server } from "@/mocks/server";
 
 const BASE = "http://localhost:8050/api";
@@ -32,6 +38,7 @@ describe("services mapper", () => {
               duration_minutes: 30,
               price: "20.00",
               active: true,
+              professional_ids: [3, 5],
             },
           ],
           count: 1,
@@ -46,6 +53,7 @@ describe("services mapper", () => {
         duration_minutes: 30,
         price: 20,
         is_active: true,
+        professional_ids: ["3", "5"],
       },
     ]);
   });
@@ -62,6 +70,7 @@ describe("services mapper", () => {
               duration_minutes: 45,
               price: "15000.00",
               active: true,
+              professional_ids: [],
             },
           ],
           count: 7,
@@ -77,6 +86,7 @@ describe("services mapper", () => {
           duration_minutes: 45,
           price: 15000,
           is_active: true,
+          professional_ids: [],
         },
       ],
       count: 7,
@@ -96,18 +106,71 @@ describe("services mapper", () => {
             duration_minutes: 10,
             price: "5.00",
             active: true,
+            professional_ids: [2],
+          },
+          { status: 201 },
+        );
+      }),
+    );
+    await createService({
+      name: "X",
+      duration_minutes: 10,
+      price: 5,
+      is_active: true,
+      professional_ids: ["2"],
+    });
+    expect(body).toMatchObject({
+      name: "X",
+      duration_minutes: 10,
+      price: 5,
+      active: true,
+      professional_ids: [2],
+    });
+  });
+
+  it("create omits professional_ids when not given (backend default [])", async () => {
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.post(`${BASE}/services/`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(
+          {
+            id: 9,
+            name: "X",
+            description: "",
+            duration_minutes: 10,
+            price: "5.00",
+            active: true,
+            professional_ids: [],
           },
           { status: 201 },
         );
       }),
     );
     await createService({ name: "X", duration_minutes: 10, price: 5, is_active: true });
-    expect(body).toMatchObject({
-      name: "X",
-      duration_minutes: 10,
-      price: 5,
-      active: true,
-    });
+    expect(body).not.toHaveProperty("professional_ids");
+  });
+
+  it("update sends [] to clear the restriction and omits it when unchanged", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${BASE}/services/9/`, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({
+          id: 9,
+          name: "X",
+          description: "",
+          duration_minutes: 10,
+          price: "5.00",
+          active: false,
+          professional_ids: [],
+        });
+      }),
+    );
+    await updateService("9", { professional_ids: [] });
+    await updateService("9", { is_active: false });
+    expect(bodies[0]).toEqual({ professional_ids: [] });
+    expect(bodies[1]).toEqual({ active: false });
   });
 });
 
@@ -481,11 +544,12 @@ describe("orders mapper", () => {
         product_name: "Croquetas",
         quantity: 2,
         unit_price: "15.00",
+        note: "sin cebolla",
       },
     ],
   };
 
-  it("createOrder posts {customer_id, items:[{product_id, quantity}]} and maps the response", async () => {
+  it("createOrder posts {customer_id, items:[{product_id, quantity, note}]} and maps the response", async () => {
     let body: unknown;
     server.use(
       http.post(`${BASE}/orders/`, async ({ request }) => {
@@ -495,15 +559,24 @@ describe("orders mapper", () => {
     );
     const out = await createOrder({
       customer_id: "4",
-      items: [{ product_id: "9", quantity: 2 }],
+      items: [{ product_id: "9", quantity: 2, note: "sin cebolla" }],
     });
-    expect(body).toEqual({ customer_id: 4, items: [{ product_id: 9, quantity: 2 }] });
+    expect(body).toEqual({
+      customer_id: 4,
+      items: [{ product_id: 9, quantity: 2, note: "sin cebolla" }],
+    });
     expect(out).toMatchObject({
       id: "5",
       customer: "Ana",
       total: 30,
       items: [
-        { product_id: "9", product_name: "Croquetas", quantity: 2, unit_price: 15 },
+        {
+          product_id: "9",
+          product_name: "Croquetas",
+          quantity: 2,
+          unit_price: 15,
+          note: "sin cebolla",
+        },
       ],
     });
   });
@@ -516,8 +589,18 @@ describe("orders mapper", () => {
         return HttpResponse.json(backendOrder);
       }),
     );
-    await updateOrder("5", [{ product_id: "9", quantity: 3 }]);
-    expect(body).toEqual({ items: [{ product_id: 9, quantity: 3 }] });
+    // PATCH is replace-all: a line sent without `note` loses it server-side, so the note
+    // must travel on every line — including two lines of the same product.
+    await updateOrder("5", [
+      { product_id: "9", quantity: 1, note: "mitad pepperoni, mitad napolitana" },
+      { product_id: "9", quantity: 1, note: "" },
+    ]);
+    expect(body).toEqual({
+      items: [
+        { product_id: 9, quantity: 1, note: "mitad pepperoni, mitad napolitana" },
+        { product_id: 9, quantity: 1, note: "" },
+      ],
+    });
   });
 });
 
@@ -574,5 +657,17 @@ describe("rating fields that landed later than the rest of the schema", () => {
     );
     await listConversations({ customerId: "42" });
     expect(seen).toBe("42");
+  });
+});
+
+describe("records — business without a record schema (H11)", () => {
+  it("getRecord maps 204 No Content to null", async () => {
+    server.use(
+      http.get(
+        `${BASE}/customers/4/record/`,
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+    await expect(getRecord("4")).resolves.toBeNull();
   });
 });

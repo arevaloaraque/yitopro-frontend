@@ -310,12 +310,12 @@ export function CustomerDrawer({
       setNoteError(null);
       setOpenNote(null);
       try {
-        // `allSettled`, no `all`: solo el cliente es indispensable. Con `all`, el
-        // 400 que devuelve `/record/` en un negocio SIN `RecordSchema` —el estado
-        // por defecto de un tenant nuevo, porque nada en el panel llama a
-        // `POST /records/schemas/`— rechazaba en bloque y se perdían también
-        // nombre, email, teléfono, conversaciones y notas. Y como la ficha ya no
-        // es una ruta, no quedaba ninguna vía para ver al cliente.
+        // `allSettled`, no `all`: solo el cliente es indispensable. Un negocio SIN
+        // `RecordSchema` (el estado por defecto de un tenant nuevo) ya no falla:
+        // `/record/` responde 204 y `getRecord` da `null`, que se dibuja como
+        // «sin campos adicionales». Pero si la ficha falla por otra causa, con
+        // `all` se perderían también nombre, email, teléfono, conversaciones y
+        // notas, y como la ficha ya no es una ruta no quedaría vía para verlos.
         const [c, r, convs, ns] = await Promise.allSettled([
           getCustomer(customerId),
           getRecord(customerId),
@@ -413,8 +413,8 @@ export function CustomerDrawer({
           .then((r) => {
             if (customerIdRef.current !== openId) return;
             setRecord(r);
-            setValues({ ...r.values });
-            loadedRef.current.values = { ...r.values };
+            setValues(r ? { ...r.values } : {});
+            loadedRef.current.values = r ? { ...r.values } : {};
           })
           .catch(() => {});
       } else if (event.type === "cliente_actualizado") {
@@ -628,13 +628,12 @@ export function CustomerDrawer({
               count={record?.schema.length ?? 0}
               defaultOpen
             >
-              {!record ? (
+              {!record && recordError ? (
                 <p className="text-xs text-destructive">
-                  No se pudo cargar la ficha
-                  {recordError ? `: ${recordError}` : "."} El resto de los datos del
+                  No se pudo cargar la ficha: {recordError} El resto de los datos del
                   cliente sí está disponible.
                 </p>
-              ) : record.schema.length === 0 ? (
+              ) : !record || record.schema.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Sin campos adicionales configurados.
                 </p>

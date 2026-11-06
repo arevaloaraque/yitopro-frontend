@@ -24,6 +24,7 @@ function backendService(id: number, name: string) {
     duration_minutes: 30,
     price: "10.00",
     active: true,
+    professional_ids: [],
   };
 }
 

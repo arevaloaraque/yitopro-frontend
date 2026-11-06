@@ -153,6 +153,7 @@ describe("OnboardingProvider", () => {
             duration_minutes: 45,
             price: "12000",
             active: true,
+            professional_ids: [],
           },
           { status: 201 },
         );

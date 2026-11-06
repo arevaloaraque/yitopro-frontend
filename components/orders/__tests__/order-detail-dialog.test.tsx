@@ -68,6 +68,7 @@ function makeOrder(over: Partial<Order> = {}): Order {
         subtotal: 34000,
         product_price: 17000,
         product_stock: 25,
+        note: "",
       },
     ],
     total: 34000,
@@ -116,6 +117,31 @@ describe("OrderDetailDialog — qué contiene el pedido", () => {
     // Un operador que no distingue el ámbar del verde igual lee «Borrador» y «Asistente».
     expect(await screen.findByText("Borrador")).toBeInTheDocument();
     expect(screen.getByText("Asistente")).toBeInTheDocument();
+  });
+
+  it("muestra la nota de cada línea, también con el mismo producto en dos líneas", async () => {
+    const pizza = {
+      product_id: "p9",
+      product_name: "Pizza Familiar",
+      quantity: 1,
+      unit_price: 15000,
+      subtotal: 15000,
+      product_price: 15000,
+      product_stock: 10,
+    };
+    renderDrawer(
+      makeOrder({
+        items: [
+          { ...pizza, note: "mitad pepperoni, mitad napolitana" },
+          { ...pizza, note: "sin cebolla" },
+        ],
+      }),
+    );
+    expect(
+      await screen.findByText("mitad pepperoni, mitad napolitana"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("sin cebolla")).toBeInTheDocument();
+    expect(screen.getAllByText("Pizza Familiar")).toHaveLength(2);
   });
 
   it("enlaza al cliente para poder ver quién es", async () => {
@@ -217,6 +243,7 @@ describe("OrderDetailDialog — qué pasa si confirmo", () => {
             subtotal: 85000,
             product_price: 17000,
             product_stock: 3,
+            note: "",
           },
         ],
       }),
@@ -242,6 +269,7 @@ describe("OrderDetailDialog — qué pasa si confirmo", () => {
             subtotal: 85000,
             product_price: 17000,
             product_stock: 0,
+            note: "",
           },
         ],
       }),
@@ -263,6 +291,7 @@ describe("OrderDetailDialog — qué pasa si confirmo", () => {
             subtotal: 17000,
             product_price: 20000,
             product_stock: 5,
+            note: "",
           },
         ],
       }),

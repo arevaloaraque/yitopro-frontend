@@ -127,9 +127,14 @@ export function OrderPrintSheet({ order, onDone }: OrderPrintSheetProps) {
           </tr>
         </thead>
         <tbody>
-          {order.items.map((line) => (
-            <tr key={line.product_id} className="align-top">
-              <td className="py-0.5 pr-2">{line.product_name}</td>
+          {/* Índice como key: el mismo producto puede ir en dos líneas con notas distintas. */}
+          {order.items.map((line, idx) => (
+            <tr key={idx} className="align-top">
+              <td className="py-0.5 pr-2">
+                {line.product_name}
+                {/* La cocina lee esto: la nota va pegada a su línea, no al pie. */}
+                {line.note ? <div className="pl-2">{line.note}</div> : null}
+              </td>
               <td className="py-0.5 text-right tabular-nums">{line.quantity}</td>
               <td className="py-0.5 text-right tabular-nums">
                 {money(line.unit_price)}

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { searchProducts, type Order } from "@/lib/api";
+import { searchProducts, updateOrder, type Order } from "@/lib/api";
 import type { Product } from "@/lib/types";
 
 import { OrderEditorDialog } from "../order-editor-dialog";
@@ -40,7 +40,13 @@ function makeOrder(over: Partial<Order> = {}): Order {
     status: "draft",
     total: 17000,
     items: [
-      { product_id: "p1", product_name: CERA.name, quantity: 1, unit_price: 17000 },
+      {
+        product_id: "p1",
+        product_name: CERA.name,
+        quantity: 1,
+        unit_price: 17000,
+        note: "",
+      },
     ],
     created_at: "2026-07-31T10:00:00Z",
     ...over,
@@ -105,5 +111,46 @@ describe("OrderEditorDialog — la plata del pedido a la vista", () => {
     // también en el trigger no cabía y se cortaba a mitad del número («$17.00(»).
     const trigger = await screen.findByText(CERA.name);
     expect(trigger.textContent).not.toContain("$17.000");
+  });
+});
+
+describe("OrderEditorDialog — notas por línea", () => {
+  const line = {
+    product_id: "p1",
+    product_name: CERA.name,
+    quantity: 1,
+    unit_price: 17000,
+  };
+
+  it("devuelve la nota de cada línea al guardar, sin fusionar el mismo producto", async () => {
+    // PATCH reemplaza todas las líneas: una nota que no viaja se borra en el servidor.
+    renderEditor(
+      makeOrder({
+        items: [
+          { ...line, note: "mitad pepperoni, mitad napolitana" },
+          { ...line, note: "sin cebolla" },
+        ] as Order["items"],
+      }),
+    );
+    const notes = await screen.findAllByLabelText("Nota");
+    expect(notes.map((n) => (n as HTMLInputElement).value)).toEqual([
+      "mitad pepperoni, mitad napolitana",
+      "sin cebolla",
+    ]);
+    await userEvent.clear(notes[1]);
+    await userEvent.type(notes[1], "sin aceitunas");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(updateOrder).toHaveBeenCalledWith("o1", [
+        { product_id: "p1", quantity: 1, note: "mitad pepperoni, mitad napolitana" },
+        { product_id: "p1", quantity: 1, note: "sin aceitunas" },
+      ]),
+    );
+  });
+
+  it("el campo de nota acepta hasta 140 caracteres, como el servidor", async () => {
+    renderEditor();
+    expect(await screen.findByLabelText("Nota")).toHaveAttribute("maxLength", "140");
   });
 });

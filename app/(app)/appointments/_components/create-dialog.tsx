@@ -71,6 +71,12 @@ export function CreateDialog({
 }: CreateDialogProps) {
   const activeProfessionals = professionals.filter((p) => p.is_active);
   const [form, setForm] = useState<FormData>(emptyForm);
+  // Un servicio con `professional_ids` lo atienden solo esos; vacío = todos.
+  const allowedIds =
+    services.find((s) => s.id === form.service_id)?.professional_ids ?? [];
+  const offeredProfessionals = allowedIds.length
+    ? activeProfessionals.filter((p) => allowedIds.includes(p.id))
+    : activeProfessionals;
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -199,6 +205,13 @@ export function CreateDialog({
                   ...prev,
                   service_id: v ?? "",
                   duration_minutes: svc?.duration_minutes ?? 0,
+                  // Un profesional ya elegido que no atiende el nuevo servicio
+                  // se suelta: el backend respondería 400.
+                  professional_id:
+                    svc?.professional_ids.length &&
+                    !svc.professional_ids.includes(prev.professional_id)
+                      ? "any"
+                      : prev.professional_id,
                 }));
                 clearError("service_id");
               }}
@@ -239,7 +252,7 @@ export function CreateDialog({
               <Select
                 items={[
                   { value: "any", label: "Cualquiera (automático)" },
-                  ...activeProfessionals.map((p) => ({ value: p.id, label: p.name })),
+                  ...offeredProfessionals.map((p) => ({ value: p.id, label: p.name })),
                 ]}
                 value={form.professional_id}
                 onValueChange={(v) =>
@@ -251,7 +264,7 @@ export function CreateDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Cualquiera (automático)</SelectItem>
-                  {activeProfessionals.map((p) => (
+                  {offeredProfessionals.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
                     </SelectItem>

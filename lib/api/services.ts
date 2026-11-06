@@ -16,6 +16,8 @@ interface BackendService {
   duration_minutes: number;
   price: string;
   active: boolean;
+  /** Empty = every active professional attends it. */
+  professional_ids: number[];
 }
 
 interface Page {
@@ -31,6 +33,8 @@ function fromBackend(s: BackendService): Service {
     duration_minutes: s.duration_minutes,
     price: Number(s.price),
     is_active: s.active,
+    // ponytail: `?? []` covers a backend deployed before H4; drop once both ship.
+    professional_ids: (s.professional_ids ?? []).map(String),
   };
 }
 
@@ -116,7 +120,13 @@ export async function searchServices(
   return { items: res.items.map(fromBackend), count: res.count };
 }
 
-export type CreateServiceInput = Omit<Service, "id" | "business_id">;
+export type CreateServiceInput = Omit<
+  Service,
+  "id" | "business_id" | "professional_ids"
+> & {
+  /** Omitted = backend default `[]` (every professional attends it). */
+  professional_ids?: string[];
+};
 
 export function createService(input: CreateServiceInput): Promise<Service> {
   return api
@@ -126,6 +136,9 @@ export function createService(input: CreateServiceInput): Promise<Service> {
       duration_minutes: input.duration_minutes,
       price: input.price,
       active: input.is_active,
+      ...(input.professional_ids !== undefined && {
+        professional_ids: input.professional_ids.map(Number),
+      }),
     })
     .then(fromBackend);
 }
@@ -141,6 +154,9 @@ export function updateService(
     body.duration_minutes = patch.duration_minutes;
   if (patch.price !== undefined) body.price = patch.price;
   if (patch.is_active !== undefined) body.active = patch.is_active;
+  // `[]` clears the restriction; omitted leaves it unchanged.
+  if (patch.professional_ids !== undefined)
+    body.professional_ids = patch.professional_ids.map(Number);
   return api.patch<BackendService>(`/services/${id}/`, body).then(fromBackend);
 }
 

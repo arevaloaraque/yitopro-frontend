@@ -546,13 +546,14 @@ function ProductsPageContent() {
           )}
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="prod-stock">Stock</Label>
+            {/* `-filter`: el campo Stock del diálogo ya ocupa `prod-stock`. */}
+            <Label htmlFor="prod-stock-filter">Stock</Label>
             <Select
               items={STOCK_OPTIONS}
               value={stockFilter}
               onValueChange={(v) => setFilters({ stock_lte: v ?? "all" })}
             >
-              <SelectTrigger id="prod-stock" className="w-44">
+              <SelectTrigger id="prod-stock-filter" className="w-44">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

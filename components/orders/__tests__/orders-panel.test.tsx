@@ -77,6 +77,7 @@ function makeOrder(over: Partial<Order> = {}): Order {
         subtotal: 30,
         product_price: 15,
         product_stock: 8,
+        note: "",
       },
     ],
     total: 33,

@@ -13,7 +13,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Service, SSEEvent } from "@/lib/types";
-import { searchServices, createService, updateService, deleteService } from "@/lib/api";
+import {
+  searchServices,
+  createService,
+  updateService,
+  deleteService,
+  listProfessionals,
+} from "@/lib/api";
 
 import ServicesPage from "../page";
 
@@ -62,6 +68,7 @@ function makeService(over: Partial<Service> = {}): Service {
     duration_minutes: 45,
     price: 12000,
     is_active: true,
+    professional_ids: [],
     ...over,
   };
 }
@@ -72,6 +79,11 @@ beforeEach(() => {
   searchParamsStub.current = new URLSearchParams();
   window.history.replaceState(null, "", "/services");
   vi.mocked(searchServices).mockResolvedValue({ items: [makeService()], count: 1 });
+  vi.mocked(listProfessionals).mockResolvedValue([
+    { id: "pro-1", name: "Camila", is_active: true },
+    { id: "pro-2", name: "Diego", is_active: true },
+    { id: "pro-3", name: "Rocío", is_active: false },
+  ]);
 });
 
 afterEach(() => {
@@ -124,6 +136,7 @@ describe("ServicesPage — crear servicio (SERVICIOS-02/05/06)", () => {
         duration_minutes: 30,
         price: 8000,
         is_active: false,
+        professional_ids: [],
       }),
     );
     expect(toastFns.success).toHaveBeenCalledWith("Servicio «Peinado» creado");
@@ -150,6 +163,7 @@ describe("ServicesPage — editar servicio (SERVICIOS-03/06)", () => {
         description: "Solo baño",
         duration_minutes: 45,
         price: 12000,
+        professional_ids: [],
       }),
     );
     expect(toastFns.success).toHaveBeenCalledWith("Servicio «Baño» actualizado");
@@ -197,6 +211,7 @@ describe("ServicesPage — editar servicio (SERVICIOS-03/06)", () => {
         description: "",
         duration_minutes: 45,
         price: 0,
+        professional_ids: [],
       }),
     );
   });
@@ -386,5 +401,78 @@ describe("ServicesPage — fallo al cargar más (SVC-03)", () => {
     expect(
       screen.queryByRole("button", { name: /reintentar/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ServicesPage — profesionales que atienden el servicio (H4)", () => {
+  it("vacío = todos: lo dice en la tabla y en el diálogo", async () => {
+    const user = userEvent.setup();
+    render(<ServicesPage />);
+    // «Todos» también es una opción del filtro de estado: se busca la celda.
+    expect(await screen.findByRole("cell", { name: "Todos" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /nuevo servicio/i }));
+    const group = screen.getByRole("group", { name: "Profesionales que lo atienden" });
+    expect(group).toHaveAccessibleDescription(
+      "Ninguno marcado: lo atienden todos los profesionales.",
+    );
+    // Un inactivo no marcado no se ofrece.
+    expect(screen.queryByLabelText(/Rocío/)).not.toBeInTheDocument();
+  });
+
+  it("crea el servicio restringido a los profesionales marcados", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createService).mockResolvedValue(
+      makeService({ id: "svc-9", name: "Corte", professional_ids: ["pro-2"] }),
+    );
+    render(<ServicesPage />);
+    expect(await screen.findByText("Baño")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /nuevo servicio/i }));
+    await user.type(screen.getByLabelText("Nombre"), "Corte");
+    await user.type(screen.getByLabelText("Duración (minutos)"), "30");
+    await user.type(screen.getByLabelText("Precio"), "8000");
+    await user.click(await screen.findByRole("checkbox", { name: "Diego" }));
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() =>
+      expect(createService).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Corte", professional_ids: ["pro-2"] }),
+      ),
+    );
+    // La fila nueva nombra a quien lo atiende.
+    expect(await screen.findByRole("cell", { name: "Diego" })).toBeInTheDocument();
+  });
+
+  it("al editar precarga la restricción y desmarcar todo la limpia con []", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchServices).mockResolvedValue({
+      items: [makeService({ professional_ids: ["pro-1", "pro-3"] })],
+      count: 1,
+    });
+    vi.mocked(updateService).mockResolvedValue(makeService());
+    render(<ServicesPage />);
+    expect(
+      await screen.findByRole("cell", { name: "Camila, Rocío" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Editar servicio Baño" }));
+    const camila = screen.getByRole("checkbox", { name: "Camila" });
+    // El inactivo aparece porque ya estaba marcado: así se puede soltar.
+    const rocio = screen.getByRole("checkbox", { name: "Rocío (inactivo)" });
+    expect(camila).toBeChecked();
+    expect(rocio).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Diego" })).not.toBeChecked();
+
+    await user.click(camila);
+    await user.click(rocio);
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() =>
+      expect(updateService).toHaveBeenCalledWith(
+        "svc-1",
+        expect.objectContaining({ professional_ids: [] }),
+      ),
+    );
   });
 });

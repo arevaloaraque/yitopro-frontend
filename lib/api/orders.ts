@@ -21,6 +21,8 @@ export interface OrderLine {
   product_price: number;
   /** Current on-hand stock, so the detail view can warn before a confirm 409s. */
   product_stock: number;
+  /** Free-text note for this line («sin cebolla»); `""` when there is none. */
+  note: string;
 }
 
 /** Tenant order (mirrors `OrderOut`, with names already resolved). */
@@ -52,6 +54,7 @@ interface BackendOrderItem {
   subtotal: string;
   product_price: string;
   product_stock: number;
+  note: string;
 }
 
 interface BackendOrder {
@@ -83,6 +86,7 @@ function fromBackend(o: BackendOrder): Order {
       subtotal: Number(i.subtotal),
       product_price: Number(i.product_price),
       product_stock: i.product_stock,
+      note: i.note,
     })),
     total: Number(o.total),
     status: o.status,
@@ -128,6 +132,11 @@ export async function listOrders(
 export interface OrderItemInput {
   product_id: string;
   quantity: number;
+  /**
+   * Required on purpose: PATCH is replace-all and a line sent without `note` is saved
+   * with an empty one, so an optional field here would let a caller wipe notes silently.
+   */
+  note: string;
 }
 
 /**
@@ -144,6 +153,7 @@ export async function createOrder(input: {
     items: input.items.map((i) => ({
       product_id: Number(i.product_id),
       quantity: i.quantity,
+      note: i.note,
     })),
   });
   return fromBackend(res);
@@ -155,6 +165,7 @@ export async function updateOrder(id: string, items: OrderItemInput[]): Promise<
     items: items.map((i) => ({
       product_id: Number(i.product_id),
       quantity: i.quantity,
+      note: i.note,
     })),
   });
   return fromBackend(res);

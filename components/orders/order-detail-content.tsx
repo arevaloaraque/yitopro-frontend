@@ -98,10 +98,18 @@ export function OrderDetailBody({ order }: { order: Order }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {order.items.map((line) => (
-            <TableRow key={line.product_id}>
-              <TableCell className="font-medium">
+          {/* Index key: the same product can sit on two lines with different notes. */}
+          {order.items.map((line, idx) => (
+            <TableRow key={idx}>
+              {/* `whitespace-normal`: the table cell is nowrap, and a 140-char note would
+                  push the money columns off the dialog. */}
+              <TableCell className="font-medium whitespace-normal">
                 {line.product_name}
+                {line.note && (
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                    {line.note}
+                  </span>
+                )}
                 {isDraft && line.quantity > line.product_stock && (
                   <span className="mt-0.5 flex items-center gap-1 text-xs font-normal text-destructive">
                     <AlertTriangle className="size-3" aria-hidden />
