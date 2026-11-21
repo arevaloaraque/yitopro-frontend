@@ -581,8 +581,13 @@ Flujo invitado por el operador (el backend manda; ver su `CLAUDE.md`):
 3. Respetar los **checkpoints** (fin de F2-E y F3-C): son validación humana de la UI antes de seguir.
 4. Commit al cerrar cada sesión:
    ```bash
-   git add . && git commit -m "sesión F1-A: proyecto base + fundación de diseño"
+   git add . && git commit -m "feat(design): base project and design foundation (session F1-A)"
    ```
+5. **Idioma de git (regla dura): SIEMPRE en inglés.** Mensajes de commit (asunto y cuerpo),
+   títulos y descripciones de pull request, nombres de rama y tags se escriben en inglés, sin
+   importar el idioma de la conversación ni el de este archivo. El asunto sigue Conventional
+   Commits (`feat|fix|perf|docs|refactor|test|build|ci|chore|style`). La plantilla
+   `.github/pull_request_template.md` fija la estructura del PR.
 
 ## Qué NO hacer
 
