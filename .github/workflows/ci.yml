@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, lab]
   pull_request:
 
 # Cancela corridas viejas del mismo ref para no malgastar minutos.
