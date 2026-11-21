@@ -61,7 +61,7 @@ describe("/activar page", () => {
   describe("valid token flow", () => {
     beforeEach(() => {
       server.use(
-        http.get(`${BASE}/auth/invite/validate/`, () =>
+        http.post(`${BASE}/auth/invite/validate/`, () =>
           HttpResponse.json({ valid: true }),
         ),
       );
@@ -165,7 +165,7 @@ describe("/activar page", () => {
       currentToken = "bad-token-xyz";
 
       server.use(
-        http.get(`${BASE}/auth/invite/validate/`, () =>
+        http.post(`${BASE}/auth/invite/validate/`, () =>
           HttpResponse.json({ valid: false }),
         ),
       );

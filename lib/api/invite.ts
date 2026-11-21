@@ -9,14 +9,16 @@ import { api } from "./client";
 
 /**
  * Validates an invite token without consuming it.
- * `GET /api/auth/invite/validate/?token=<token>`
+ * `POST /api/auth/invite/validate/` — el token va en el body: en la query
+ * quedaría, todavía vigente, en los access logs.
  */
 export async function validateInvite(token: string): Promise<boolean> {
   return (
-    await api.get<{ valid: boolean }>("/auth/invite/validate/", {
-      query: { token },
-      skipRefresh: true,
-    })
+    await api.post<{ valid: boolean }>(
+      "/auth/invite/validate/",
+      { token },
+      { skipRefresh: true },
+    )
   ).valid;
 }
 

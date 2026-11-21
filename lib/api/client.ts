@@ -69,6 +69,12 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
+  // Los ids se interpolan en el path y algunos vienen de la URL del panel
+  // (`/customers?id=…`): un `../` o un `?` redirigiría la llamada autenticada a
+  // otro endpoint. Los parámetros van siempre por `query`, nunca en el path.
+  if (/\.\.|[?#\\]/.test(path)) {
+    throw new Error("Ruta de API inválida.");
+  }
   const url = new URL(`${API_PREFIX}${path}`, API_BASE_URL);
   if (query) {
     for (const [key, value] of Object.entries(query)) {

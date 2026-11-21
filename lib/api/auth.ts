@@ -82,10 +82,12 @@ export function requestPasswordReset(email: string): Promise<GenericDetailRespon
 
 /** Checks whether a reset token is still usable, without consuming it. */
 export function validateResetToken(token: string): Promise<{ valid: boolean }> {
-  return api.get<{ valid: boolean }>("/auth/password/reset/validate/", {
-    query: { token },
-    skipRefresh: true,
-  });
+  // POST con el token en el body: en la query quedaría en los access logs.
+  return api.post<{ valid: boolean }>(
+    "/auth/password/reset/validate/",
+    { token },
+    { skipRefresh: true },
+  );
 }
 
 /**

@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 
+import { toast } from "sonner";
+
 import { configureApiAuth, refreshAuthOnce } from "@/lib/api/client";
 import { getMe, loginRequest, logoutRequest, refreshRequest } from "@/lib/api/auth";
 import { acceptInvite as apiAcceptInvite } from "@/lib/api/invite";
@@ -116,9 +118,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    // Best-effort: revokes the refresh token on the backend (uses the cookie).
-    // Does not block local logout if the network fails.
-    void logoutRequest().catch(() => {});
+    // Revokes the refresh token on the backend (uses the cookie). It does not
+    // block the local logout, but a failure is NOT silent: the 30-day cookie
+    // would stay valid and the next person on this device would be signed in.
+    const revoke = () =>
+      logoutRequest().catch(() => {
+        toast.error("No pudimos cerrar tu sesión en el servidor.", {
+          description: "En un equipo compartido, vuelve a intentarlo.",
+          duration: Infinity,
+          action: { label: "Reintentar", onClick: () => void revoke() },
+        });
+      });
+    void revoke();
     tokenRef.current = null;
     setToken(null);
     setUser(null);

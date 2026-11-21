@@ -120,4 +120,15 @@ describe("apiFetch (lib/api/client)", () => {
     await expect(api.get("/secure2")).rejects.toMatchObject({ status: 401 });
     expect(onExpired).toHaveBeenCalledOnce();
   });
+
+  it("rejects a path that would escape its endpoint", async () => {
+    // `/customers?id=../services/5` llega hasta aquí interpolado en el path.
+    for (const path of [
+      "/customers/../services/5/",
+      "/customers/9?x=/notes/",
+      "/a#b",
+    ]) {
+      await expect(api.get(path)).rejects.toThrow("Ruta de API inválida.");
+    }
+  });
 });
