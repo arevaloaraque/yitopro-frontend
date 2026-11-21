@@ -38,6 +38,7 @@ describe("Step3Services (adapted)", () => {
             duration_minutes: 45,
             price: "12000",
             active: true,
+            professional_ids: [],
           },
           { status: 201 },
         );
@@ -56,6 +57,7 @@ describe("Step3Services (adapted)", () => {
     await waitFor(() =>
       expect(posted).toEqual({
         name: "Baño",
+        description: "",
         duration_minutes: 45,
         price: 12000,
         active: true,
@@ -68,7 +70,14 @@ describe("Step3Services (adapted)", () => {
     // Backend shape: numeric id, price as string, active (not is_active)
     mockRehydration({
       services: [
-        { id: 10, name: "Corte", duration_minutes: 30, price: "5000", active: true },
+        {
+          id: 10,
+          name: "Corte",
+          duration_minutes: 30,
+          price: "5000",
+          active: true,
+          professional_ids: [],
+        },
       ],
     });
 
@@ -82,6 +91,7 @@ describe("Step3Services (adapted)", () => {
           duration_minutes: 30,
           price: "5000",
           active: true,
+          professional_ids: [],
         });
       }),
     );
@@ -104,7 +114,14 @@ describe("Step3Services (adapted)", () => {
   it("does not PATCH when blurring with an unchanged service name", async () => {
     mockRehydration({
       services: [
-        { id: 11, name: "Baño", duration_minutes: 60, price: "8000", active: true },
+        {
+          id: 11,
+          name: "Baño",
+          duration_minutes: 60,
+          price: "8000",
+          active: true,
+          professional_ids: [],
+        },
       ],
     });
 
@@ -118,6 +135,7 @@ describe("Step3Services (adapted)", () => {
           duration_minutes: 60,
           price: "8000",
           active: true,
+          professional_ids: [],
         });
       }),
     );
@@ -144,9 +162,6 @@ describe("Step6Agents (adapted)", () => {
             name: "Agente de agenda",
             type: "scheduling",
             is_active: false,
-            autonomy: "supervised",
-            skills: ["agendar"],
-            tools: [],
           },
         ],
         count: 1,
@@ -165,9 +180,6 @@ describe("Step6Agents (adapted)", () => {
           name: "Agente de agenda",
           type: "scheduling",
           is_active: true,
-          autonomy: "supervised",
-          skills: ["agendar"],
-          tools: [],
         });
       }),
     );

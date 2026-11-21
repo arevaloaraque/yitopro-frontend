@@ -66,10 +66,17 @@ beforeEach(() => {
     phone: "+56911111111",
     email: "",
     created_at: "2026-07-11T10:00:00Z",
+    rating_avg: null,
+    rating_count: 0,
   });
   vi.mocked(getRecord).mockResolvedValue(makeRecord());
   vi.mocked(getCustomerNotes).mockResolvedValue([]);
-  vi.mocked(listConversations).mockResolvedValue([]);
+  // El inbox se pagina por cursor: el mock devuelve el sobre, no el array.
+  vi.mocked(listConversations).mockResolvedValue({
+    items: [],
+    next_cursor: "",
+    has_more: false,
+  });
 });
 
 function renderDrawer() {
@@ -124,6 +131,56 @@ describe("CustomerDrawer — live refresh", () => {
     expect(getRecord).toHaveBeenCalledTimes(1);
   });
 
+  it("re-aplica el rating con cliente_actualizado aunque el nombre esté editado sin guardar", async () => {
+    renderDrawer();
+    const nameInput = await screen.findByDisplayValue("Ana");
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Ana María"); // dirty: el nombre NO debe pisarse
+
+    vi.mocked(getCustomer).mockResolvedValue({
+      id: "cust-1",
+      name: "Ana",
+      phone: "+56911111111",
+      email: "",
+      created_at: "2026-07-11T10:00:00Z",
+      rating_avg: 4.5,
+      rating_count: 2,
+    });
+    emitSse({
+      id: "c1",
+      type: "cliente_actualizado",
+      emitted_at: "2026-08-20T10:00:00Z",
+      data: { customer_id: "cust-1", fields: ["rating"] },
+    } as SSEEvent);
+
+    // El rating no es editable → se re-aplica SIEMPRE…
+    expect(await screen.findByLabelText("4,5 de 5")).toBeTruthy();
+    // …y lo tipeado sobrevive intacto.
+    expect(screen.getByDisplayValue("Ana María")).toBeTruthy();
+  });
+
+  it("mensaje_recibido recarga el historial UNA vez por ráfaga (coalescido 250 ms)", async () => {
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+    expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(1);
+
+    const msg = (id: string): SSEEvent =>
+      ({
+        id,
+        type: "mensaje_recibido",
+        emitted_at: "2026-08-20T10:00:00Z",
+        data: { conversation_id: "conv-1", message_id: id },
+      }) as SSEEvent;
+    emitSse(msg("m1"));
+    emitSse(msg("m2"));
+    emitSse(msg("m3"));
+
+    await waitFor(() => expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(2));
+    // Pasada la ventana de coalescing no llega ninguna llamada extra.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(vi.mocked(listConversations)).toHaveBeenCalledTimes(2);
+  });
+
   it("does NOT clobber unsaved ficha edits on a remote update", async () => {
     renderDrawer();
     const input = await screen.findByRole("spinbutton");
@@ -138,5 +195,124 @@ describe("CustomerDrawer — live refresh", () => {
     // The record must not be refetched/reapplied — the edit stands.
     expect(getRecord).toHaveBeenCalledTimes(1);
     expect(input).toHaveValue(20);
+  });
+});
+
+describe("CustomerDrawer — calificación e historial", () => {
+  it("pide SOLO las conversaciones de este cliente al servidor", async () => {
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+    // Antes bajaba la tabla completa del negocio y filtraba en el navegador por
+    // `customer_id`; el filtro vive ahora en el endpoint.
+    expect(vi.mocked(listConversations)).toHaveBeenCalledWith({ customerId: "cust-1" });
+  });
+
+  it("muestra el promedio del cliente diciendo de quién es", async () => {
+    vi.mocked(getCustomer).mockResolvedValue({
+      id: "cust-1",
+      name: "Ana",
+      phone: "+56911111111",
+      email: "",
+      created_at: "2026-07-11T10:00:00Z",
+      rating_avg: 4.5,
+      rating_count: 2,
+    });
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+    expect(screen.getByLabelText("4,5 de 5")).toBeTruthy();
+    expect(screen.getByText(/· 2 conversaciones/)).toBeTruthy();
+  });
+
+  it("lista el historial con la nota de cada hilo y un enlace para abrirlo", async () => {
+    vi.mocked(listConversations).mockResolvedValue({
+      items: [
+        {
+          id: "conv-9",
+          customer_id: "cust-1",
+          customer_name: "Ana",
+          customer_phone: "+56911111111",
+          status: "closed",
+          active_agent: null,
+          assignee_id: null,
+          last_message_at: "2026-07-30T18:00:00Z",
+          created_at: "2026-07-29T09:00:00Z",
+          unread: 0,
+          customer_rating: 2,
+          rating_status: "rated",
+          customer_rating_avg: null,
+          customer_rating_count: 0,
+          last_message_preview: "",
+          last_message_direction: "",
+          last_message_sender_kind: "",
+        },
+        {
+          id: "conv-10",
+          customer_id: "cust-1",
+          customer_name: "Ana",
+          customer_phone: "+56911111111",
+          status: "ai_active",
+          active_agent: "sales",
+          assignee_id: null,
+          last_message_at: "2026-07-31T09:00:00Z",
+          created_at: "2026-07-30T09:00:00Z",
+          unread: 0,
+          customer_rating: null,
+          rating_status: "pending",
+          customer_rating_avg: null,
+          customer_rating_count: 0,
+          last_message_preview: "",
+          last_message_direction: "",
+          last_message_sender_kind: "",
+        },
+      ],
+      next_cursor: "",
+      has_more: false,
+    });
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+
+    // El hilo calificado muestra su nota; el pendiente dice por qué no la tiene —
+    // nunca un 0, que se leería como la peor calificación posible.
+    expect(screen.getByLabelText("2 de 5")).toBeTruthy();
+    expect(screen.getByText("Sin calificar aún")).toBeTruthy();
+
+    // Y cada fila es navegable al inbox, que acepta `?id=`.
+    const links = screen.getAllByRole("link");
+    const hrefs = links.map((a) => a.getAttribute("href"));
+    // `chat=` es la clave canónica del inbox (el número); `id=` va como ancla para
+    // que el hilo abra posicionado en ESA conversación.
+    expect(hrefs).toContain("/conversations?chat=cust-1&id=conv-9");
+    expect(hrefs).toContain("/conversations?chat=cust-1&id=conv-10");
+  });
+});
+
+describe("CustomerDrawer — negocio sin ficha (H11)", () => {
+  it("un record null (204) muestra el vacío normal, no un error", async () => {
+    vi.mocked(getRecord).mockResolvedValue(null);
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+
+    expect(screen.getByText("Sin campos adicionales configurados.")).toBeTruthy();
+    expect(screen.queryByText(/No se pudo cargar la ficha/)).toBeNull();
+  });
+
+  it("un fallo real de la ficha se nombra en su sección y el cliente sigue visible", async () => {
+    vi.mocked(getRecord).mockRejectedValue(new Error("Error de red"));
+    renderDrawer();
+    await screen.findByDisplayValue("Ana");
+
+    expect(screen.getByText(/No se pudo cargar la ficha: Error de red/)).toBeTruthy();
+  });
+
+  it("ficha_actualizada que vuelve null no rompe el drawer", async () => {
+    renderDrawer();
+    expect(await screen.findByRole("spinbutton")).toBeInTheDocument();
+
+    vi.mocked(getRecord).mockResolvedValue(null);
+    emitSse(fichaEvent("cust-1"));
+
+    expect(
+      await screen.findByText("Sin campos adicionales configurados."),
+    ).toBeTruthy();
   });
 });

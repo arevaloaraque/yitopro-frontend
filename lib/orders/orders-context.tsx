@@ -26,8 +26,10 @@ const OrdersContext = createContext<OrdersContextValue | null>(null);
  * Single source of truth for the pending-draft-orders count, mounted once in the
  * authenticated layout. The sidebar badge and the Pedidos page consume it, so a
  * draft created by the sales agent (SSE) or a confirm/cancel from the panel
- * (explicit `refresh()`) both update the badge live. Cancel emits no SSE event,
- * so the panel calls `refresh()` directly after acting.
+ * (explicit `refresh()`) both update the badge live. `pedido_cancelado` también
+ * llega por SSE (events.ts) — sin ese case, una cancelación hecha en OTRA sesión
+ * dejaba el badge contando de más hasta el próximo reload (auditoría 2026-08-20;
+ * el comentario anterior afirmaba que cancelar no emitía evento, y era falso).
  */
 export function OrdersProvider({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
@@ -44,11 +46,16 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [refresh]);
 
-  // Real-time: a new draft (`pedido_borrador_creado`) or a confirmation
-  // (`pedido_creado`, which also decrements the draft count) refreshes the badge.
+  // Real-time: a new draft (`pedido_borrador_creado`), a confirmation
+  // (`pedido_creado`) or a cancellation (`pedido_cancelado`) all move the
+  // draft count — the three refresh the badge.
   useEffect(() => {
     const unsub = subscribeToEvents((event: SSEEvent) => {
-      if (event.type === "pedido_creado" || event.type === "pedido_borrador_creado") {
+      if (
+        event.type === "pedido_creado" ||
+        event.type === "pedido_borrador_creado" ||
+        event.type === "pedido_cancelado"
+      ) {
         refresh();
       }
     });

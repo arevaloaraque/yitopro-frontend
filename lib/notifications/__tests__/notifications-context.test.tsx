@@ -6,12 +6,14 @@
  * toasting them would be noise. They must stay silent. Real alerts (a new
  * WhatsApp message) must still toast and land in the bell.
  */
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SSEEvent } from "@/lib/types";
 
 import { NotificationsProvider, useNotifications } from "../notifications-context";
+import { setToastsEnabled } from "../preferences";
 
 const { sseHandlers } = vi.hoisted(() => ({
   sseHandlers: [] as ((event: SSEEvent) => void)[],
@@ -24,13 +26,24 @@ vi.mock("@/lib/sse", () => ({
 }));
 
 const { toastFns } = vi.hoisted(() => ({
-  toastFns: { base: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
+  toastFns: {
+    base: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+    // El provider usa `custom`: la tarjeta del aviso es markup propio para que TODA la caja
+    // sea el enlace al destino (antes había un botón «Ver» adentro).
+    custom: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }));
 vi.mock("sonner", () => {
   const toast = Object.assign(toastFns.base, {
     success: toastFns.success,
     warning: toastFns.warning,
     error: toastFns.error,
+    custom: toastFns.custom,
+    dismiss: toastFns.dismiss,
   });
   return { toast };
 });
@@ -40,6 +53,16 @@ function emitSse(event: SSEEvent) {
     for (const handler of sseHandlers) handler(event);
   });
 }
+
+// Siembra de campana (GET /notifications/recent/). Default: RECHAZA — es el
+// mundo de hoy (endpoint aún no desplegado) y deja todos los tests previos
+// exactamente como estaban; los casos de siembra lo sobreescriben.
+const { recentApi } = vi.hoisted(() => ({
+  recentApi: { getRecentNotifications: vi.fn() },
+}));
+vi.mock("@/lib/api/notifications", () => ({
+  getRecentNotifications: recentApi.getRecentNotifications,
+}));
 
 function Probe() {
   const { unreadCount } = useNotifications();
@@ -51,16 +74,30 @@ function totalToasts() {
     toastFns.base.mock.calls.length +
     toastFns.success.mock.calls.length +
     toastFns.warning.mock.calls.length +
-    toastFns.error.mock.calls.length
+    toastFns.error.mock.calls.length +
+    toastFns.custom.mock.calls.length
   );
+}
+
+/** Renderiza la tarjeta que el provider le pasó a `toast.custom` en esa posición. */
+function renderCard(i = 0) {
+  const build = toastFns.custom.mock.calls[i][0] as (id: number) => React.ReactElement;
+  return render(build(i + 1));
 }
 
 beforeEach(() => {
   sseHandlers.length = 0;
+  recentApi.getRecentNotifications.mockReset();
+  recentApi.getRecentNotifications.mockRejectedValue(new Error("404"));
   toastFns.base.mockClear();
   toastFns.success.mockClear();
   toastFns.warning.mockClear();
   toastFns.error.mockClear();
+  toastFns.custom.mockClear();
+  toastFns.dismiss.mockClear();
+  // La preferencia vive en localStorage; sin este reset, el caso que la apaga contamina a
+  // los que corren después.
+  setToastsEnabled(true);
 });
 
 describe("NotificationsProvider", () => {
@@ -118,6 +155,24 @@ describe("NotificationsProvider", () => {
       emitted_at: "2026-07-11T10:00:06Z",
       data: { is_operative: true },
     } as SSEEvent);
+    emitSse({
+      id: "pr1",
+      type: "producto_actualizado",
+      emitted_at: "2026-07-11T10:00:07Z",
+      data: { product_id: "1", active: true },
+    } as SSEEvent);
+    emitSse({
+      id: "pf1",
+      type: "profesional_creado",
+      emitted_at: "2026-07-11T10:00:08Z",
+      data: { professional_id: "p1", active: true },
+    } as SSEEvent);
+    emitSse({
+      id: "el1",
+      type: "enlace_pago_creado",
+      emitted_at: "2026-07-11T10:00:09Z",
+      data: { link_id: "uuid-1", amount: "5000", currency: "CLP", customer_id: null },
+    } as SSEEvent);
 
     expect(totalToasts()).toBe(0);
     expect(screen.getByTestId("count").textContent).toBe("0");
@@ -160,11 +215,12 @@ describe("NotificationsProvider", () => {
       data: { order_id: "1", total: "9990", customer_id: "9" },
     } as SSEEvent);
 
-    expect(toastFns.success).toHaveBeenCalledTimes(1);
+    expect(toastFns.custom).toHaveBeenCalledTimes(1);
+    expect(renderCard().container.textContent).toContain("Nuevo pedido por confirmar");
     expect(screen.getByTestId("count").textContent).toBe("1");
   });
 
-  it("toasts (neutral, not success) for a modified draft order (pedido_borrador_actualizado)", () => {
+  it("un borrador modificado avisa, y se distingue por su dominio no por su severidad", () => {
     render(
       <NotificationsProvider>
         <Probe />
@@ -178,9 +234,301 @@ describe("NotificationsProvider", () => {
       data: { order_id: "1", total: "12990", customer_id: "9" },
     } as SSEEvent);
 
-    expect(toastFns.base).toHaveBeenCalledTimes(1);
-    expect(toastFns.base).toHaveBeenCalledWith("Pedido actualizado", expect.anything());
-    expect(toastFns.success).not.toHaveBeenCalled();
+    // Ya no hay sabores `success`/neutro de sonner: la tarjeta es propia y lo que identifica
+    // al aviso es el distintivo de su dominio (antes esto afirmaba `toast()` contra
+    // `toast.success()`, una distinción que dejó de existir).
+    expect(toastFns.custom).toHaveBeenCalledTimes(1);
+    const { container } = renderCard();
+    expect(container.textContent).toContain("Pedido actualizado");
+    expect(container.querySelector("[role=img]")?.getAttribute("aria-label")).toBe(
+      "Pedido",
+    );
     expect(screen.getByTestId("count").textContent).toBe("1");
+  });
+});
+
+describe("duplicate delivery", () => {
+  // The original guard keyed on `event.id`, which lib/sse mints locally and monotonically,
+  // so it could never hit — dead code. Its replacement keyed on `type:conversation_id`,
+  // which dropped the field that actually distinguishes two inbound messages, so a burst
+  // collapsed into one entry while the dashboard counted three (review 2026-07-27).
+  const inbound = (messageId: string) =>
+    ({
+      id: `evt_${messageId}`,
+      type: "mensaje_recibido",
+      emitted_at: "2026-07-11T10:00:00Z",
+      data: { conversation_id: "1", message_id: messageId, customer_id: "9" },
+    }) as SSEEvent;
+
+  it("keeps every message of a burst in the same conversation", () => {
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse(inbound("m1"));
+    emitSse(inbound("m2"));
+    emitSse(inbound("m3"));
+
+    expect(screen.getByTestId("count").textContent).toBe("3");
+    expect(totalToasts()).toBe(3);
+  });
+
+  it("still collapses a genuine redelivery (identical payload)", () => {
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse(inbound("m1"));
+    emitSse(inbound("m1"));
+
+    expect(screen.getByTestId("count").textContent).toBe("1");
+    expect(totalToasts()).toBe(1);
+  });
+
+  it("does not swallow two distinct errors seconds apart", () => {
+    // These carry none of the ids the old key looked at, so they ALL collapsed into one —
+    // and they are the loudest events we have.
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse({
+      id: "e1",
+      type: "error_integracion",
+      emitted_at: "2026-07-11T10:00:00Z",
+      data: { provider: "meta", error_type: "HTTPError" },
+    } as SSEEvent);
+    emitSse({
+      id: "e2",
+      type: "error_integracion",
+      emitted_at: "2026-07-11T10:00:01Z",
+      data: { provider: "litellm", error_type: "Timeout" },
+    } as SSEEvent);
+
+    expect(screen.getByTestId("count").textContent).toBe("2");
+  });
+
+  it("confirmar un pedido no vuelve a avisar (y ya no dice «Nuevo pedido»)", () => {
+    // El backend emite `pedido_creado` al CONFIRMAR, no al crear. Anunciarlo acá producía
+    // dos toasts a la vez para el mismo acto —«Pedido #31 confirmado · $17.000» junto a
+    // «Nuevo pedido»— y el segundo además era falso. Confirmar es una acción del operador,
+    // que ya tiene su propio aviso; `pedido_borrador_creado` sí queda ruidoso porque ESO
+    // es trabajo nuevo entrando por WhatsApp.
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse({
+      id: "p1",
+      type: "pedido_creado",
+      emitted_at: "2026-07-11T10:00:00Z",
+      data: { order_id: "31", total: "17000.00", customer_id: "42" },
+    } as SSEEvent);
+
+    expect(totalToasts()).toBe(0);
+    expect(screen.getByTestId("count").textContent).toBe("0");
+  });
+
+  it("un aviso con destino trae cómo llegar ahí", () => {
+    // Un toast que se puede leer pero no accionar obliga a recordarlo. En sonner 2.x el
+    // toast no tiene `onClick`, así que el camino soportado es `action`.
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse({
+      id: "d1",
+      type: "pedido_borrador_creado",
+      emitted_at: "2026-07-11T10:00:00Z",
+      data: { order_id: "31", total: "17000.00", customer_id: "42" },
+    } as SSEEvent);
+
+    // TODA la tarjeta es el enlace, no un botón «Ver» adentro: no hay nada que alinear y el
+    // área de click es la caja entera.
+    const { container } = renderCard();
+    const link = container.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("/orders");
+    expect(container.textContent).not.toContain("Ver");
+  });
+
+  it("cada aviso trae un distintivo que dice de qué es, no solo su severidad", () => {
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse({
+      id: "d2",
+      type: "pedido_borrador_creado",
+      emitted_at: "2026-07-11T10:00:00Z",
+      data: { order_id: "31", total: "17000.00", customer_id: "42" },
+    } as SSEEvent);
+    emitSse({
+      id: "a2",
+      type: "nueva_cita",
+      emitted_at: "2026-07-11T10:00:01Z",
+      data: {
+        appointment_id: "7",
+        customer_id: "42",
+        service_id: "3",
+        start: "2026-08-01T15:30:00Z",
+      },
+    } as SSEEvent);
+
+    // Un pedido y una cita no pueden llevar el mismo icono: distinguirlos de un vistazo es
+    // justamente lo que el aviso tiene que resolver antes de que nadie lea el texto.
+    const labelOf = (i: number) =>
+      renderCard(i).container.querySelector("[role=img]")?.getAttribute("aria-label");
+    expect(labelOf(0)).toBe("Pedido");
+    expect(labelOf(1)).toBe("Cita");
+  });
+
+  it("con los emergentes apagados no toastea, pero la campana los recibe igual", () => {
+    // El contrato del interruptor de Ajustes: silencia la INTERRUPCIÓN, no la información.
+    // Quien lo apaga no quiere perderse avisos, quiere elegir cuándo mirarlos.
+    setToastsEnabled(false);
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+
+    emitSse({
+      id: "off1",
+      type: "pedido_borrador_creado",
+      emitted_at: "2026-07-11T10:00:00Z",
+      data: { order_id: "31", total: "17000.00", customer_id: "42" },
+    } as SSEEvent);
+
+    expect(totalToasts()).toBe(0);
+    expect(screen.getByTestId("count").textContent).toBe("1");
+  });
+
+  it("el aviso se puede cerrar sin navegar a su destino", async () => {
+    render(
+      <NotificationsProvider>
+        <Probe />
+      </NotificationsProvider>,
+    );
+    emitSse({
+      id: "c1",
+      type: "pedido_borrador_creado",
+      emitted_at: "2026-07-11T10:00:00Z",
+      data: { order_id: "31", total: "17000.00", customer_id: "42" },
+    } as SSEEvent);
+
+    // El botón de cerrar es HERMANO del enlace, no hijo: un botón dentro de un <a> es un
+    // control anidado, y así cerrar no dispara la navegación.
+    const { container } = renderCard();
+    const cerrar = screen.getByRole("button", { name: "Cerrar aviso" });
+    expect(container.querySelector("a")?.contains(cerrar)).toBe(false);
+    await userEvent.click(cerrar);
+    expect(toastFns.dismiss).toHaveBeenCalled();
+  });
+});
+
+/** La campana se siembra al montar desde el backend: sin esto, un F5 no la
+ * desactualizaba — la DESTRUÍA (auditoría 2026-08-20). Reglas: entra LEÍDA,
+ * sin toasts/sonidos, silenciosos fuera, y con 404 el mundo sigue como hoy. */
+describe("siembra de la campana", () => {
+  function ListProbe() {
+    const { notifications, unreadCount } = useNotifications();
+    return (
+      <>
+        <span data-testid="len">{notifications.length}</span>
+        <span data-testid="unread">{unreadCount}</span>
+      </>
+    );
+  }
+
+  const seedPago: SSEEvent = {
+    id: "ntf-1",
+    type: "pago_recibido",
+    emitted_at: "2026-08-20T09:00:00Z",
+    data: { payment_id: "7", amount: "12000", currency: "CLP", customer_id: null },
+  } as SSEEvent;
+  const seedPedido: SSEEvent = {
+    id: "ntf-2",
+    type: "pedido_borrador_creado",
+    emitted_at: "2026-08-20T08:00:00Z",
+    data: { order_id: "31", total: "17000", customer_id: "9" },
+  } as SSEEvent;
+  const seedSilencioso: SSEEvent = {
+    id: "ntf-3",
+    type: "cliente_creado",
+    emitted_at: "2026-08-20T07:00:00Z",
+    data: { customer_id: "9", origin: "whatsapp" },
+  } as SSEEvent;
+
+  it("siembra la campana leída, sin toasts y filtrando los silenciosos", async () => {
+    recentApi.getRecentNotifications.mockResolvedValue([
+      seedPago,
+      seedPedido,
+      seedSilencioso,
+    ]);
+    render(
+      <NotificationsProvider>
+        <ListProbe />
+      </NotificationsProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("len").textContent).toBe("2"));
+    // Leída: el badge no se infla en cada recarga con lo ya visto.
+    expect(screen.getByTestId("unread").textContent).toBe("0");
+    // Y jamás re-dispara la interrupción: cero toasts (y por lo tanto cero pings).
+    expect(totalToasts()).toBe(0);
+  });
+
+  it("no duplica un evento que ya llegó vivo antes de que la siembra resuelva", async () => {
+    let resolveSeed!: (v: SSEEvent[]) => void;
+    recentApi.getRecentNotifications.mockReturnValue(
+      new Promise<SSEEvent[]>((r) => {
+        resolveSeed = r;
+      }),
+    );
+    render(
+      <NotificationsProvider>
+        <ListProbe />
+      </NotificationsProvider>,
+    );
+
+    // El evento vivo gana la carrera a la respuesta del endpoint…
+    emitSse(seedPago);
+    expect(screen.getByTestId("len").textContent).toBe("1");
+
+    // …y la siembra trae el MISMO payload persistido: dedupe, no dos entradas.
+    await act(async () => {
+      resolveSeed([{ ...seedPago, id: "persisted-1" }]);
+    });
+    await waitFor(() => expect(screen.getByTestId("len").textContent).toBe("1"));
+  });
+
+  it("con el endpoint caído (404) la campana queda como hoy y lo vivo sigue sonando", async () => {
+    render(
+      <NotificationsProvider>
+        <ListProbe />
+      </NotificationsProvider>,
+    );
+    // La siembra falló en silencio: nada sembrado…
+    await waitFor(() =>
+      expect(recentApi.getRecentNotifications).toHaveBeenCalledTimes(1),
+    );
+    expect(screen.getByTestId("len").textContent).toBe("0");
+
+    // …y un evento vivo se comporta exactamente como siempre.
+    emitSse(seedPedido);
+    expect(screen.getByTestId("len").textContent).toBe("1");
+    expect(totalToasts()).toBe(1);
   });
 });

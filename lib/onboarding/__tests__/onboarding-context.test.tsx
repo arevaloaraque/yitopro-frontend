@@ -103,6 +103,7 @@ function mockRehydration() {
         id: 1,
         name: "PET Spa",
         country: "CL",
+        address: "",
         currency: "CLP",
         language: "es",
         timezone: "America/Santiago",
@@ -152,6 +153,7 @@ describe("OnboardingProvider", () => {
             duration_minutes: 45,
             price: "12000",
             active: true,
+            professional_ids: [],
           },
           { status: 201 },
         );
@@ -169,6 +171,7 @@ describe("OnboardingProvider", () => {
     );
     expect(posted).toEqual({
       name: "Baño",
+      description: "",
       duration_minutes: 45,
       price: 12000,
       active: true,

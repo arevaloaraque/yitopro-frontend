@@ -48,26 +48,12 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // La carga inicial ES el refetch: el cuerpo estaba escrito dos veces, y una
+  // segunda copia de «cómo se carga el negocio» es la que se olvida de cambiar.
   useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(() => {
-      getBusiness()
-        .then((data) => {
-          if (cancelled) return;
-          setBusiness(data);
-          setState("ready");
-        })
-        .catch((e) => {
-          if (cancelled) return;
-          setError(e instanceof Error ? e.message : "Error al cargar el negocio");
-          setState("error");
-        });
-    }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, []);
+    const t = setTimeout(refetch, 0);
+    return () => clearTimeout(t);
+  }, [refetch]);
 
   // Real-time: an admin action or another session can flip is_operative —
   // refetch so the topbar badge stays accurate everywhere.
@@ -91,4 +77,17 @@ export function useBusiness(): BusinessContextValue {
     throw new Error("useBusiness must be used within a BusinessProvider");
   }
   return ctx;
+}
+
+/**
+ * Same context, `null` instead of a throw when the provider is absent.
+ *
+ * For consumers where the business only REFINES the output and its absence has a
+ * correct fallback — the money formatter's currency, say. Those must not be able to
+ * blank a whole screen (or fail a unit test that renders the page in isolation) just
+ * because a provider is missing; a consumer that cannot work without the business
+ * should keep using `useBusiness` and get the loud error.
+ */
+export function useBusinessOptional(): BusinessContextValue | null {
+  return useContext(BusinessContext);
 }

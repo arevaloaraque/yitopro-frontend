@@ -6,11 +6,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Formats a money amount for display. Shows up to 2 decimals **when present**
- * and keeps whole amounts clean (no trailing `,00`). Backend prices are
- * Decimal(…, 2), so e.g. 15.25 must render as "$15,25" — a previous formatter
- * capped fraction digits at 0 and silently rounded cents away. Defaults to
- * CLP/es-CL to match the panel; pass `currency`/`locale` for other tenants.
+ * Formats a money amount for display. Whole amounts stay clean (no trailing
+ * `,00`); non-integers always show exactly 2 decimals so cents render
+ * consistently — e.g. 15 → "$15", 15.5 → "$15,50", 15.25 → "$15,25". Backend
+ * prices are Decimal(…, 2). Defaults to CLP/es-CL to match the panel; pass
+ * `currency`/`locale` for other tenants.
  */
 export function formatPrice(
   amount: number,
@@ -20,7 +20,7 @@ export function formatPrice(
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
-    minimumFractionDigits: 0,
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
   }).format(amount);
 }

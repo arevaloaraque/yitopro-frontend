@@ -15,6 +15,7 @@ import {
 import { AssistantStatus } from "./assistant-status";
 import { NotificationBell } from "./notification-bell";
 import { SidebarBrand } from "./sidebar-brand";
+import { PlanBadge } from "./plan-badge";
 import { SidebarNav } from "./sidebar-nav";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
@@ -34,7 +35,7 @@ export function Topbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="lg:hidden"
               aria-label="Abrir menú"
             />
           }
@@ -48,6 +49,7 @@ export function Topbar() {
             </SheetTitle>
           </SheetHeader>
           <SidebarNav onNavigate={() => setMobileOpen(false)} />
+          <PlanBadge />
         </SheetContent>
       </Sheet>
 

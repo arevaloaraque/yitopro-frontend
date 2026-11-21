@@ -8,11 +8,10 @@ import {
   Bot,
   Calendar,
   MessageSquare,
-  TrendingDown,
-  TrendingUp,
   Users,
 } from "lucide-react";
 
+import { MetricCard } from "@/components/metric-card";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,6 +28,7 @@ import { useBusiness } from "@/lib/business";
 import { subscribeToEvents } from "@/lib/sse";
 import type { Appointment, Conversation, Service, SSEEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { relativeTime, timeOnly } from "@/lib/format/date";
 
 type PageState = "loading" | "error" | "ready";
 
@@ -39,6 +39,13 @@ interface AlertItem {
   at: string;
 }
 
+/**
+ * El día de HOY en la zona horaria del negocio, como `YYYY-MM-DD`, que es
+ * exactamente lo que `GET /appointments/?date=` espera (el backend también
+ * interpreta ese día en la zona del negocio). Antes se armaba un rango
+ * `T00:00:00Z`–`T23:59:59Z` que la capa de API colapsaba a este mismo día: el
+ * rango era decorativo y el `Z` mentía sobre el huso.
+ */
 function todayYmd(timezone?: string): string {
   // en-CA formats as YYYY-MM-DD, so it doubles as the ISO date directly.
   if (timezone) {
@@ -55,31 +62,6 @@ function todayYmd(timezone?: string): string {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
-}
-
-/** Today's date range in the business's own timezone (falls back to the browser's local date). */
-function todayRange(timezone?: string): { from: string; to: string } {
-  const ymd = todayYmd(timezone);
-  return {
-    from: `${ymd}T00:00:00.000Z`,
-    to: `${ymd}T23:59:59.999Z`,
-  };
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
-}
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "ahora";
-  if (mins < 60) return `hace ${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  return `hace ${days}d`;
 }
 
 function statusBadge(status: Conversation["status"]) {
@@ -174,70 +156,6 @@ function DashboardSkeleton() {
   );
 }
 
-interface MetricCardProps {
-  label: string;
-  value: string | number;
-  subValue?: string;
-  icon: React.ReactNode;
-  trend?: "up" | "down" | "neutral";
-  variant?: "default" | "accent" | "warning";
-}
-
-function MetricCard({
-  label,
-  value,
-  subValue,
-  icon,
-  trend,
-  variant = "default",
-}: MetricCardProps) {
-  return (
-    <Card className="group/card">
-      <CardHeader className="flex flex-row items-center justify-between pb-0">
-        <CardDescription className="text-[0.75rem]">{label}</CardDescription>
-        <span
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-200",
-            variant === "accent" && "bg-accent/10 text-accent ring-1 ring-accent/20",
-            variant === "warning" &&
-              "bg-warning/10 text-warning ring-1 ring-warning/20",
-            variant === "default" && "bg-muted text-muted-foreground",
-          )}
-        >
-          {icon}
-        </span>
-      </CardHeader>
-      <CardContent className="pb-1">
-        <div className="flex items-baseline gap-2.5">
-          <span className="text-[1.75rem] leading-none font-semibold tracking-tight text-foreground tabular-nums">
-            {value}
-          </span>
-          {trend ? (
-            <span
-              className={cn(
-                "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.65rem] font-semibold",
-                trend === "up" && "bg-success/10 text-success",
-                trend === "down" && "bg-destructive/10 text-destructive",
-              )}
-            >
-              {trend === "up" ? (
-                <TrendingUp className="size-2.5" />
-              ) : (
-                <TrendingDown className="size-2.5" />
-              )}
-            </span>
-          ) : null}
-        </div>
-        {subValue ? (
-          <p className="mt-1.5 text-[0.7rem] leading-relaxed text-muted-foreground">
-            {subValue}
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
 interface ConversationRowProps {
   conversation: Conversation;
   customerName: string;
@@ -252,7 +170,8 @@ function ConversationRow({
   const s = statusBadge(conversation.status);
   return (
     <Link
-      href="/conversations"
+      // `chat=` es la clave canónica; el `id=` va como ancla dentro del hilo.
+      href={`/conversations?chat=${conversation.customer_id}&id=${conversation.id}`}
       className="flex cursor-pointer items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5 transition-all duration-200 hover:border-border/60 hover:bg-surface active:scale-[0.99]"
     >
       <div
@@ -306,7 +225,7 @@ function AppointmentRow({
   const s = appointmentStatusBadge(appointment.status);
   return (
     <Link
-      href="/appointments"
+      href={`/appointments?id=${appointment.id}`}
       className="flex cursor-pointer items-center gap-3.5 rounded-xl border border-border/30 px-4 py-3.5 transition-all duration-200 hover:border-border/60 hover:bg-surface active:scale-[0.99]"
     >
       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
@@ -323,7 +242,7 @@ function AppointmentRow({
           {s.label}
         </Badge>
         <span className="text-[0.7rem] text-muted-foreground tabular-nums">
-          {formatTime(appointment.start)} – {formatTime(appointment.end)}
+          {timeOnly(appointment.start)} – {timeOnly(appointment.end)}
         </span>
       </div>
     </Link>
@@ -375,6 +294,11 @@ export default function DashboardPage() {
   const [state, setState] = useState<PageState>("loading");
   const [data, setData] = useState<DashboardData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  /** Inbound WhatsApp messages seen since this panel was opened. The backend has
+   * no read/unread model, so this is honestly a per-session count — the card says
+   * so — and it must NOT be derived from `conversations`, which every refetch
+   * resets to the backend's hardcoded 0. */
+  const [inboundThisSession, setInboundThisSession] = useState(0);
   // Kept in sync with business.timezone so the SSE handler below (set up once,
   // outside the render) can compute "today" in the business's own timezone.
   const businessTimezoneRef = useRef<string | undefined>(undefined);
@@ -382,14 +306,23 @@ export default function DashboardPage() {
   // refetches (ready -> loading -> ready) after an unrelated update.
   const loadedRef = useRef(false);
 
-  const loadData = useCallback(async (timezone?: string) => {
-    const { from, to } = todayRange(timezone);
+  const loadData = useCallback(async (timezone?: string, hasAssistant = true) => {
+    // Las dos listas llegan en sobre paginado (`{items, …}`), no como array: la
+    // tarjeta se queda con `items`.
+    //
+    // `listConversations` NO se llama sin asistente: el router responde 403 y este
+    // `Promise.all` comparte un solo `.catch`, así que un plan sin conversaciones
+    // dejaba el dashboard entero en estado de error. No es cosmético.
     const [conversations, appointments, services] = await Promise.all([
-      listConversations(),
-      listAppointments({ from, to }),
+      hasAssistant ? listConversations() : Promise.resolve({ items: [] }),
+      listAppointments({ date: todayYmd(timezone) }),
       listServices(),
     ]);
-    return { conversations, appointments, services };
+    return {
+      conversations: conversations.items,
+      appointments: appointments.items,
+      services,
+    };
   }, []);
 
   useEffect(() => {
@@ -400,7 +333,7 @@ export default function DashboardPage() {
     if (bizState !== "ready" || loadedRef.current) return;
     let cancelled = false;
     const t = setTimeout(() => {
-      loadData(business?.timezone)
+      loadData(business?.timezone, business?.entitlements?.assistant !== false)
         .then((result) => {
           if (!cancelled) {
             loadedRef.current = true;
@@ -422,14 +355,21 @@ export default function DashboardPage() {
     const unsubscribe = subscribeToEvents((event: SSEEvent) => {
       switch (event.type) {
         case "mensaje_recibido":
+          // Counted HERE and kept out of `data`: the refetch below replaces the
+          // conversations with the backend's, whose `unread` is hardcoded to 0
+          // (the backend models no read/unread state), so summing it made the
+          // metric permanently 0 — a card that says "no hay nada nuevo" while
+          // WhatsApp messages arrive (live QA 2026-07-26).
+          setInboundThisSession((n) => n + 1);
+        // falls through to the shared refetch
         case "conversacion_escalada":
         case "conversacion_reactivada":
         case "mensaje_automatico_enviado":
         case "conversacion_cerrada":
         case "conversacion_asignada":
           listConversations()
-            .then((conversations) => {
-              setData((prev) => (prev ? { ...prev, conversations } : prev));
+            .then((page) => {
+              setData((prev) => (prev ? { ...prev, conversations: page.items } : prev));
             })
             .catch(() => {});
           break;
@@ -445,10 +385,9 @@ export default function DashboardPage() {
         case "nueva_cita":
         case "cita_cancelada":
         case "cita_reagendada": {
-          const { from, to } = todayRange(businessTimezoneRef.current);
-          listAppointments({ from, to })
-            .then((appointments) => {
-              setData((prev) => (prev ? { ...prev, appointments } : prev));
+          listAppointments({ date: todayYmd(businessTimezoneRef.current) })
+            .then((page) => {
+              setData((prev) => (prev ? { ...prev, appointments: page.items } : prev));
             })
             .catch(() => {});
           break;
@@ -505,7 +444,7 @@ export default function DashboardPage() {
         description="Ocurrió un error al obtener los datos. Revisa tu conexión e inténtalo de nuevo."
         onRetry={() => {
           setState("loading");
-          loadData(business.timezone)
+          loadData(business.timezone, business.entitlements?.assistant !== false)
             .then((result) => {
               loadedRef.current = true;
               setData(result);
@@ -523,9 +462,14 @@ export default function DashboardPage() {
   const serviceMap = new Map(services.map((s) => [s.id, s]));
 
   const activeConversations = conversations.filter((c) => c.status !== "closed");
-  const totalUnread = conversations.reduce((sum, c) => sum + c.unread, 0);
+  // NOT `Σ conversations.unread`: that field is hardcoded to 0 by the API mapper
+  // (no backend read/unread model), and the `mensaje_recibido` refetch overwrote
+  // any in-memory increment, so the card could never leave 0.
+  const totalUnread = inboundThisSession;
   // Live = the business is operative (answers customers) and has at least one agent on.
   const assistantActive = business.is_operative && hasActiveAgents;
+  // Solo ante un `false` explícito, como el menú y las pestañas de Configuración.
+  const hasAssistant = business.entitlements?.assistant !== false;
 
   const recentConversations = conversations.slice(0, 5);
   const todayAppointments = appointments.filter((a) => a.status !== "cancelled");
@@ -542,39 +486,54 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Metric cards */}
+      {/* Metric cards. Tres de las cuatro son del asistente: sin plan que lo
+          incluya no se muestran, porque un "0 / Sin actividad" sobre algo que el
+          negocio no contrató se lee como producto roto, no como plan. */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Conversaciones activas"
-          value={activeConversations.length}
-          subValue={`${activeConversations.length > 0 ? "En curso" : "Sin actividad"}`}
-          icon={<MessageSquare className="size-4" />}
-          trend={activeConversations.length > 0 ? "up" : "neutral"}
-        />
+        {hasAssistant && (
+          <MetricCard
+            label="Conversaciones activas"
+            value={activeConversations.length}
+            subValue={`${activeConversations.length > 0 ? "En curso" : "Sin actividad"}`}
+            icon={<MessageSquare className="size-4" />}
+          />
+        )}
         <MetricCard
           label="Citas de hoy"
           value={todayAppointments.length}
           subValue={`${todayAppointments.length} programada${todayAppointments.length !== 1 ? "s" : ""}`}
           icon={<Calendar className="size-4" />}
-          trend={todayAppointments.length >= 3 ? "up" : "neutral"}
         />
-        <MetricCard
-          label="Mensajes sin leer"
-          value={totalUnread}
-          subValue={totalUnread > 0 ? "Requieren atención" : "Todo al día"}
-          icon={<Users className="size-4" />}
-          trend={totalUnread > 5 ? "up" : totalUnread > 0 ? "down" : "neutral"}
-          variant={totalUnread > 0 ? "warning" : "default"}
-        />
-        <MetricCard
-          label="Asistente IA"
-          value={assistantActive ? "Activo" : "Pausado"}
-          subValue={
-            assistantActive ? "Respondiendo automáticamente" : "Esperando activación"
-          }
-          icon={<Bot className="size-4" />}
-          variant={assistantActive ? "accent" : "default"}
-        />
+        {/* DASHBOARD-03: el backend no modela leído/no leído, así que este KPI sólo
+            puede contar lo que llegó mientras el panel está abierto — y el rótulo lo
+            dice. Antes se derivaba de `Σ conversations.unread`, que el refetch de
+            `mensaje_recibido` devolvía siempre en 0: la tarjeta decía "sin mensajes
+            nuevos" con mensajes de WhatsApp entrando (QA en vivo 2026-07-26). El
+            arreglo de fondo es un `last_read_at` por operador en el backend. */}
+        {hasAssistant && (
+          <MetricCard
+            label="Mensajes nuevos"
+            value={totalUnread}
+            subValue={
+              totalUnread > 0
+                ? "Recibidos en esta sesión"
+                : "Sin mensajes en esta sesión"
+            }
+            icon={<Users className="size-4" />}
+            variant={totalUnread > 0 ? "warning" : "default"}
+          />
+        )}
+        {hasAssistant && (
+          <MetricCard
+            label="Asistente IA"
+            value={assistantActive ? "Activo" : "Pausado"}
+            subValue={
+              assistantActive ? "Respondiendo automáticamente" : "Esperando activación"
+            }
+            icon={<Bot className="size-4" />}
+            variant={assistantActive ? "accent" : "default"}
+          />
+        )}
       </div>
 
       {/* Alerts section */}
@@ -601,49 +560,51 @@ export default function DashboardPage() {
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Recent conversations */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Conversaciones recientes</CardTitle>
-              <CardDescription>
-                Últimas {recentConversations.length} conversaciones activas
-              </CardDescription>
-            </div>
-            <Link
-              href="/conversations"
-              className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Ver todas
-              <ArrowUpRight className="size-3" />
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {recentConversations.length === 0 ? (
-              <EmptyState
-                title="Sin conversaciones"
-                description="No hay conversaciones recientes para mostrar."
-                icon={MessageSquare}
-              />
-            ) : (
-              <div className="space-y-2">
-                {recentConversations.map((c) => {
-                  const agent = c.active_agent ? agentMap.get(c.active_agent) : null;
-                  return (
-                    <ConversationRow
-                      key={c.id}
-                      conversation={c}
-                      customerName={c.customer_name.trim() || c.customer_phone}
-                      agentName={agent?.name ?? null}
-                    />
-                  );
-                })}
+        {hasAssistant && (
+          <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Conversaciones recientes</CardTitle>
+                <CardDescription>
+                  Últimas {recentConversations.length} conversaciones
+                </CardDescription>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <Link
+                href="/conversations"
+                className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Ver todas
+                <ArrowUpRight className="size-3" />
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {recentConversations.length === 0 ? (
+                <EmptyState
+                  title="Sin conversaciones"
+                  description="No hay conversaciones recientes para mostrar."
+                  icon={MessageSquare}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {recentConversations.map((c) => {
+                    const agent = c.active_agent ? agentMap.get(c.active_agent) : null;
+                    return (
+                      <ConversationRow
+                        key={c.id}
+                        conversation={c}
+                        customerName={c.customer_name.trim() || c.customer_phone}
+                        agentName={agent?.name ?? null}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Today's appointments */}
-        <Card>
+        <Card className={hasAssistant ? undefined : "lg:col-span-3"}>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Citas de hoy</CardTitle>

@@ -9,9 +9,12 @@ const API = "http://localhost:8050/api";
 describe("invite API", () => {
   it("validateInvite returns the boolean", async () => {
     server.use(
-      http.get(`${API}/auth/invite/validate/`, () =>
-        HttpResponse.json({ valid: true }),
-      ),
+      http.post(`${API}/auth/invite/validate/`, async ({ request }) => {
+        // El token viaja en el body, nunca en la URL.
+        expect(new URL(request.url).search).toBe("");
+        expect(await request.json()).toEqual({ token: "tok" });
+        return HttpResponse.json({ valid: true });
+      }),
     );
     expect(await validateInvite("tok")).toBe(true);
   });

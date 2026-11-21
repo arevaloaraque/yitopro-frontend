@@ -5,12 +5,20 @@ import { configureApiAuth } from "@/lib/api";
 import {
   cancelAppointment,
   createAppointment,
+  getAppointmentHistory,
   listAppointments,
   rescheduleAppointment,
 } from "@/lib/api/appointments";
 import { listConversations, listMessages, sendMessage } from "@/lib/api/conversations";
-import { createCustomer, updateCustomer } from "@/lib/api/customers";
-import { createService, listServices, searchServices } from "@/lib/api/services";
+import { createCustomer, getCustomer, updateCustomer } from "@/lib/api/customers";
+import { createOrder, updateOrder } from "@/lib/api/orders";
+import { getRecord } from "@/lib/api/records";
+import {
+  createService,
+  listServices,
+  searchServices,
+  updateService,
+} from "@/lib/api/services";
 import { server } from "@/mocks/server";
 
 const BASE = "http://localhost:8050/api";
@@ -30,6 +38,7 @@ describe("services mapper", () => {
               duration_minutes: 30,
               price: "20.00",
               active: true,
+              professional_ids: [3, 5],
             },
           ],
           count: 1,
@@ -37,7 +46,15 @@ describe("services mapper", () => {
       ),
     );
     expect(await listServices()).toEqual([
-      { id: "1", name: "Baño", duration_minutes: 30, price: 20, is_active: true },
+      {
+        id: "1",
+        name: "Baño",
+        description: "",
+        duration_minutes: 30,
+        price: 20,
+        is_active: true,
+        professional_ids: ["3", "5"],
+      },
     ]);
   });
 
@@ -53,6 +70,7 @@ describe("services mapper", () => {
               duration_minutes: 45,
               price: "15000.00",
               active: true,
+              professional_ids: [],
             },
           ],
           count: 7,
@@ -61,7 +79,15 @@ describe("services mapper", () => {
     );
     expect(await searchServices({ limit: 1, offset: 0 })).toEqual({
       items: [
-        { id: "2", name: "Corte", duration_minutes: 45, price: 15000, is_active: true },
+        {
+          id: "2",
+          name: "Corte",
+          description: "",
+          duration_minutes: 45,
+          price: 15000,
+          is_active: true,
+          professional_ids: [],
+        },
       ],
       count: 7,
     });
@@ -80,18 +106,71 @@ describe("services mapper", () => {
             duration_minutes: 10,
             price: "5.00",
             active: true,
+            professional_ids: [2],
+          },
+          { status: 201 },
+        );
+      }),
+    );
+    await createService({
+      name: "X",
+      duration_minutes: 10,
+      price: 5,
+      is_active: true,
+      professional_ids: ["2"],
+    });
+    expect(body).toMatchObject({
+      name: "X",
+      duration_minutes: 10,
+      price: 5,
+      active: true,
+      professional_ids: [2],
+    });
+  });
+
+  it("create omits professional_ids when not given (backend default [])", async () => {
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.post(`${BASE}/services/`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(
+          {
+            id: 9,
+            name: "X",
+            description: "",
+            duration_minutes: 10,
+            price: "5.00",
+            active: true,
+            professional_ids: [],
           },
           { status: 201 },
         );
       }),
     );
     await createService({ name: "X", duration_minutes: 10, price: 5, is_active: true });
-    expect(body).toMatchObject({
-      name: "X",
-      duration_minutes: 10,
-      price: 5,
-      active: true,
-    });
+    expect(body).not.toHaveProperty("professional_ids");
+  });
+
+  it("update sends [] to clear the restriction and omits it when unchanged", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${BASE}/services/9/`, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({
+          id: 9,
+          name: "X",
+          description: "",
+          duration_minutes: 10,
+          price: "5.00",
+          active: false,
+          professional_ids: [],
+        });
+      }),
+    );
+    await updateService("9", { professional_ids: [] });
+    await updateService("9", { is_active: false });
+    expect(bodies[0]).toEqual({ professional_ids: [] });
+    expect(bodies[1]).toEqual({ active: false });
   });
 });
 
@@ -108,6 +187,8 @@ describe("customers mapper", () => {
             display_name: "Bob",
             email: "",
             created_at: "2026-06-01T00:00:00Z",
+            rating_avg: null,
+            rating_count: 0,
           },
           { status: 201 },
         );
@@ -130,6 +211,8 @@ describe("customers mapper", () => {
           display_name: "Ana B",
           email: "ana@x.cl",
           created_at: "2026-06-01T00:00:00Z",
+          rating_avg: null,
+          rating_count: 0,
         });
       }),
     );
@@ -147,23 +230,43 @@ describe("customers mapper", () => {
 describe("conversations mapper", () => {
   it("maps status + nested customer; sendMessage posts {content} as a human reply", async () => {
     server.use(
+      // `/conversations/` pagina por CURSOR: `{items, next_cursor, has_more}` y
+      // sin `count` (contar un recorte de la historia del tenant cuesta una
+      // lectura completa por página, para un número sobre el que nadie actúa).
       http.get(`${BASE}/conversations/`, () =>
-        HttpResponse.json([
-          {
-            id: 1,
-            status: "assigned_to_human",
-            channel_type: "whatsapp",
-            active_agent: "",
-            customer: { id: 7, display_name: "Ana", phone: "569" },
-            assignee_id: 2,
-            last_message_at: "2026-06-01T00:00:00Z",
-            created_at: "2026-06-01T00:00:00Z",
-            updated_at: "2026-06-01T00:00:00Z",
-          },
-        ]),
+        HttpResponse.json({
+          items: [
+            {
+              id: 1,
+              status: "assigned_to_human",
+              channel_type: "whatsapp",
+              active_agent: "",
+              customer: {
+                id: 7,
+                display_name: "Ana",
+                phone: "569",
+                rating_avg: 4.5,
+                rating_count: 2,
+              },
+              assignee_id: 2,
+              // DISTINTOS a propósito: si fueran iguales, un mapper que copiara
+              // `last_message_at` en `created_at` pasaría el test igual.
+              last_message_at: "2026-06-03T10:00:00Z",
+              created_at: "2026-06-01T00:00:00Z",
+              updated_at: "2026-06-05T23:00:00Z",
+              customer_rating: 3,
+              rating_status: "rated",
+              last_message_preview: "hola, tienen hora?",
+              last_message_direction: "in",
+              last_message_sender_kind: "",
+            },
+          ],
+          next_cursor: "",
+          has_more: false,
+        }),
       ),
     );
-    expect((await listConversations())[0]).toMatchObject({
+    expect((await listConversations()).items[0]).toMatchObject({
       id: "1",
       customer_id: "7",
       customer_name: "Ana",
@@ -172,7 +275,25 @@ describe("conversations mapper", () => {
       active_agent: null,
       assignee_id: "2",
       unread: 0,
+      customer_rating: 3,
+      rating_status: "rated",
+      // El agregado del cliente viaja ANIDADO en `customer` y se aplana acá: si el mapper
+      // leyera un `customer_rating_avg` plano (que el backend NO manda) esto lo caza.
+      customer_rating_avg: 4.5,
+      customer_rating_count: 2,
+      last_message_preview: "hola, tienen hora?",
+      last_message_direction: "in",
+      last_message_sender_kind: "",
+      last_message_at: "2026-06-03T10:00:00Z",
+      // Lo usa el delimitador del hilo unificado («Conversación abierta el …»).
+      created_at: "2026-06-01T00:00:00Z",
     });
+
+    // `updated_at` NO se mapea, y la ausencia es la garantía: es «la última
+    // escritura de la fila» sin nada que diga cuál fue, así que no se puede
+    // rotular con honestidad — y no existe `closed_at`. Si alguien lo agrega
+    // para pintar una hora de cierre, esto lo caza.
+    expect((await listConversations()).items[0]).not.toHaveProperty("updated_at");
 
     let body: unknown;
     server.use(
@@ -196,41 +317,46 @@ describe("conversations mapper", () => {
 
   it("listMessages derives sender from sender_kind: operator->human, system->system, ai/''->ai/customer", async () => {
     server.use(
+      // Los mensajes también llegan en sobre: `{items, has_more}`, donde
+      // `has_more` significa «hay historia más vieja arriba».
       http.get(`${BASE}/conversations/1/messages/`, () =>
-        HttpResponse.json([
-          {
-            id: 1,
-            direction: "in",
-            sender_kind: "",
-            content: "hola",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-          {
-            id: 2,
-            direction: "out",
-            sender_kind: "operator",
-            content: "hola humano",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-          {
-            id: 3,
-            direction: "out",
-            sender_kind: "system",
-            content: "recordatorio",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-          {
-            id: 4,
-            direction: "out",
-            sender_kind: "ai",
-            content: "hola IA",
-            created_at: "2026-06-01T00:00:00Z",
-          },
-        ]),
+        HttpResponse.json({
+          items: [
+            {
+              id: 1,
+              direction: "in",
+              sender_kind: "",
+              content: "hola",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+            {
+              id: 2,
+              direction: "out",
+              sender_kind: "operator",
+              content: "hola humano",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+            {
+              id: 3,
+              direction: "out",
+              sender_kind: "system",
+              content: "recordatorio",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+            {
+              id: 4,
+              direction: "out",
+              sender_kind: "ai",
+              content: "hola IA",
+              created_at: "2026-06-01T00:00:00Z",
+            },
+          ],
+          has_more: false,
+        }),
       ),
     );
     const messages = await listMessages("1");
-    expect(messages.map((m) => m.sender)).toEqual([
+    expect(messages.items.map((m) => m.sender)).toEqual([
       "customer",
       "human",
       "system",
@@ -254,20 +380,17 @@ describe("appointments mapper", () => {
     cancellation_reason: "",
   };
 
-  it("list maps origin->created_by + start_datetime->start and filters by date", async () => {
-    let url = "";
+  it("lee el sobre paginado {items, count} y mapea origin->created_by + start_datetime->start", async () => {
     server.use(
-      http.get(`${BASE}/appointments/`, ({ request }) => {
-        url = request.url;
-        return HttpResponse.json([appt]);
-      }),
+      http.get(`${BASE}/appointments/`, () =>
+        HttpResponse.json({ items: [appt], count: 137 }),
+      ),
     );
-    const list = await listAppointments({
-      from: "2026-06-29T00:00:00.000Z",
-      to: "2026-06-29T23:59:59Z",
-    });
-    expect(url).toContain("date=2026-06-29");
-    expect(list[0]).toMatchObject({
+    const page = await listAppointments();
+    // El `count` es del servidor: es lo único que sabe cuántas citas hay detrás
+    // de la página que se está mostrando.
+    expect(page.count).toBe(137);
+    expect(page.items[0]).toMatchObject({
       id: "1",
       service_id: "2",
       professional_id: "3",
@@ -279,17 +402,56 @@ describe("appointments mapper", () => {
     });
   });
 
-  it("list forwards professional_id and service_id as query params", async () => {
+  it("manda date_from/date_to de verdad, no un día suelto", async () => {
     let url = "";
     server.use(
       http.get(`${BASE}/appointments/`, ({ request }) => {
         url = request.url;
-        return HttpResponse.json([appt]);
+        return HttpResponse.json({ items: [appt], count: 1 });
       }),
     );
-    await listAppointments({ professional_id: "3", service_id: "2" });
+    // Antes el rango se colapsaba a `date=<día de from>` y `to` se tiraba en
+    // silencio: pedir una semana devolvía un día y el calendario dibujaba la
+    // semana con esa jornada.
+    await listAppointments({ date_from: "2026-06-29", date_to: "2026-07-05" });
+    expect(url).toContain("date_from=2026-06-29");
+    expect(url).toContain("date_to=2026-07-05");
+    expect(url).not.toContain("date=");
+  });
+
+  it("con `date` no manda el rango: el backend le da prioridad al día suelto", async () => {
+    let url = "";
+    server.use(
+      http.get(`${BASE}/appointments/`, ({ request }) => {
+        url = request.url;
+        return HttpResponse.json({ items: [appt], count: 1 });
+      }),
+    );
+    await listAppointments({
+      date: "2026-06-29",
+      date_from: "2026-06-01",
+      date_to: "2026-06-30",
+    });
+    expect(url).toContain("date=2026-06-29");
+    expect(url).not.toContain("date_from");
+    expect(url).not.toContain("date_to");
+  });
+
+  it("list forwards professional_id, service_id, limit y offset como query params", async () => {
+    let url = "";
+    server.use(
+      http.get(`${BASE}/appointments/`, ({ request }) => {
+        url = request.url;
+        return HttpResponse.json({ items: [appt], count: 1 });
+      }),
+    );
+    await listAppointments({ professional_id: "3", service_id: "2", offset: 25 });
     expect(url).toContain("professional_id=3");
     expect(url).toContain("service_id=2");
+    expect(url).toContain("offset=25");
+    // `limit` viaja SIEMPRE, aunque quien llama no lo pase: el default del
+    // servidor es 100 y un recorte callado se lee como una agenda completa.
+    expect(url).toContain("limit=100");
   });
 
   it("create posts start_datetime (no end); reschedule posts new_start_datetime; cancel posts reason", async () => {
@@ -332,5 +494,180 @@ describe("appointments mapper", () => {
     const cancelled = await cancelAppointment("1", "no show");
     expect(cancelBody).toEqual({ reason: "no show" });
     expect(cancelled.status).toBe("cancelled");
+  });
+
+  it("history maps event_type->event chronologically and drops unknown types", async () => {
+    server.use(
+      http.get(`${BASE}/appointments/7/history/`, () =>
+        HttpResponse.json([
+          {
+            event_type: "appointment_created",
+            created_at: "2026-07-01T09:00:00Z",
+            metadata: {},
+          },
+          {
+            event_type: "appointment_no_show",
+            created_at: "2026-07-03T09:00:00Z",
+            metadata: {},
+          },
+          {
+            event_type: "something_unknown",
+            created_at: "2026-07-04T09:00:00Z",
+            metadata: {},
+          },
+        ]),
+      ),
+    );
+    const history = await getAppointmentHistory("7");
+    expect(history.map((h) => h.event)).toEqual(["created", "no_show"]);
+    expect(history[0]).toMatchObject({
+      appointment_id: "7",
+      timestamp: "2026-07-01T09:00:00Z",
+      details: null,
+    });
+  });
+});
+
+describe("orders mapper", () => {
+  const backendOrder = {
+    id: 5,
+    customer_id: 4,
+    customer_name: "Ana",
+    status: "draft",
+    total: "30.00",
+    created_by_ai: false,
+    created_at: "2026-07-01T00:00:00Z",
+    items: [
+      {
+        id: 1,
+        product_id: 9,
+        product_name: "Croquetas",
+        quantity: 2,
+        unit_price: "15.00",
+        note: "sin cebolla",
+      },
+    ],
+  };
+
+  it("createOrder posts {customer_id, items:[{product_id, quantity, note}]} and maps the response", async () => {
+    let body: unknown;
+    server.use(
+      http.post(`${BASE}/orders/`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(backendOrder, { status: 201 });
+      }),
+    );
+    const out = await createOrder({
+      customer_id: "4",
+      items: [{ product_id: "9", quantity: 2, note: "sin cebolla" }],
+    });
+    expect(body).toEqual({
+      customer_id: 4,
+      items: [{ product_id: 9, quantity: 2, note: "sin cebolla" }],
+    });
+    expect(out).toMatchObject({
+      id: "5",
+      customer: "Ana",
+      total: 30,
+      items: [
+        {
+          product_id: "9",
+          product_name: "Croquetas",
+          quantity: 2,
+          unit_price: 15,
+          note: "sin cebolla",
+        },
+      ],
+    });
+  });
+
+  it("updateOrder PATCHes {items:[...]} only (the customer is fixed by the order)", async () => {
+    let body: unknown;
+    server.use(
+      http.patch(`${BASE}/orders/5/`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(backendOrder);
+      }),
+    );
+    // PATCH is replace-all: a line sent without `note` loses it server-side, so the note
+    // must travel on every line — including two lines of the same product.
+    await updateOrder("5", [
+      { product_id: "9", quantity: 1, note: "mitad pepperoni, mitad napolitana" },
+      { product_id: "9", quantity: 1, note: "" },
+    ]);
+    expect(body).toEqual({
+      items: [
+        { product_id: 9, quantity: 1, note: "mitad pepperoni, mitad napolitana" },
+        { product_id: 9, quantity: 1, note: "" },
+      ],
+    });
+  });
+});
+
+describe("rating fields that landed later than the rest of the schema", () => {
+  it("a payload WITHOUT them reads as «no rating», never as a zero", async () => {
+    // Un caché viejo, un mock, o un backend a medio desplegar. `?? null` / `?? ""` /
+    // `?? 0` existen para que eso no se pinte como la peor calificación posible.
+    server.use(
+      http.get(`${BASE}/conversations/`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 5,
+              status: "closed",
+              channel_type: "whatsapp",
+              active_agent: "",
+              customer: { id: 7, display_name: "Ana", phone: "569" },
+              assignee_id: null,
+              last_message_at: "2026-06-01T00:00:00Z",
+              created_at: "2026-06-01T00:00:00Z",
+              updated_at: "2026-06-01T00:00:00Z",
+            },
+          ],
+          next_cursor: "",
+          has_more: false,
+        }),
+      ),
+      http.get(`${BASE}/customers/8/`, () =>
+        HttpResponse.json({
+          id: 8,
+          phone: "569",
+          display_name: "Ana",
+          email: "",
+          created_at: "2026-06-01T00:00:00Z",
+        }),
+      ),
+    );
+    const conv = (await listConversations()).items[0];
+    expect(conv.customer_rating).toBeNull();
+    expect(conv.rating_status).toBe("");
+
+    const cust = await getCustomer("8");
+    expect(cust.rating_avg).toBeNull();
+    expect(cust.rating_count).toBe(0);
+  });
+
+  it("sends customer_id on the wire when the drawer asks for one customer's history", async () => {
+    let seen: string | null = null;
+    server.use(
+      http.get(`${BASE}/conversations/`, ({ request }) => {
+        seen = new URL(request.url).searchParams.get("customer_id");
+        return HttpResponse.json({ items: [], next_cursor: "", has_more: false });
+      }),
+    );
+    await listConversations({ customerId: "42" });
+    expect(seen).toBe("42");
+  });
+});
+
+describe("records — business without a record schema (H11)", () => {
+  it("getRecord maps 204 No Content to null", async () => {
+    server.use(
+      http.get(
+        `${BASE}/customers/4/record/`,
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+    await expect(getRecord("4")).resolves.toBeNull();
   });
 });

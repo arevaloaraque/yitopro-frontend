@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Check, Link2, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,6 @@ export function Step7WhatsApp() {
   const [sdkReady, setSdkReady] = useState(
     () => typeof window !== "undefined" && Boolean(window.FB),
   );
-  const displayPhoneRef = useRef<string | null>(null);
 
   // Load Meta's JS SDK only once (only if credentials are present).
   useEffect(() => {
@@ -76,24 +75,10 @@ export function Step7WhatsApp() {
     document.body.appendChild(js);
   }, []);
 
-  // Capture the session data Meta posts during Embedded Signup
-  // (the backend returns it anyway; this is just for immediate feedback).
-  useEffect(() => {
-    function onMessage(event: MessageEvent) {
-      if (!/\.facebook\.com$/.test(new URL(event.origin).hostname)) return;
-      try {
-        const info =
-          typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        if (info?.type === "WA_EMBEDDED_SIGNUP" && info?.data?.phone_number_id) {
-          displayPhoneRef.current = info.data.phone_number_id;
-        }
-      } catch {
-        // payload unrelated to Embedded Signup — ignore
-      }
-    }
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
+  // El listener de `message` que Meta postea durante el Embedded Signup se
+  // retiró: guardaba el phone_number_id en un ref que nadie leía nunca. El
+  // número que la pantalla muestra sale de la respuesta del backend
+  // (`result.display_phone_number` más abajo), que es la fuente real.
 
   const handleConnect = useCallback(() => {
     if (!CONFIGURED || !window.FB) {

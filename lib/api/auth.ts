@@ -41,7 +41,7 @@ export function logoutRequest(): Promise<{ detail: string }> {
 }
 
 /** Authenticated user's profile (to reconstruct the visible identity). */
-export interface MeResponse {
+interface MeResponse {
   id: string;
   email: string;
   name: string;
@@ -63,7 +63,7 @@ export function getMe(): Promise<MeResponse> {
 // so the UI always shows the same generic confirmation.
 
 /** Generic `{ detail }` response from the reset request/confirm endpoints. */
-export interface GenericDetailResponse {
+interface GenericDetailResponse {
   detail: string;
 }
 
@@ -82,10 +82,12 @@ export function requestPasswordReset(email: string): Promise<GenericDetailRespon
 
 /** Checks whether a reset token is still usable, without consuming it. */
 export function validateResetToken(token: string): Promise<{ valid: boolean }> {
-  return api.get<{ valid: boolean }>("/auth/password/reset/validate/", {
-    query: { token },
-    skipRefresh: true,
-  });
+  // POST con el token en el body: en la query quedaría en los access logs.
+  return api.post<{ valid: boolean }>(
+    "/auth/password/reset/validate/",
+    { token },
+    { skipRefresh: true },
+  );
 }
 
 /**

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { getOnboardingStatus } from "@/lib/api/businesses";
 import { useAuth } from "@/lib/auth";
 
-export interface OnboardingRedirectResult {
+interface OnboardingRedirectResult {
   /** True while authentication is resolving or the status fetch is in flight. */
   loading: boolean;
   /**

@@ -1,25 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo } from "react";
+import { CalendarX, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { EmptyState } from "@/components/states";
 import type { Appointment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { AppointmentActions } from "./appointment-actions";
-import type { StatusFilter } from "./status-tabs";
+import { AppointmentDetailPopover } from "./appointment-detail-popover";
 import type { EnrichedAppointment } from "./types";
+import { timeOnly } from "@/lib/format/date";
 
-type CalendarView = "day" | "week" | "month";
+export type CalendarView = "day" | "week" | "month";
 
 const VIEW_OPTIONS: { value: CalendarView; label: string }[] = [
   { value: "day", label: "Día" },
   { value: "week", label: "Semana" },
   { value: "month", label: "Mes" },
 ];
+
+/** Cómo se nombra la ventana visible en la rama de vacío. */
+const WINDOW_NOUN: Record<CalendarView, string> = {
+  day: "este día",
+  week: "esta semana",
+  month: "este mes",
+};
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8..20
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -49,6 +56,56 @@ function startOfWeek(d: Date): Date {
 
 function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+/**
+ * `YYYY-MM-DD` del día LOCAL. No sirve `toISOString().slice(0,10)`: en cualquier
+ * offset negativo (todo Chile) devuelve el día anterior para las horas de la
+ * tarde, o sea que la ventana pedida se corría un día entero.
+ */
+function ymd(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/**
+ * La ventana visible (día/semana/mes) traducida a días de calendario para el
+ * backend (`date_from`/`date_to`, inclusivos).
+ *
+ * Es lo que permite que el calendario pida EL PERÍODO que dibuja en vez de bajar
+ * el historial completo del negocio y navegarlo en memoria: con el `limit` por
+ * defecto de 100 del servidor, ese historial completo llegaba recortado y la
+ * agenda se veía entera estando incompleta.
+ *
+ * Se pide **un día de más a cada lado** a propósito: el backend interpreta estos
+ * días en la zona horaria del NEGOCIO y la grilla se dibuja en la del NAVEGADOR,
+ * así que con el operador en otro huso la cita del borde (23:30 del domingo, por
+ * ejemplo) cae fuera del rango y ese día aparece vacío. Sobran filas, nunca
+ * faltan; el filtro por ventana visible de más abajo descarta lo que no toca
+ * dibujar.
+ */
+export function calendarWindow(
+  view: CalendarView,
+  cursor: Date,
+): { date_from: string; date_to: string } {
+  let from: Date;
+  let to: Date;
+  if (view === "day") {
+    from = new Date(cursor);
+    to = new Date(cursor);
+  } else if (view === "week") {
+    from = startOfWeek(cursor);
+    to = new Date(from);
+    to.setDate(to.getDate() + 6);
+  } else {
+    from = startOfMonth(cursor);
+    // Día 0 del mes siguiente = último día de este mes.
+    to = new Date(from.getFullYear(), from.getMonth() + 1, 0);
+  }
+  from.setDate(from.getDate() - 1);
+  to.setDate(to.getDate() + 1);
+  return { date_from: ymd(from), date_to: ymd(to) };
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -87,11 +144,24 @@ function formatDayHeader(d: Date, view: CalendarView): string {
 }
 
 interface AppointmentCalendarProps {
+  /** Ya filtradas en el servidor: aquí no se vuelve a filtrar por estado. */
   appointments: EnrichedAppointment[];
-  statusFilter: StatusFilter;
+  /**
+   * Rango y posición son CONTROLADOS por la página: la ventana visible es lo que
+   * define qué citas se piden (`date_from`/`date_to`), y un estado escondido acá
+   * dentro dejaba a la página adivinando qué período dibujar.
+   */
+  view: CalendarView;
+  onViewChange: (v: CalendarView) => void;
+  cursor: Date;
+  onCursorChange: (d: Date) => void;
+  /** Hay algún filtro puesto: decide qué dice la rama de vacío. */
+  filtersActive: boolean;
+  onClearFilters: () => void;
   onCancel: (a: Appointment) => void;
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
+  onCreatePaymentLink: (a: EnrichedAppointment) => void;
 }
 
 function statusBarColor(status: Appointment["status"]): string {
@@ -109,31 +179,27 @@ function statusBarColor(status: Appointment["status"]): string {
 
 export function AppointmentCalendar({
   appointments,
-  statusFilter,
+  view,
+  onViewChange,
+  cursor,
+  onCursorChange,
+  filtersActive,
+  onClearFilters,
   onCancel,
   onReschedule,
   onHistory,
+  onCreatePaymentLink,
 }: AppointmentCalendarProps) {
-  const [view, setView] = useState<CalendarView>("week");
-  const [cursor, setCursor] = useState(() => new Date());
-
-  const filtered = useMemo(() => {
-    if (statusFilter === "all") return appointments;
-    return appointments.filter((a) => a.status === statusFilter);
-  }, [appointments, statusFilter]);
-
   function navigate(delta: number, unit: "day" | "week" | "month") {
-    setCursor((prev) => {
-      const next = new Date(prev);
-      if (unit === "day") next.setDate(next.getDate() + delta);
-      else if (unit === "week") next.setDate(next.getDate() + delta * 7);
-      else next.setMonth(next.getMonth() + delta);
-      return next;
-    });
+    const next = new Date(cursor);
+    if (unit === "day") next.setDate(next.getDate() + delta);
+    else if (unit === "week") next.setDate(next.getDate() + delta * 7);
+    else next.setMonth(next.getMonth() + delta);
+    onCursorChange(next);
   }
 
   function goToday() {
-    setCursor(new Date());
+    onCursorChange(new Date());
   }
 
   const weekStart = useMemo(() => startOfWeek(cursor), [cursor]);
@@ -161,6 +227,35 @@ export function AppointmentCalendar({
     }
     return days;
   }, [monthStart]);
+
+  // CITAS-04: la rama de vacío se calcula sobre la VENTANA VISIBLE, no sobre la
+  // lista completa. El calendario no dibujaba ninguna: con un filtro sin
+  // coincidencias la lista decía «sin citas» y el calendario mostraba una
+  // grilla muda, o sea las dos vistas contestaban distinto a la misma pregunta.
+  // Y aunque haya citas cargadas, una semana vacía tiene que decirlo.
+  // Sigue haciendo falta con el fetch por período: la ventana que se pide lleva
+  // un día extra a cada lado por la zona horaria del negocio (ver
+  // `calendarWindow`), y esos días no se dibujan.
+  const visible = useMemo(() => {
+    if (view === "month") {
+      return appointments.filter((a) => {
+        const start = new Date(a.start);
+        return (
+          start.getFullYear() === monthStart.getFullYear() &&
+          start.getMonth() === monthStart.getMonth()
+        );
+      });
+    }
+    if (view === "day") {
+      return appointments.filter((a) => isSameDay(new Date(a.start), cursor));
+    }
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    return appointments.filter((a) => {
+      const start = new Date(a.start);
+      return start >= weekStart && start < weekEnd;
+    });
+  }, [appointments, view, cursor, weekStart, monthStart]);
 
   return (
     <div className="rounded-xl border border-border bg-card">
@@ -197,12 +292,19 @@ export function AppointmentCalendar({
             Hoy
           </Button>
         </div>
-        <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
+        <div
+          role="group"
+          aria-label="Rango del calendario"
+          className="flex items-center gap-1 rounded-lg bg-muted p-0.5"
+        >
           {VIEW_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
-              onClick={() => setView(opt.value)}
+              // CITAS-08: el fondo claro es la ÚNICA señal de cuál está puesto,
+              // y un lector de pantalla no la ve.
+              aria-pressed={view === opt.value}
+              onClick={() => onViewChange(opt.value)}
               className={cn(
                 "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                 view === opt.value
@@ -216,52 +318,78 @@ export function AppointmentCalendar({
         </div>
       </div>
 
-      {/* Day names row */}
-      <div
-        className={cn(
-          "grid border-b border-border bg-muted/30",
-          view === "day" ? "grid-cols-[3rem_1fr]" : "grid-cols-7",
-        )}
-      >
-        {view === "day" ? (
-          <>
-            <div />
-            <div className="px-3 py-1.5 text-center text-xs font-medium text-muted-foreground">
-              {cursor.toLocaleDateString("es-CL", { weekday: "long" })}
-            </div>
-          </>
-        ) : (
-          DAY_NAMES.map((name) => (
-            <div
-              key={name}
-              className="px-3 py-1.5 text-center text-xs font-medium text-muted-foreground"
-            >
-              {name}
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Grid body */}
-      {view === "month" ? (
-        <MonthGrid
-          days={monthDays}
-          monthStart={monthStart}
-          appointments={filtered}
-          onCancel={onCancel}
-          onReschedule={onReschedule}
-          onHistory={onHistory}
+      {visible.length === 0 ? (
+        // Sin la grilla: una rejilla de horas vacía se lee como «esto no cargó».
+        // La cabecera se queda, que es por donde se sale a otra semana.
+        <EmptyState
+          className="border-0 bg-transparent py-14"
+          icon={CalendarX}
+          title={filtersActive ? "Sin coincidencias" : "Sin citas"}
+          description={
+            filtersActive
+              ? `Ninguna cita coincide con los filtros en ${WINDOW_NOUN[view]}.`
+              : `No hay citas agendadas en ${WINDOW_NOUN[view]}.`
+          }
+          action={
+            filtersActive ? (
+              <Button variant="outline" onClick={onClearFilters}>
+                Limpiar filtros
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
-        <TimeGrid
-          view={view}
-          cursor={cursor}
-          weekStart={weekStart}
-          appointments={filtered}
-          onCancel={onCancel}
-          onReschedule={onReschedule}
-          onHistory={onHistory}
-        />
+        <>
+          {/* Day names row */}
+          <div
+            className={cn(
+              "grid border-b border-border bg-muted/30",
+              view === "day" ? "grid-cols-[3rem_1fr]" : "grid-cols-7",
+            )}
+          >
+            {view === "day" ? (
+              <>
+                <div />
+                <div className="px-3 py-1.5 text-center text-xs font-medium text-muted-foreground">
+                  {cursor.toLocaleDateString("es-CL", { weekday: "long" })}
+                </div>
+              </>
+            ) : (
+              DAY_NAMES.map((name) => (
+                <div
+                  key={name}
+                  className="px-3 py-1.5 text-center text-xs font-medium text-muted-foreground"
+                >
+                  {name}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Grid body */}
+          {view === "month" ? (
+            <MonthGrid
+              days={monthDays}
+              monthStart={monthStart}
+              appointments={visible}
+              onCancel={onCancel}
+              onReschedule={onReschedule}
+              onHistory={onHistory}
+              onCreatePaymentLink={onCreatePaymentLink}
+            />
+          ) : (
+            <TimeGrid
+              view={view}
+              cursor={cursor}
+              weekStart={weekStart}
+              appointments={visible}
+              onCancel={onCancel}
+              onReschedule={onReschedule}
+              onHistory={onHistory}
+              onCreatePaymentLink={onCreatePaymentLink}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -275,6 +403,7 @@ function TimeGrid({
   onCancel,
   onReschedule,
   onHistory,
+  onCreatePaymentLink,
 }: {
   view: "day" | "week";
   cursor: Date;
@@ -283,6 +412,7 @@ function TimeGrid({
   onCancel: (a: Appointment) => void;
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
+  onCreatePaymentLink: (a: EnrichedAppointment) => void;
 }) {
   const days =
     view === "day"
@@ -344,49 +474,53 @@ function TimeGrid({
               {HOURS.map((h) => (
                 <div key={h} className="h-20 border-b border-border/50" />
               ))}
-              {/* Appointments */}
+              {/* Appointments — the whole event is the detail trigger; its
+                  actions live inside the card, Google Calendar style. */}
               {dayApps.map((apt) => {
                 const { top, height } = getPosition(apt.start, apt.end);
                 const showService = height >= 64;
-                const timeLabel = `${new Date(apt.start).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} – ${new Date(apt.end).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}`;
+                const timeLabel = `${timeOnly(apt.start)} – ${timeOnly(apt.end)}`;
                 return (
-                  <div
+                  <AppointmentDetailPopover
                     key={apt.id}
-                    title={`${apt.customerName} · ${apt.serviceName} · ${timeLabel}`}
-                    className={cn(
-                      "absolute right-0.5 left-0.5 z-10 flex flex-col gap-0.5 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-xs leading-tight",
-                      statusBarColor(apt.status),
-                    )}
-                    style={{ top: `${top}px`, height: `${height}px` }}
-                  >
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="truncate font-medium">{apt.customerName}</span>
-                      <div className="-mt-0.5 -mr-1 flex shrink-0 items-center gap-0.5">
-                        {apt.created_by === "ai" && (
-                          <Badge
-                            variant="outline"
-                            className="h-4 px-1 text-[0.625rem] leading-none"
-                          >
-                            IA
-                          </Badge>
+                    appointment={apt}
+                    onCancel={onCancel}
+                    onReschedule={onReschedule}
+                    onHistory={onHistory}
+                    onCreatePaymentLink={onCreatePaymentLink}
+                    trigger={
+                      <div
+                        title={`${apt.customerName} · ${apt.serviceName} · ${timeLabel}`}
+                        className={cn(
+                          "absolute right-0.5 left-0.5 z-10 flex cursor-pointer flex-col gap-0.5 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left text-xs leading-tight",
+                          statusBarColor(apt.status),
                         )}
-                        <AppointmentActions
-                          appointment={apt}
-                          onCancel={onCancel}
-                          onReschedule={onReschedule}
-                          onHistory={onHistory}
-                        />
+                        style={{ top: `${top}px`, height: `${height}px` }}
+                      >
+                        <div className="flex items-start justify-between gap-1">
+                          <span className="truncate font-medium">
+                            {apt.customerName}
+                          </span>
+                          {apt.created_by === "ai" && (
+                            <Badge
+                              variant="outline"
+                              className="-mt-0.5 -mr-1 h-4 shrink-0 px-1 text-[0.625rem] leading-none"
+                            >
+                              IA
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="truncate text-[0.6875rem] text-muted-foreground">
+                          {timeLabel}
+                        </span>
+                        {showService && (
+                          <span className="truncate text-muted-foreground">
+                            {apt.serviceName}
+                          </span>
+                        )}
                       </div>
-                    </div>
-                    <span className="truncate text-[0.6875rem] text-muted-foreground">
-                      {timeLabel}
-                    </span>
-                    {showService && (
-                      <span className="truncate text-muted-foreground">
-                        {apt.serviceName}
-                      </span>
-                    )}
-                  </div>
+                    }
+                  />
                 );
               })}
             </div>
@@ -404,6 +538,7 @@ function MonthGrid({
   onCancel,
   onReschedule,
   onHistory,
+  onCreatePaymentLink,
 }: {
   days: Date[];
   monthStart: Date;
@@ -411,6 +546,7 @@ function MonthGrid({
   onCancel: (a: Appointment) => void;
   onReschedule: (a: Appointment) => void;
   onHistory: (a: Appointment) => void;
+  onCreatePaymentLink: (a: EnrichedAppointment) => void;
 }) {
   return (
     <div className="grid grid-cols-7">
@@ -442,11 +578,17 @@ function MonthGrid({
             </span>
             <div className="mt-0.5 space-y-0.5">
               {dayApps.slice(0, 3).map((apt) => (
-                <Tooltip key={apt.id}>
-                  <TooltipTrigger>
+                <AppointmentDetailPopover
+                  key={apt.id}
+                  appointment={apt}
+                  onCancel={onCancel}
+                  onReschedule={onReschedule}
+                  onHistory={onHistory}
+                  onCreatePaymentLink={onCreatePaymentLink}
+                  trigger={
                     <div
                       className={cn(
-                        "flex cursor-default items-center gap-1 truncate rounded px-1 py-0.5 text-[0.625rem] leading-none",
+                        "flex cursor-pointer items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[0.625rem] leading-none",
                         statusBarColor(apt.status),
                       )}
                     >
@@ -457,28 +599,8 @@ function MonthGrid({
                         </span>
                       )}
                     </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-medium">{apt.customerName}</p>
-                        <p className="text-muted-foreground">{apt.serviceName}</p>
-                        <p className="text-muted-foreground">
-                          {new Date(apt.start).toLocaleTimeString("es-CL", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                      <AppointmentActions
-                        appointment={apt}
-                        onCancel={onCancel}
-                        onReschedule={onReschedule}
-                        onHistory={onHistory}
-                      />
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
+                  }
+                />
               ))}
               {dayApps.length > 3 && (
                 <p className="px-1 text-[0.625rem] text-muted-foreground">

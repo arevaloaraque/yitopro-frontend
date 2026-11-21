@@ -23,12 +23,9 @@
   --font-sans: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --font-heading: var(--font-display);
-  --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
@@ -66,7 +63,6 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.5);
   --radius-2xl: calc(var(--radius) * 2);
-  --radius-3xl: calc(var(--radius) * 2.5);
   --radius-4xl: calc(var(--radius) * 3);
 
   /* Elevación: escala suave navy-tinted (nivel 1→5). Contacto fino + ambiente
@@ -82,9 +78,6 @@
   --shadow-clay-xs: 1px 1px 0 0 var(--clay-line);
   --shadow-clay: 3px 3px 0 0 var(--clay-line);
   --shadow-clay-lg: 4px 4px 0 0 var(--clay-line);
-
-  /* Movimiento: easing y duración consistentes en todo el sistema. */
-  --ease-out-quad: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -146,12 +139,9 @@
 
   --sidebar: #ffffff;
   --sidebar-foreground: #071a3a;
-  --sidebar-primary: #6d35f2;
-  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f4f3fb;
   --sidebar-accent-foreground: #6d35f2;
   --sidebar-border: #e7e8ee;
-  --sidebar-ring: #6d35f2;
 }
 
 /* ---------------------------------------------------------------------------
@@ -209,12 +199,9 @@
 
   --sidebar: #0c2348;
   --sidebar-foreground: #f5f7fa;
-  --sidebar-primary: #8b5cff;
-  --sidebar-primary-foreground: #0b0a1f;
   --sidebar-accent: #122b52;
   --sidebar-accent-foreground: #f5f7fa;
   --sidebar-border: #1e3a66;
-  --sidebar-ring: #8b5cff;
 }
 
 @layer base {
@@ -244,6 +231,67 @@
   th,
   td {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Los avisos de notificación ya NO llevan CSS acá: su tarjeta se dibuja con `toast.custom`
+   (ver lib/notifications/notification-toast.tsx), así que es markup propio y se estiliza con
+   utilidades. Con eso se fueron 68 líneas que existían solo para vencer a la hoja de sonner
+   —que se inyecta en runtime y ganaba por orden de cascada— y para dimensionar su slot de
+   icono, forzado a 16x16. Los toasts de ACCIÓN (un «Cliente creado» suelto) siguen siendo de
+   sonner, y su botón de cierre se reposiciona con variables en components/ui/sonner.tsx. */
+
+/* Impresión de un pedido (components/orders/order-print-sheet.tsx).
+
+   Se imprime la página actual aislando un contenedor, en vez de abrir una ventana nueva: una
+   ventana nueva no hereda las hojas de estilo de la app —habría que reinyectarlas— y encima
+   la bloquean los popup blockers. El PDF sale de «Guardar como PDF» del propio diálogo del
+   navegador, que es el generador que ya trae la plataforma.
+
+   `visibility` y no `display`: ocultar por `display` colapsaría el layout de los ancestros
+   del contenedor, y `visibility: visible` en el subárbol SÍ se impone aunque los ancestros
+   estén ocultos, que es justo lo que hace falta acá. */
+@media print {
+  /* El papel es BLANCO y la tinta NEGRA siempre, sin importar el tema del panel. Medido: en
+     modo oscuro el `body` es rgb(7,26,58) y la hoja es transparente, así que el comprobante
+     salía en negro sobre azul oscuro. Que muchos navegadores descarten fondos al imprimir no
+     alcanza: es una casilla del diálogo («Imprimir fondos») que el operador puede tener
+     activada, y un comprobante ilegible no puede depender de eso. */
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #order-print-root,
+  #order-print-root * {
+    visibility: visible !important;
+  }
+
+  /* El `display` lo pone la variante `print:block` del propio contenedor; acá va solo lo que
+     no tiene utilidad equivalente. */
+  #order-print-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    /* Tope de ancho para que el comprobante no se estire a todo el papel y las cifras
+       queden a un palmo del nombre del producto. En A4 con estos márgenes el área
+       imprimible ya ronda estos 672px, así que se nota sobre todo en papel más ancho. */
+    max-width: 42rem;
+    padding: 0;
+    /* Explícito además del `html, body` de arriba: la hoja es un documento propio y no debe
+       heredar el lienzo de la app aunque alguien le cambie el fondo al shell. */
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  @page {
+    margin: 16mm;
   }
 }
 

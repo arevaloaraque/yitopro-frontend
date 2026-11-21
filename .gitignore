@@ -61,6 +61,19 @@ public/mockServiceWorker.js
 
 # archivos de configuración local
 .opencode/
+.claude/
 
 # superpowers
 .superpowers/
+docs/superpowers/
+docs/
+
+# Graphify cache and state directories
+.graphify/
+graphify*/
+
+# claude 
+.claude/
+
+# docs
+docs/

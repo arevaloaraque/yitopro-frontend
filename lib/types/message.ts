@@ -1,8 +1,8 @@
 /** Message direction relative to the business. */
-export type MessageDirection = "inbound" | "outbound";
+type MessageDirection = "inbound" | "outbound";
 
 /** Who sent the message. */
-export type MessageSender = "customer" | "ai" | "human" | "system";
+type MessageSender = "customer" | "ai" | "human" | "system";
 
 /** Message within a conversation. Mirror of the `Message` schema. */
 export interface Message {

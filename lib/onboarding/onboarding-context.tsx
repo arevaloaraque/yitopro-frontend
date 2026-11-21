@@ -33,7 +33,7 @@ import {
   updateService as apiUpdateService,
   type CreateServiceInput,
 } from "@/lib/api";
-import type { AgentAutonomy, AgentType, ScheduleWindow, Service } from "@/lib/types";
+import type { AgentType, ScheduleWindow, Service } from "@/lib/types";
 
 import {
   createEmptyOnboardingData,
@@ -59,6 +59,7 @@ interface OnboardingContextValue {
   updateBusinessInfo: (info: {
     businessName: string;
     country: string;
+    address: string;
     currency: string;
     language: string;
     timezone: string;
@@ -97,7 +98,6 @@ interface OnboardingContextValue {
 
   // Step 7 — Agents
   toggleAgent: (type: AgentType, isActive: boolean) => Promise<void>;
-  setAgentAutonomy: (type: AgentType, autonomy: AgentAutonomy) => Promise<void>;
 
   // Step 8 — Confirm
   complete: () => Promise<void>;
@@ -134,13 +134,18 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }, 0);
     async function run() {
       try {
-        const [professionals, services, users, agents, business] = await Promise.all([
-          listProfessionals(),
-          listServices(),
-          listUsers(),
-          listAgents(),
-          getBusiness(),
-        ]);
+        const [professionals, services, allUsers, agents, business] = await Promise.all(
+          [
+            listProfessionals(),
+            listServices(),
+            listUsers(),
+            listAgents(),
+            getBusiness(),
+          ],
+        );
+        // listUsers ya no filtra (la pantalla de equipo necesita ver los
+        // desactivados); el wizard solo lista los asientos vivos.
+        const users = allUsers.filter((u) => u.is_active);
         if (cancelled) return;
         let weeklySchedule: ScheduleWindow[] = [];
         try {
@@ -162,6 +167,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
           ...prev,
           businessName: business.name,
           country: business.country,
+          address: business.address,
           currency: business.currency,
           language: business.language,
           timezone: business.timezone,
@@ -209,6 +215,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     async (info: {
       businessName: string;
       country: string;
+      address: string;
       currency: string;
       language: string;
       timezone: string;
@@ -216,6 +223,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       const business = await updateBusiness({
         name: info.businessName,
         country: info.country,
+        address: info.address,
         currency: info.currency,
         language: info.language,
         timezone: info.timezone,
@@ -224,6 +232,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         ...prev,
         businessName: business.name,
         country: business.country,
+        address: business.address,
         currency: business.currency,
         language: business.language,
         timezone: business.timezone,
@@ -355,17 +364,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }));
   }, []);
 
-  const setAgentAutonomy = useCallback(
-    async (type: AgentType, autonomy: AgentAutonomy) => {
-      const agent = await apiUpdateAgent(type, { autonomy });
-      setData((prev) => ({
-        ...prev,
-        agents: prev.agents.map((a) => (a.type === type ? agent : a)),
-      }));
-    },
-    [],
-  );
-
   // ── Step 8 — Confirm ──────────────────────────────────────────────────────
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [missingSteps, setMissingSteps] = useState<string[]>([]);
@@ -404,7 +402,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       removeUser,
       setWhatsappConnected,
       toggleAgent,
-      setAgentAutonomy,
       complete,
       completeError,
       missingSteps,
@@ -430,7 +427,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       removeUser,
       setWhatsappConnected,
       toggleAgent,
-      setAgentAutonomy,
       complete,
       completeError,
       missingSteps,

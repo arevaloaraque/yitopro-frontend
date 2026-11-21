@@ -7,8 +7,30 @@ import { CheckIcon, Loader2, SearchIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { searchCustomers } from "@/lib/api/customers";
 
-type Option = { value: string; label: string };
-type Selection = { id: string; name: string } | null;
+type Option = { value: string; label: string; phone: string };
+export type CustomerSelection = { id: string; name: string; phone?: string } | null;
+type Selection = CustomerSelection;
+
+/**
+ * `Nombre · +56 9 1234 5678`.
+ *
+ * The phone is the disambiguator, not decoration: two customers called "María
+ * González" are ordinary in this product, and picking the wrong one sends the
+ * charge — or the appointment — to a stranger. It rides in BOTH the list and
+ * the selected value, because the confusion does not end when the popup closes.
+ *
+ * `name` stays clean in what `onChange` hands back, so callers that print the
+ * customer's name keep printing a name.
+ */
+function optionLabel(name: string, phone: string): string {
+  const clean = name.trim();
+  if (!clean) return phone;
+  return phone ? `${clean} · ${phone}` : clean;
+}
+
+function toOption(c: { id: string; name: string; phone: string }): Option {
+  return { value: c.id, label: optionLabel(c.name, c.phone), phone: c.phone };
+}
 
 /**
  * Customer search with server-side search (accessible Base UI combobox).
@@ -24,11 +46,18 @@ export function CustomerCombobox({
   onChange,
   placeholder = "Buscar cliente…",
   className,
+  id,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedby,
 }: {
   value: Selection;
   onChange: (customer: Selection) => void;
   placeholder?: string;
   className?: string;
+  /** Se reenvía al input para que un `<Label htmlFor>` externo lo asocie. */
+  id?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
+  "aria-describedby"?: string;
 }) {
   const [options, setOptions] = React.useState<Option[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -37,7 +66,7 @@ export function CustomerCombobox({
   async function fetchOptions(q: string) {
     try {
       const res = await searchCustomers({ search: q || undefined, limit: 20 });
-      setOptions(res.items.map((c) => ({ value: c.id, label: c.name })));
+      setOptions(res.items.map(toOption));
     } catch {
       setOptions([]);
     } finally {
@@ -51,8 +80,7 @@ export function CustomerCombobox({
     async function loadInitial() {
       try {
         const res = await searchCustomers({ limit: 20 });
-        if (!cancelled)
-          setOptions(res.items.map((c) => ({ value: c.id, label: c.name })));
+        if (!cancelled) setOptions(res.items.map(toOption));
       } catch {
         if (!cancelled) setOptions([]);
       } finally {
@@ -77,7 +105,14 @@ export function CustomerCombobox({
 
   // Stable across renders (otherwise Base UI would rewrite the input on every render).
   const selected = React.useMemo<Option | null>(
-    () => (value ? { value: value.id, label: value.name } : null),
+    () =>
+      value
+        ? {
+            value: value.id,
+            label: optionLabel(value.name, value.phone ?? ""),
+            phone: value.phone ?? "",
+          }
+        : null,
     [value],
   );
 
@@ -86,7 +121,10 @@ export function CustomerCombobox({
       items={options}
       value={selected}
       onValueChange={(v: Option | null) =>
-        onChange(v ? { id: v.value, name: v.label } : null)
+        // The label carries the phone for display; `name` goes back plain.
+        onChange(
+          v ? { id: v.value, name: v.label.split(" · ")[0], phone: v.phone } : null,
+        )
       }
       onInputValueChange={onInput}
       filter={null}
@@ -94,6 +132,9 @@ export function CustomerCombobox({
       <div className={cn("relative", className)}>
         <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Combobox.Input
+          id={id}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedby}
           placeholder={placeholder}
           className="h-9 w-full min-w-0 rounded-xl border-[1.5px] border-input bg-background py-1.5 pr-3 pl-8 text-sm transition-all duration-150 outline-none placeholder:text-muted-foreground hover:border-input/80 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/20"
         />

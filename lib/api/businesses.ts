@@ -1,5 +1,6 @@
 import type {
   Business,
+  BusinessConfig,
   OnboardingState,
   ScheduleBlock,
   ScheduleWindow,
@@ -16,15 +17,19 @@ interface BackendBusiness {
   id: number;
   name: string;
   country: string;
+  address: string;
   currency: string;
   language: string;
   timezone: string;
   active: boolean;
   is_operative: boolean;
+  is_blocked: boolean;
   whatsapp_connected: boolean;
   whatsapp_number: string;
+  entitlements: Business["entitlements"];
   onboarding_status: Business["onboarding_status"];
   assistant_config: Business["assistant_config"];
+  created_at: string;
 }
 
 function toBusiness(b: BackendBusiness): Business {
@@ -32,15 +37,19 @@ function toBusiness(b: BackendBusiness): Business {
     id: String(b.id),
     name: b.name,
     country: b.country,
+    address: b.address,
     currency: b.currency,
     language: b.language,
     timezone: b.timezone,
     is_active: b.active,
     is_operative: b.is_operative,
+    is_blocked: b.is_blocked,
     whatsapp_connected: b.whatsapp_connected,
     whatsapp_number: b.whatsapp_number,
+    entitlements: b.entitlements,
     onboarding_status: b.onboarding_status,
     assistant_config: b.assistant_config,
+    created_at: b.created_at,
   };
 }
 
@@ -59,11 +68,83 @@ export async function updateBusiness(
   patch: Partial<
     Pick<
       Business,
-      "name" | "country" | "currency" | "language" | "timezone" | "assistant_config"
+      | "name"
+      | "country"
+      | "address"
+      | "currency"
+      | "language"
+      | "timezone"
+      | "assistant_config"
     >
   >,
 ): Promise<Business> {
   return toBusiness(await api.patch<BackendBusiness>("/businesses/me/", patch));
+}
+
+/**
+ * The business's voice — every message its customers read.
+ *
+ * A separate endpoint from `PATCH /businesses/me/`: the config row lives on
+ * `BusinessConfig`, and the backend exposes a deliberately narrow slice of it here.
+ * `display_name` is NOT part of it (it is not in the backend's config schema) — that
+ * one still travels in the nested `assistant_config` of `updateBusiness`.
+ *
+ * The wire shape is already flat snake_case, so the only mapping needed is the pick
+ * below.
+ */
+const CONFIG_FIELDS: (keyof BusinessConfig)[] = [
+  "tone",
+  "welcome_message",
+  "fallback_message",
+  "out_of_hours_message",
+  "out_of_hours_ack_message",
+  "human_handoff_message",
+  "handoff_waiting_ack_message",
+  "handoff_timeout_revert_message",
+  "off_topic_message",
+  "business_context",
+  "flexible_scheduling",
+  "closing_grace_minutes",
+];
+
+/**
+ * Defaults for fields where "" (the meaningful empty for every message) would be a
+ * lie: `tone` is a closed enum, and the scheduling pair is a bool/int — "" typed as
+ * boolean survives by accident and breaks a number input.
+ */
+const CONFIG_DEFAULTS: Partial<BusinessConfig> = {
+  tone: "friendly",
+  flexible_scheduling: false,
+  closing_grace_minutes: 0,
+};
+
+/**
+ * `GET /businesses/me/config/` returns the WHOLE config row — ~25 fields, including the
+ * model, the six confirmation templates, the identity reply and plan entitlements — so
+ * typing the response as `BusinessConfig` was a lie, and a PATCH built from a GET
+ * carried all of it back. The server ignores unknown fields today, which means the
+ * guarantee rested on the server's goodwill rather than on us (review 2026-07-27).
+ * Picking here fixes it in ONE place: every caller gets exactly the writable slice.
+ */
+function pickConfig(raw: Record<string, unknown>): BusinessConfig {
+  return Object.fromEntries(
+    // "" is the meaningful empty for every message (the backend falls back to its
+    // per-language default); the non-string fields get their own default from
+    // CONFIG_DEFAULTS instead of minting an invalid value through the cast below.
+    CONFIG_FIELDS.map((key) => [key, raw[key] ?? CONFIG_DEFAULTS[key] ?? ""]),
+  ) as unknown as BusinessConfig;
+}
+
+export async function getBusinessConfig(): Promise<BusinessConfig> {
+  return pickConfig(await api.get<Record<string, unknown>>("/businesses/me/config/"));
+}
+
+export async function updateBusinessConfig(
+  patch: Partial<BusinessConfig>,
+): Promise<BusinessConfig> {
+  return pickConfig(
+    await api.patch<Record<string, unknown>>("/businesses/me/config/", patch),
+  );
 }
 
 /** Detailed onboarding status (the backend already returns the exact shape). */

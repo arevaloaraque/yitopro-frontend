@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Eye, EyeOff, Pencil, Save } from "lucide-react";
+import Link from "next/link";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Pencil,
+  Save,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +41,9 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorState, Loading } from "@/components/states";
+import { useBusinessOptional } from "@/lib/business/business-context";
 import { listConversations } from "@/lib/api/conversations";
+import { CustomerRating, ThreadRating } from "@/components/customers/rating";
 import {
   addCustomerNote,
   getCustomer,
@@ -40,6 +51,7 @@ import {
   updateCustomer,
 } from "@/lib/api/customers";
 import { getRecord, updateRecordValues } from "@/lib/api/records";
+import { useSubmitGuard } from "@/lib/hooks/use-submit-guard";
 import { subscribeToEvents } from "@/lib/sse";
 import type {
   Conversation,
@@ -51,6 +63,7 @@ import type {
   RecordValue,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { formatDateTime, relativeTime } from "@/lib/format/date";
 
 type LoadState = "idle" | "loading" | "error" | "ready";
 
@@ -64,25 +77,6 @@ function fieldTypeLabel(type: RecordFieldType): string {
     boolean: "Sí/No",
   };
   return map[type];
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("es-CL", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "ahora";
-  if (mins < 60) return `hace ${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `hace ${hrs}h`;
-  return `hace ${Math.floor(hrs / 24)}d`;
 }
 
 function convStatusBadge(status: Conversation["status"]) {
@@ -135,6 +129,8 @@ function renderFieldInput(
         />
       );
     case "select":
+      // Sin `items` en el Root — las opciones de ficha son strings
+      // planos (valor === label), el trigger ya muestra el texto correcto.
       return (
         <Select
           value={typeof value === "string" ? value : ""}
@@ -218,6 +214,12 @@ export function CustomerDrawer({
   onOpenChange,
   onCustomerSaved,
 }: CustomerDrawerProps) {
+  // Cuatro superficies de este drawer son del asistente: los badges «IA lee/edita»
+  // de cada campo de la ficha, el historial de conversaciones, la calificación de
+  // comportamiento del encabezado y la propia consulta de conversaciones. Sin
+  // asistente en el plan ninguna describe algo que exista.
+  const hasAssistant =
+    useBusinessOptional()?.business?.entitlements?.assistant !== false;
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -237,6 +239,11 @@ export function CustomerDrawer({
   const [recordError, setRecordError] = useState<string | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Agregado del evaluador (promedio + cuántas conversaciones lo componen).
+  const [rating, setRating] = useState<{ avg: number | null; count: number }>({
+    avg: null,
+    count: 0,
+  });
 
   // Notes (the staff log about this customer)
   const [notes, setNotes] = useState<Note[]>([]);
@@ -247,8 +254,12 @@ export function CustomerDrawer({
   const [openNote, setOpenNote] = useState<Note | null>(null);
 
   const reqRef = useRef(0);
+  const submitGuard = useSubmitGuard();
   const custTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const recordTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  // Coalesce de `mensaje_recibido` (250 ms, espejo de /conversations): una ráfaga
+  // de WhatsApp cuesta UNA recarga del historial del drawer, no una por mensaje.
+  const convTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   // Live refs for the SSE handler (subscribed once): the open customer, the
   // current editable state, and a snapshot of what was last loaded/saved so we
@@ -258,6 +269,7 @@ export function CustomerDrawer({
   const custNameRef = useRef(custName);
   const custEmailRef = useRef(custEmail);
   const onCustomerSavedRef = useRef(onCustomerSaved);
+  const hasAssistantRef = useRef(hasAssistant);
   const loadedRef = useRef<{
     name: string;
     email: string;
@@ -269,12 +281,14 @@ export function CustomerDrawer({
     custNameRef.current = custName;
     custEmailRef.current = custEmail;
     onCustomerSavedRef.current = onCustomerSaved;
+    hasAssistantRef.current = hasAssistant;
   });
 
   useEffect(
     () => () => {
       if (custTimer.current) clearTimeout(custTimer.current);
       if (recordTimer.current) clearTimeout(recordTimer.current);
+      if (convTimer.current) clearTimeout(convTimer.current);
     },
     [],
   );
@@ -296,21 +310,49 @@ export function CustomerDrawer({
       setNoteError(null);
       setOpenNote(null);
       try {
-        const [c, r, convs, ns] = await Promise.all([
+        // `allSettled`, no `all`: solo el cliente es indispensable. Un negocio SIN
+        // `RecordSchema` (el estado por defecto de un tenant nuevo) ya no falla:
+        // `/record/` responde 204 y `getRecord` da `null`, que se dibuja como
+        // «sin campos adicionales». Pero si la ficha falla por otra causa, con
+        // `all` se perderían también nombre, email, teléfono, conversaciones y
+        // notas, y como la ficha ya no es una ruta no quedaría vía para verlos.
+        const [c, r, convs, ns] = await Promise.allSettled([
           getCustomer(customerId),
           getRecord(customerId),
-          listConversations(),
+          // Server-side: antes bajaba TODAS las conversaciones del negocio y filtraba acá.
+          hasAssistant
+            ? listConversations({ customerId })
+            : Promise.resolve({ items: [] }),
           getCustomerNotes(customerId),
         ]);
         if (reqId !== reqRef.current) return;
-        setCustName(c.name);
-        setCustEmail(c.email);
-        setCustPhone(c.phone);
-        setRecord(r);
-        setValues({ ...r.values });
-        setConversations(convs.filter((cv) => cv.customer_id === customerId));
-        setNotes(ns);
-        loadedRef.current = { name: c.name, email: c.email, values: { ...r.values } };
+        if (c.status === "rejected") throw c.reason;
+        const cust = c.value;
+        const rec = r.status === "fulfilled" ? r.value : null;
+        setCustName(cust.name);
+        setCustEmail(cust.email);
+        setCustPhone(cust.phone);
+        setRating({ avg: cust.rating_avg, count: cust.rating_count });
+        setRecord(rec);
+        setValues(rec ? { ...rec.values } : {});
+        // El fallo de la ficha se nombra en SU sección, no como error del drawer.
+        setRecordError(
+          r.status === "rejected"
+            ? r.reason instanceof Error
+              ? r.reason.message
+              : "No se pudo cargar la ficha."
+            : null,
+        );
+        // `.items`: el inbox pasó a paginarse por cursor y la respuesta es un
+        // sobre. Aquí se toma solo la primera página a propósito — es el
+        // historial de UN cliente en un panel lateral, no la bandeja.
+        setConversations(convs.status === "fulfilled" ? convs.value.items : []);
+        setNotes(ns.status === "fulfilled" ? ns.value : []);
+        loadedRef.current = {
+          name: cust.name,
+          email: cust.email,
+          values: rec ? { ...rec.values } : {},
+        };
         setState("ready");
       } catch (e) {
         if (reqId !== reqRef.current) return;
@@ -319,7 +361,10 @@ export function CustomerDrawer({
       }
     }
     load();
-  }, [customerId]);
+    // `hasAssistant` entra en las dependencias porque decide si se pide el
+    // historial de conversaciones: si el negocio carga después que el drawer, la
+    // ficha se recarga con el dato correcto en vez de quedarse sin hilos.
+  }, [customerId, hasAssistant]);
 
   // Live refresh while the drawer is open. Subscribe once; the handler reads
   // refs so it always sees the current open customer and edit state. It only
@@ -329,6 +374,27 @@ export function CustomerDrawer({
     return subscribeToEvents((event) => {
       const openId = customerIdRef.current;
       if (!openId) return;
+
+      // ANTES del guard por customer_id: el payload de mensaje_recibido no lo
+      // trae (política PII: solo ids de conversación), así que no se puede
+      // discriminar — se recarga el historial del cliente abierto, coalescido.
+      // Costo asumido: mensajes de OTROS clientes también refetchean (≤1
+      // request/250 ms y solo con el drawer abierto).
+      if (event.type === "mensaje_recibido") {
+        if (!hasAssistantRef.current) return;
+        if (convTimer.current) clearTimeout(convTimer.current);
+        convTimer.current = setTimeout(() => {
+          const id = customerIdRef.current;
+          if (!id) return;
+          listConversations({ customerId: id })
+            .then((page) => {
+              if (customerIdRef.current === id) setConversations(page.items);
+            })
+            .catch(() => {});
+        }, 250);
+        return;
+      }
+
       const data = event.data as { customer_id?: string };
       if (data.customer_id !== openId) return;
 
@@ -347,18 +413,22 @@ export function CustomerDrawer({
           .then((r) => {
             if (customerIdRef.current !== openId) return;
             setRecord(r);
-            setValues({ ...r.values });
-            loadedRef.current.values = { ...r.values };
+            setValues(r ? { ...r.values } : {});
+            loadedRef.current.values = r ? { ...r.values } : {};
           })
           .catch(() => {});
       } else if (event.type === "cliente_actualizado") {
-        const dirty =
-          custNameRef.current !== loadedRef.current.name ||
-          custEmailRef.current !== loadedRef.current.email;
-        if (dirty) return;
         getCustomer(openId)
           .then((c) => {
             if (customerIdRef.current !== openId) return;
+            // El rating no es editable en el drawer → se re-aplica SIEMPRE,
+            // sin riesgo de clobber (una valoración nueva del evaluador se
+            // quedaba congelada hasta un reload — auditoría 2026-08-20).
+            setRating({ avg: c.rating_avg, count: c.rating_count });
+            const dirty =
+              custNameRef.current !== loadedRef.current.name ||
+              custEmailRef.current !== loadedRef.current.email;
+            if (dirty) return; // keep the operator's unsaved edits
             setCustName(c.name);
             setCustEmail(c.email);
             loadedRef.current.name = c.name;
@@ -432,7 +502,9 @@ export function CustomerDrawer({
     }
   }
 
-  async function handleAddNote() {
+  const handleAddNote = () => submitGuard(addNote);
+
+  async function addNote() {
     if (!customerId) return;
     const body = noteDraft.trim();
     if (!body) {
@@ -466,7 +538,17 @@ export function CustomerDrawer({
           <SheetTitle>
             {state === "ready" ? custName || "Cliente" : "Cliente"}
           </SheetTitle>
-          <SheetDescription>{custPhone || "—"}</SheetDescription>
+          <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>{custPhone || "—"}</span>
+            {state === "ready" && hasAssistant && (
+              <>
+                <span aria-hidden className="text-muted-foreground/50">
+                  ·
+                </span>
+                <CustomerRating avg={rating.avg} count={rating.count} />
+              </>
+            )}
+          </SheetDescription>
         </SheetHeader>
 
         {state === "loading" && (
@@ -480,7 +562,9 @@ export function CustomerDrawer({
           </div>
         )}
 
-        {state === "ready" && record && (
+        {/* Sin `&& record`: la ficha es UNA sección del drawer, no su condición de
+            existencia. Ver el `allSettled` de la carga. */}
+        {state === "ready" && (
           <div className="flex flex-col gap-3 overflow-y-auto p-4 pt-0">
             {/* Datos del cliente */}
             <div className="space-y-3 rounded-xl border border-border/40 p-3">
@@ -539,8 +623,17 @@ export function CustomerDrawer({
             </div>
 
             {/* Datos adicionales (dynamic schema) */}
-            <Section title="Datos adicionales" count={record.schema.length} defaultOpen>
-              {record.schema.length === 0 ? (
+            <Section
+              title="Datos adicionales"
+              count={record?.schema.length ?? 0}
+              defaultOpen
+            >
+              {!record && recordError ? (
+                <p className="text-xs text-destructive">
+                  No se pudo cargar la ficha: {recordError} El resto de los datos del
+                  cliente sí está disponible.
+                </p>
+              ) : !record || record.schema.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Sin campos adicionales configurados.
                 </p>
@@ -556,28 +649,36 @@ export function CustomerDrawer({
                         <span className="text-[0.65rem] text-muted-foreground">
                           ({fieldTypeLabel(field.type)})
                         </span>
-                        <div className="ml-auto flex items-center gap-1">
-                          {field.ai_visible !== false ? (
-                            <Badge variant="success" className="gap-0.5 text-[0.6rem]">
-                              <Eye className="size-2.5" />
-                              IA lee
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="secondary"
-                              className="gap-0.5 text-[0.6rem]"
-                            >
-                              <EyeOff className="size-2.5" />
-                              IA no lee
-                            </Badge>
-                          )}
-                          {field.ai_editable && (
-                            <Badge variant="default" className="gap-0.5 text-[0.6rem]">
-                              <Pencil className="size-2.5" />
-                              IA edita
-                            </Badge>
-                          )}
-                        </div>
+                        {hasAssistant && (
+                          <div className="ml-auto flex items-center gap-1">
+                            {field.ai_visible !== false ? (
+                              <Badge
+                                variant="success"
+                                className="gap-0.5 text-[0.6rem]"
+                              >
+                                <Eye className="size-2.5" />
+                                IA lee
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="secondary"
+                                className="gap-0.5 text-[0.6rem]"
+                              >
+                                <EyeOff className="size-2.5" />
+                                IA no lee
+                              </Badge>
+                            )}
+                            {field.ai_editable && (
+                              <Badge
+                                variant="default"
+                                className="gap-0.5 text-[0.6rem]"
+                              >
+                                <Pencil className="size-2.5" />
+                                IA edita
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                       {renderFieldInput(field, values[field.name] ?? null, (v) =>
                         setValues((prev) => ({ ...prev, [field.name]: v })),
@@ -614,32 +715,55 @@ export function CustomerDrawer({
             </Section>
 
             {/* Conversaciones */}
-            <Section title="Conversaciones" count={conversations.length}>
-              {conversations.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Sin conversaciones.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {conversations.map((conv) => {
-                    const s = convStatusBadge(conv.status);
-                    return (
-                      <div
-                        key={conv.id}
-                        className="flex items-center justify-between rounded-lg border border-border/30 px-3 py-2"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[0.65rem] text-muted-foreground">
-                            {relativeTime(conv.last_message_at)}
-                          </p>
-                        </div>
-                        <Badge variant={s.variant} className="text-[0.65rem]">
-                          {s.label}
-                        </Badge>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Section>
+            {/* Historial de conversaciones de este cliente. La lista viene filtrada por el
+                servidor (`listConversations({ customerId })`); antes se bajaba la tabla
+                completa del negocio y se filtraba en el navegador. Cada fila es navegable:
+                el inbox acepta `?id=` y abre ese hilo. */}
+            {hasAssistant && (
+              <Section title="Conversaciones" count={conversations.length} defaultOpen>
+                {conversations.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin conversaciones.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {conversations.map((conv) => {
+                      const s = convStatusBadge(conv.status);
+                      return (
+                        <li key={conv.id}>
+                          <Link
+                            href={`/conversations?chat=${conv.customer_id}&id=${conv.id}`}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-border/30 px-3 py-2 transition-colors hover:border-border hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-xs text-foreground">
+                                {formatDateTime(conv.last_message_at)}
+                              </span>
+                              <span className="block text-[0.65rem] text-muted-foreground">
+                                {relativeTime(conv.last_message_at)}
+                              </span>
+                            </span>
+                            <ThreadRating
+                              value={conv.customer_rating}
+                              status={conv.rating_status}
+                              className="shrink-0"
+                            />
+                            <Badge
+                              variant={s.variant}
+                              className="shrink-0 text-[0.65rem]"
+                            >
+                              {s.label}
+                            </Badge>
+                            <ChevronRight
+                              className="size-4 shrink-0 text-muted-foreground"
+                              aria-hidden
+                            />
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Section>
+            )}
 
             {/* Notas — lo que el profesional registra del cliente en cada servicio */}
             <Section title="Notas" count={notes.length} defaultOpen>

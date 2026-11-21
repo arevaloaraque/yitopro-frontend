@@ -127,7 +127,10 @@ describe("AuthContext", () => {
     );
     // Without going through login: boot restores the session using the refresh cookie.
     await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("in"));
-    expect(screen.getByTestId("email").textContent).toBe("boot@b.com");
+    // "in" aparece con el token; la identidad llega después, con /me.
+    await waitFor(() =>
+      expect(screen.getByTestId("email").textContent).toBe("boot@b.com"),
+    );
   });
 
   it("acceptInvite: sets token in memory and loads identity → status becomes authenticated", async () => {

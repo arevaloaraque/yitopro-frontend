@@ -13,6 +13,8 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost
 /** API prefix (Django Ninja mounts at `/api`). */
 const API_PREFIX = "/api";
 
+import { messageForStatus } from "@/lib/errors";
+
 /** Typed error from the network layer. */
 export class ApiError extends Error {
   readonly status: number;
@@ -53,7 +55,7 @@ export function configureApiAuth(opts: {
 
 type QueryValue = string | number | boolean | null | undefined;
 
-export interface RequestOptions extends Omit<RequestInit, "body"> {
+interface RequestOptions extends Omit<RequestInit, "body"> {
   /** JSON body; serialized automatically. */
   body?: unknown;
   /** Query parameters; `undefined`/`null` values are omitted. */
@@ -67,10 +69,21 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
+  // Los ids se interpolan en el path y algunos vienen de la URL del panel
+  // (`/customers?id=…`): un `../` o un `?` redirigiría la llamada autenticada a
+  // otro endpoint. Los parámetros van siempre por `query`, nunca en el path.
+  if (/\.\.|[?#\\]/.test(path)) {
+    throw new Error("Ruta de API inválida.");
+  }
   const url = new URL(`${API_PREFIX}${path}`, API_BASE_URL);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== null) {
+      // La cadena vacía se descarta igual que `undefined`/`null`: en un filtro
+      // de lista, "" significa «sin filtro», y mandarlo produce `?status=&q=`.
+      // Vivía resuelto en un helper privado de `lib/api/payments.ts`, así que
+      // cada dominio nuevo tenía que acordarse por su cuenta. Aquí se acuerda
+      // una vez. Ningún endpoint del backend distingue "" de ausente.
+      if (value !== undefined && value !== null && value !== "") {
         url.searchParams.set(key, String(value));
       }
     }
@@ -93,7 +106,9 @@ async function parseBody(res: Response): Promise<unknown> {
   return text;
 }
 
-function extractErrorMessage(payload: unknown, status: number, path: string): string {
+function extractErrorMessage(payload: unknown, status: number): string {
+  // 5xx bodies can be stack traces or HTML; never show them to the user.
+  if (status >= 500) return messageForStatus(status);
   if (payload && typeof payload === "object") {
     const detail = (payload as { detail?: unknown }).detail;
     if (typeof detail === "string") return detail;
@@ -110,7 +125,7 @@ function extractErrorMessage(payload: unknown, status: number, path: string): st
     if (Array.isArray(firstField) && typeof firstField[0] === "string")
       return String(firstField[0]);
   }
-  return `Error ${status} en ${path}`;
+  return messageForStatus(status);
 }
 
 // Single-flight: a single refresh even if N requests receive a 401 at once.
@@ -196,11 +211,7 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const { res, payload } = await requestRaw(path, options);
   if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      extractErrorMessage(payload, res.status, path),
-      payload,
-    );
+    throw new ApiError(res.status, extractErrorMessage(payload, res.status), payload);
   }
   return payload as T;
 }
@@ -215,11 +226,7 @@ export async function apiFetchWithStatus<T>(
 ): Promise<{ status: number; body: T }> {
   const { res, payload } = await requestRaw(path, options);
   if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      extractErrorMessage(payload, res.status, path),
-      payload,
-    );
+    throw new ApiError(res.status, extractErrorMessage(payload, res.status), payload);
   }
   return { status: res.status, body: payload as T };
 }

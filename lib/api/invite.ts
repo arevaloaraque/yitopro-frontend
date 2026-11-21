@@ -9,14 +9,16 @@ import { api } from "./client";
 
 /**
  * Validates an invite token without consuming it.
- * `GET /api/auth/invite/validate/?token=<token>`
+ * `POST /api/auth/invite/validate/` — el token va en el body: en la query
+ * quedaría, todavía vigente, en los access logs.
  */
 export async function validateInvite(token: string): Promise<boolean> {
   return (
-    await api.get<{ valid: boolean }>("/auth/invite/validate/", {
-      query: { token },
-      skipRefresh: true,
-    })
+    await api.post<{ valid: boolean }>(
+      "/auth/invite/validate/",
+      { token },
+      { skipRefresh: true },
+    )
   ).valid;
 }
 
@@ -25,10 +27,7 @@ export async function validateInvite(token: string): Promise<boolean> {
  * establishes the session immediately (same shape as login: `TokenResponse`).
  * `POST /api/auth/invite/accept/`
  */
-export function acceptInvite(
-  token: string,
-  password: string,
-): Promise<TokenResponse> {
+export function acceptInvite(token: string, password: string): Promise<TokenResponse> {
   // skipRefresh: a 400 here is "bad token/weak password", not an expired session.
   return api.post<TokenResponse>(
     "/auth/invite/accept/",

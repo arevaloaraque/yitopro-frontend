@@ -69,3 +69,30 @@ export function windowsToWeek(windows: ScheduleWindow[]): DayState[] {
 export function hasValidOpenDay(week: DayState[]): boolean {
   return buildWindows(week).length > 0;
 }
+
+/**
+ * Validates the weekly grid before saving, so invalid ranges surface as an
+ * inline error instead of being silently dropped by `buildWindows`:
+ * every range of an open day needs start < end, and ranges within the same
+ * day must not overlap. Returns a Spanish message naming the day, or null.
+ */
+export function validateWeek(week: DayState[]): string | null {
+  for (let i = 0; i < week.length; i++) {
+    const day = week[i];
+    if (!day.open) continue;
+    const label = DAYS[i].label;
+    for (const r of day.ranges) {
+      if (!r.start || !r.end || r.start >= r.end) {
+        return `${label}: la hora de inicio debe ser anterior a la de término.`;
+      }
+    }
+    // "HH:MM" compares correctly as a string.
+    const sorted = [...day.ranges].sort((a, b) => a.start.localeCompare(b.start));
+    for (let j = 1; j < sorted.length; j++) {
+      if (sorted[j].start < sorted[j - 1].end) {
+        return `${label}: los rangos de horario se superponen.`;
+      }
+    }
+  }
+  return null;
+}

@@ -71,6 +71,7 @@ export function mockRehydration(overrides: RehydrationOverrides = {}) {
         id: 1,
         name: "PET Spa",
         country: "CL",
+        address: "",
         currency: "CLP",
         language: "es",
         timezone: "America/Santiago",

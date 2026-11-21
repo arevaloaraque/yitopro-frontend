@@ -4,8 +4,15 @@ export interface Service {
   /** Not exposed by the backend (scoped per tenant); present only in mocks. */
   business_id?: string;
   name: string;
+  /** Optional free-text description shown to the AI agent and operators. */
+  description?: string;
   duration_minutes: number;
   /** Price in the business currency's major unit (e.g. 1000 = $1.000 CLP). */
   price: number;
   is_active: boolean;
+  /**
+   * Professionals who attend this service. Empty = every active professional
+   * attends it (the default).
+   */
+  professional_ids: string[];
 }

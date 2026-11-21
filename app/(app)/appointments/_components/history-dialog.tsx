@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, History, Plus, X, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Clock, History, Plus, X, RefreshCw, CheckCircle2, UserX } from "lucide-react";
 
 import {
   Dialog,
@@ -24,6 +24,7 @@ const EVENT_ICONS: Record<AppointmentAuditEntry["event"], typeof Clock> = {
   cancelled: X,
   rescheduled: RefreshCw,
   completed: CheckCircle2,
+  no_show: UserX,
 };
 
 const EVENT_LABELS: Record<AppointmentAuditEntry["event"], string> = {
@@ -31,6 +32,7 @@ const EVENT_LABELS: Record<AppointmentAuditEntry["event"], string> = {
   cancelled: "Cancelada",
   rescheduled: "Reagendada",
   completed: "Completada",
+  no_show: "No asistió",
 };
 
 function formatDateTime(iso: string): string {

@@ -142,7 +142,7 @@ function ResetPasswordInner() {
             <div className="mb-2 flex justify-center">
               <CheckCircle2 className="size-10 text-success" aria-hidden="true" />
             </div>
-            <CardTitle>Contraseña actualizada</CardTitle>
+            <CardTitle as="h1">Contraseña actualizada</CardTitle>
             <CardDescription>
               Tu contraseña fue cambiada y cerramos las demás sesiones. Te llevamos al
               inicio de sesión…
@@ -168,7 +168,7 @@ function ResetPasswordInner() {
     <Shell>
       <Card elevated>
         <CardHeader className="text-center">
-          <CardTitle>Crea una nueva contraseña</CardTitle>
+          <CardTitle as="h1">Crea una nueva contraseña</CardTitle>
           <CardDescription>Elige una contraseña segura para tu cuenta.</CardDescription>
         </CardHeader>
         <CardContent>

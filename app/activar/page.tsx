@@ -125,7 +125,7 @@ function ActivarInner() {
     <Shell>
       <Card elevated>
         <CardHeader className="text-center">
-          <CardTitle>Crea tu contraseña</CardTitle>
+          <CardTitle as="h1">Crea tu contraseña</CardTitle>
           <CardDescription>
             Elige una contraseña segura para activar tu cuenta.
           </CardDescription>
