@@ -84,8 +84,9 @@ CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
   `*`), requisito del navegador para enviar/recibir cookies cross-origin.
 - La cookie de refresh es `SameSite=Lax`; como `:3000`↔`:8050` son _same-site_ (el puerto no cuenta
   para el "site"), el navegador la envía en el `fetch` a `/api/auth/*`.
-- En producción frontend y backend son **same-origin** (`app.yitopro.com`), así que `CORS_ALLOWED_ORIGINS`
-  queda vacío allí.
+- En producción el frontend vive en `app.yitopro.com` y el backend en `services.yitopro.com`: son
+  cross-origin pero _same-site_, así que la cookie `SameSite=Lax` viaja igual y el backend debe listar
+  `https://app.yitopro.com` en `CORS_ALLOWED_ORIGINS`.
 
 ## Conexión al backend por dominio
 
